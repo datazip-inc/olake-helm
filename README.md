@@ -32,7 +32,7 @@
 
 ### Step 1: Add the OLake Helm Repository
 ```bash
-helm repo add olake https://datazip-inc.github.io/olake
+helm repo add olake https://datazip-inc.github.io/olake-helm
 helm repo update
 ```
 
@@ -42,7 +42,7 @@ helm repo update
 helm install olake olake/olake
 ```
 
-Just like any typical Helm chart, a values file could be crafted that would define/override any of the values exposed into the default [values.yaml](https://github.com/datazip-inc/olake/helm/olake/values.yaml).
+Just like any typical Helm chart, a values file could be crafted that would define/override any of the values exposed into the default [values.yaml](https://github.com/datazip-inc/olake-helm/helm/olake/values.yaml).
 ```bash
 # Using the crafted my-values.yaml file
 helm install --values my-values.yaml olake olake/olake
