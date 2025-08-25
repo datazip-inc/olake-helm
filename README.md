@@ -11,7 +11,7 @@
 
 ## Usage
 
-[Helm](https://helm.sh) must be installed to use the charts. Please refer to
+[Helm](https://helm.sh) must be installed to use the chart. Please refer to
 Helm's [documentation](https://helm.sh/docs) to get started.
 
 Once Helm has been set up correctly, add the repo as follows:
@@ -20,7 +20,7 @@ Once Helm has been set up correctly, add the repo as follows:
 helm repo add olake https://datazip-inc.github.io/olake-helm
 ```
 
-Run helm search repo olake to see the charts.
+Run `helm search repo olake` to see the charts.
 
 Chart documentation is available in [olake directory](./helm/olake/README.md).
 
