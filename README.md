@@ -22,7 +22,7 @@ helm repo add olake https://datazip-inc.github.io/olake-helm
 
 Run helm search repo olake to see the charts.
 
-Chart documentation is available in [olake directory](./helm/README.md).
+Chart documentation is available in [olake directory](./helm/olake/README.md).
 
 ## Contributing
 
