@@ -16,9 +16,8 @@ metadata:
     # This policy is still important to prevent deletion on `helm uninstall`.
     "helm.sh/resource-policy": keep
   labels:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: storage-class
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.sg.labels" . | nindent 4 }}
 provisioner: {{ include "olake.fullname" . }}/nfs-server
 parameters: {}
 reclaimPolicy: Delete

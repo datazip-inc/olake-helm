@@ -7,17 +7,15 @@ metadata:
   annotations:
     "helm.sh/resource-policy": keep
   labels:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: nfs-server
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.nfs.labels" . | nindent 4 }}
 spec:
   serviceName: {{ include "olake.fullname" . }}-nfs-server
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-      app.kubernetes.io/instance: {{ .Release.Name }}
-      app.kubernetes.io/component: nfs-server
+      {{- include "olake.selectorLabels" . | nindent 6 }}
+      {{- include "olake.nfs.labels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -25,9 +23,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/component: nfs-server
+        {{- include "olake.labels" . | nindent 8 }}
+        {{- include "olake.nfs.labels" . | nindent 8 }}
         {{- with .Values.nfsServer.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
