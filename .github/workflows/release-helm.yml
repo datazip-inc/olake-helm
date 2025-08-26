@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - 'helm/olake/**'
+      - 'helm/olake/Chart.yaml'
 
 jobs:
   release:
