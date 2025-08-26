@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - 'helm/olake/Chart.yaml'
+      - 'helm/**'
 
 jobs:
   release:
@@ -23,6 +23,8 @@ jobs:
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.2.1
+        with:
+          charts_dir: helm
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
   
