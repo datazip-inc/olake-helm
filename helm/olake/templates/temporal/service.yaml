@@ -8,10 +8,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: temporal
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: workflow-engine
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-engine
 spec:
   type: ClusterIP
   ports:
@@ -20,6 +18,5 @@ spec:
     protocol: TCP
     name: grpc
   selector:
-    app.kubernetes.io/name: temporal
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: workflow-engine

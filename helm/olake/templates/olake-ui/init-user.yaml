@@ -5,10 +5,8 @@ metadata:
   namespace: {{ include "olake.namespace" . }}
   annotations: {}
   labels:
-    app.kubernetes.io/name: olake-ui-init
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: init
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: init
 spec:
   # Ensure job runs only once
   completions: 1
@@ -17,8 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: olake-ui-init
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "olake.labels" . | nindent 8 }}
         app.kubernetes.io/component: init
     spec:
       restartPolicy: Never
@@ -73,23 +70,23 @@ spec:
         - |
           echo 'signup-init: Starting signup initialization...'
           echo "signup-init: Target URL: $OLAKE_APP_URL"
-          
+
           echo 'signup-init: Attempting to create admin user...'
-          
+
           response=$(curl -s -w "%{http_code}" -o /tmp/response.json \
             -X POST "$OLAKE_APP_URL" \
             -H "Content-Type: application/json" \
             -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\",\"email\":\"$EMAIL\"}")
-          
+
           # The actual response body from olake-ui will be printed to stderr by the '-o /dev/stderr' curl option.
           # A newline after stderr output from curl can make logs cleaner.
           echo ''
-          
+
           if ! [ "$response" -eq "$response" ] 2>/dev/null; then
               echo "signup-init: ERROR - HTTP_RESPONSE_CODE is not a number: '$response'"
               exit 1
           fi
-          
+
           if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
             echo "signup-init: User '$USERNAME' creation request successful (HTTP $response)."
           elif [ "$response" = "409" ] || [ "$response" = "400" ]; then
@@ -99,7 +96,7 @@ spec:
             exit 1
           fi
           echo 'signup-init: User setup process complete.'
-        {{- $defaultResources := dict 
+        {{- $defaultResources := dict
           "requests" (dict "memory" "128Mi" "cpu" "100m")
         }}
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeUI.initUser.resources | default dict) }}

@@ -5,10 +5,8 @@ metadata:
   name: {{ include "olake.sharedStoragePVC" . }}
   namespace: {{ include "olake.namespace" . }}
   labels:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-shared-storage
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: shared-storage
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: shared-storage
   annotations:
     "helm.sh/resource-policy": keep
 spec:

@@ -8,10 +8,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: elasticsearch
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: search
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: search
 spec:
   type: ClusterIP
   ports:
@@ -20,6 +18,5 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app.kubernetes.io/name: elasticsearch
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "olake.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: search

@@ -6,16 +6,13 @@ metadata:
   annotations: {}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/name: postgresql
-    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: database
 spec:
   replicas: 1
   serviceName: postgresql
   selector:
     matchLabels:
-      app.kubernetes.io/name: postgresql
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "olake.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: database
   template:
     metadata:
@@ -24,8 +21,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        app.kubernetes.io/name: postgresql
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "olake.labels" . | nindent 8 }}
         app.kubernetes.io/component: database
         {{- with .Values.postgresql.podLabels }}
         {{- toYaml . | nindent 8 }}
@@ -61,11 +57,11 @@ spec:
         envFrom:
         - secretRef:
             name: postgresql-secret
-        {{- $defaultResources := dict 
+        {{- $defaultResources := dict
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
         {{- $resources := mergeOverwrite $defaultResources (.Values.postgresql.resources | default dict) }}
-        {{- $defaultReadinessProbe := dict 
+        {{- $defaultReadinessProbe := dict
           "initialDelaySeconds" 5
           "periodSeconds" 10
           "timeoutSeconds" 5
@@ -76,7 +72,7 @@ spec:
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.postgresql.readinessProbe | default dict) }}
         readinessProbe:
           {{- toYaml $readinessProbe | nindent 10 }}
-        {{- $defaultLivenessProbe := dict 
+        {{- $defaultLivenessProbe := dict
           "initialDelaySeconds" 30
           "periodSeconds" 10
           "timeoutSeconds" 5

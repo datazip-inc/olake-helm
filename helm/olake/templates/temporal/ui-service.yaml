@@ -9,10 +9,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: temporal-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: workflow-ui
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-ui
 spec:
   type: {{ .Values.temporal.ui.service.type }}
   ports:
@@ -24,7 +22,6 @@ spec:
     nodePort: {{ .Values.temporal.ui.service.nodePort }}
     {{- end }}
   selector:
-    app.kubernetes.io/name: temporal-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: workflow-ui
 {{- end }}

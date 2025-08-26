@@ -6,22 +6,18 @@ metadata:
   namespace: {{ include "olake.namespace" . }}
   annotations: {}
   labels:
-    app.kubernetes.io/name: temporal-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: workflow-ui
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-ui
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: temporal-ui
-      app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "olake.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: workflow-ui
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: temporal-ui
-        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "olake.labels" . | nindent 8 }}
         app.kubernetes.io/component: workflow-ui
     spec:
       {{- with .Values.global.imagePullSecrets }}

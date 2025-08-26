@@ -8,10 +8,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: olake-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: olake-ui
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: olake-ui
 spec:
   type: {{ .Values.olakeUI.service.type }}
   ports:
@@ -23,6 +21,5 @@ spec:
     nodePort: 30082
     {{- end }}
   selector:
-    app.kubernetes.io/name: olake-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "olake.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: olake-ui

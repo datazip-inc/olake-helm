@@ -34,9 +34,20 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "olake.labels" -}}
-app.kubernetes.io/name: {{ include "olake.name" . }}
+helm.sh/chart: {{ include "olake.chart" . }}
+{{ include "olake.selectorLabels" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: olake
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 olake.io/part-of: olake
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "olake.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
@@ -88,4 +99,3 @@ Reserves 2Gi for filesystem overhead
 {{- $adjustedSize := sub $sizeValue 2 -}}
 {{- printf "%d%s" $adjustedSize $sizeUnit -}}
 {{- end -}}
-
