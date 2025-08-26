@@ -159,10 +159,10 @@ The worker exposes health endpoints on port 8090:
 
 ```bash
 # Liveness probe
-curl http://localhost:8090/health/live
+curl http://localhost:8090/health
 
 # Readiness probe  
-curl http://localhost:8090/health/ready
+curl http://localhost:8090/ready
 ```
 
 ### Logging
