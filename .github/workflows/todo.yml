@@ -1,0 +1,30 @@
+name: TODO Issue CI
+
+on:
+  push:
+    branches:
+      - "staging"
+      - "*"
+  workflow_dispatch:
+    inputs:
+      importAll:
+        default: false
+        required: false
+        type: boolean
+        description: Enable, if you want to import all TODOs. Runs on checked out branch! Only use if you're sure what you are doing.
+
+permissions:
+  issues: write
+  repository-projects: read
+  contents: read
+
+jobs:
+  todos:
+    name: Create Issues from TODO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: todo-issue
+        uses: DerJuulsn/todo-issue@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
