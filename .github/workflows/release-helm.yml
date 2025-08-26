@@ -9,11 +9,11 @@ on:
 
 jobs:
   release:
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
-      pages: write # to deploy to Pages
-      id-token: write # to verify the deployment originates from an appropriate source
-      
+      contents: write   # needed to push to gh-pages and create releases
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,4 +32,23 @@ jobs:
           charts_dir: helm
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          
+      - name: Copy index.html to gh-pages
+        run: |
+          # Make sure gh-pages exists locally
+          git fetch origin gh-pages:gh-pages || true
+          if ! git rev-parse --verify gh-pages >/dev/null 2>&1; then
+            git switch --orphan gh-pages
+            git reset --hard
+          else
+            git checkout gh-pages
+          fi
+
+          # Copy index.html from master branch
+          git checkout origin/master -- index.html
+
+          # Commit and push
+          git add index.html
+          git commit -m "Update index.html from master" || echo "No changes to commit"
+          git push origin gh-pages
   
