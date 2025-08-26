@@ -70,13 +70,16 @@ function release_k8s_worker() {
 
     echo "Building and pushing K8s worker Docker image..."
     
-    # Build K8s worker from olake-workers/k8s directory
+    # Build K8s worker from script directory (olake-workers/k8s)
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    pushd "$script_dir" >/dev/null || fail "Failed to change directory to $script_dir"
     docker buildx build --platform "$platform" --push \
         -t "${image_name}:${tag_version}" \
         -t "${image_name}:${latest_tag}" \
         --build-arg ENVIRONMENT="$environment" \
         --build-arg APP_VERSION="$version" \
-        -f ./Dockerfile ./ || fail "K8s Worker build failed. Exiting..."
+        -f ./Dockerfile . || { popd >/dev/null; fail "K8s Worker build failed. Exiting..."; }
+    popd >/dev/null
     
     echo "$(chalk green "K8s Worker release successful for $image_name version $tag_version")"
 }
@@ -119,13 +122,13 @@ fi
 setup_buildx
 
 platform="linux/amd64,linux/arm64"
-echo "✅ Releasing frontend application for environment $ENVIRONMENT with version $VERSION on platforms: $platform"
+echo "✅ Releasing K8s worker application for environment $ENVIRONMENT with version $VERSION on platforms: $platform"
 
 chalk green "=== Releasing Olake K8s Worker application ==="
 chalk green "=== Environment: $ENVIRONMENT ==="
 chalk green "=== Release version: $VERSION ==="
 
-# Call the frontend-only release function
+# Call the release function
 release_k8s_worker "$VERSION" "$platform" "$ENVIRONMENT"
 
-echo "$(chalk green "✅ Frontend release process completed successfully")"
+echo "$(chalk green "✅ K8s Worker release process completed successfully")"

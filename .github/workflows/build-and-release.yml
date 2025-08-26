@@ -1,4 +1,4 @@
-name: Olake UI Build And Release
+name: Olake Worker Build And Release
 on:
   workflow_call:
     inputs:
@@ -31,7 +31,7 @@ on:
 
 jobs:
   build_and_publish_frontend:
-    name: Build and publish frontend image for ${{ inputs.environment }}
+    name: Build and publish K8s Worker image for ${{ inputs.environment }}
     environment: ${{ inputs.environment }}
     runs-on: ubuntu-latest
     env:
@@ -47,7 +47,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: ${{ inputs.environment == 'master' && 'master' || (inputs.environment == 'staging' && 'staging' || inputs.environment == 'dev' && 'ci/workerReleaseIssues' || 'develop') }}
+          ref: ${{ inputs.environment == 'master' && 'refs/heads/master' || inputs.environment == 'staging' && 'refs/heads/staging' || github.ref }}
 
       - name: Setup environment variables
         run: |
