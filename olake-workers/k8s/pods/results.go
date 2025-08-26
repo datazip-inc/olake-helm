@@ -84,7 +84,11 @@ func (k *K8sPodManager) getPodLogs(ctx context.Context, podName string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to get pod logs: %v", err)
 	}
-	defer logs.Close()
+	defer func() {
+		if err := logs.Close(); err != nil {
+			logger.Warnf("Failed to close logs: %v", err)
+		}
+	}()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
