@@ -9,6 +9,11 @@ on:
 
 jobs:
   release:
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+      
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,7 +27,7 @@ jobs:
           git config --global user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.2.1
+        uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: helm
         env:
