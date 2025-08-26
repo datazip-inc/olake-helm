@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.streams.configMapName }}
+  namespace: {{ .Release.namespace }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.cron.labels" . | nindent 4 }}
+data:
+  streams.json: |
+    {{ tpl (.Values.streams.config | toJson) . }}
