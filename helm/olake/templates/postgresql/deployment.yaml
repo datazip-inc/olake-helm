@@ -60,12 +60,16 @@ spec:
           value: /var/lib/postgresql/data/pgdata
         envFrom:
         - secretRef:
+            {{- if .Values.postgresql.auth.existingSecret }}
+            name: {{ .Values.postgresql.auth.existingSecret }}
+            {{- else }}
             name: postgresql-secret
-        {{- $defaultResources := dict 
+            {{- end }}
+        {{- $defaultResources := dict
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
         {{- $resources := mergeOverwrite $defaultResources (.Values.postgresql.resources | default dict) }}
-        {{- $defaultReadinessProbe := dict 
+        {{- $defaultReadinessProbe := dict
           "initialDelaySeconds" 5
           "periodSeconds" 10
           "timeoutSeconds" 5
@@ -76,7 +80,7 @@ spec:
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.postgresql.readinessProbe | default dict) }}
         readinessProbe:
           {{- toYaml $readinessProbe | nindent 10 }}
-        {{- $defaultLivenessProbe := dict 
+        {{- $defaultLivenessProbe := dict
           "initialDelaySeconds" 30
           "periodSeconds" 10
           "timeoutSeconds" 5
