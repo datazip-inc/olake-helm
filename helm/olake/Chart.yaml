@@ -21,5 +21,4 @@ maintainers:
     email: hello@olake.io
 dependencies: []
 annotations:
-  # Enable schema validation for this chart
-  helm.sh/schema-validation: "true"
+  helm.sh/schema-validation: "true" # Enable schema validation for this chart
