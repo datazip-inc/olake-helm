@@ -10,7 +10,7 @@ metadata:
   {{- end }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-ui
+    {{- include "olake.temporal.ui.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.temporal.ui.service.type }}
   ports:
@@ -23,5 +23,5 @@ spec:
     {{- end }}
   selector:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-ui
+    {{- include "olake.temporal.ui.labels" . | nindent 4 }}
 {{- end }}

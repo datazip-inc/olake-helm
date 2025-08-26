@@ -9,7 +9,7 @@ metadata:
   {{- end }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: olake-ui
+    {{- include "olake.ui.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.olakeUI.service.type }}
   ports:
@@ -22,4 +22,4 @@ spec:
     {{- end }}
   selector:
     {{- include "olake.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: olake-ui
+    {{- include "olake.ui.labels" . | nindent 4 }}

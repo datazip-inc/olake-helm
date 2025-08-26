@@ -46,9 +46,53 @@ olake.io/part-of: olake
 Selector labels
 */}}
 {{- define "olake.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "olake.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "olake.elasticsearch.labels" -}}
+app.kubernetes.io/name: elasticsearch
+app.kubernetes.io/component: search
+{{- end -}}
+
+{{- define "olake.nfs.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
+app.kubernetes.io/component: nfs-server
+{{- end -}}
+
+{{- define "olake.sg.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
+app.kubernetes.io/component: storage-class
+{{- end -}}
+
+{{- define "olake.ui.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-ui
+app.kubernetes.io/component: ui
+{{- end -}}
+
+{{- define "olake.ui.init.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-ui-init
+app.kubernetes.io/component: init
+{{- end -}}
+
+{{- define "olake.workers.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-workers
+app.kubernetes.io/component: workers
+{{- end -}}
+
+{{- define "olake.postgresql.labels" -}}
+app.kubernetes.io/name: postgresql
+app.kubernetes.io/component: database
+{{- end -}}
+
+{{- define "olake.temporal.labels" -}}
+app.kubernetes.io/name: temporal
+app.kubernetes.io/component: workflow-engine
+{{- end -}}
+
+{{- define "olake.temporal.ui.labels" -}}
+app.kubernetes.io/name: temporal
+app.kubernetes.io/component: workflow-ui
+{{- end -}}
 
 {{/*
 Create the name of the service account to use for olake-workers

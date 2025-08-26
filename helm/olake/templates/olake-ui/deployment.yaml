@@ -5,17 +5,14 @@ metadata:
   namespace: {{ include "olake.namespace" . }}
   annotations: {}
   labels:
-    app.kubernetes.io/name: olake-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: olake-ui
     {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.ui.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.olakeUI.replicaCount }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: olake-ui
-      app.kubernetes.io/instance: {{ .Release.Name }}
-      app.kubernetes.io/component: olake-ui
+      {{- include "olake.labels" . | nindent 6 }}
+      {{- include "olake.ui.labels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -23,9 +20,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        app.kubernetes.io/name: olake-ui
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/component: olake-ui
+        {{- include "olake.labels" . | nindent 8 }}
+        {{- include "olake.ui.labels" . | nindent 8 }}
         {{- with .Values.olakeUI.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -87,13 +83,13 @@ spec:
           mountPath: /app/olake-ui/conf
         - name: shared-storage
           mountPath: /tmp/olake-config
-        {{- $defaultResources := dict 
+        {{- $defaultResources := dict
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeUI.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
-        {{- $defaultReadinessProbe := dict 
+        {{- $defaultReadinessProbe := dict
           "initialDelaySeconds" 30
           "periodSeconds" 10
           "timeoutSeconds" 5
@@ -104,7 +100,7 @@ spec:
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeUI.readinessProbe | default dict) }}
         readinessProbe:
           {{- toYaml $readinessProbe | nindent 10 }}
-        {{- $defaultLivenessProbe := dict 
+        {{- $defaultLivenessProbe := dict
           "initialDelaySeconds" 60
           "periodSeconds" 30
           "timeoutSeconds" 10

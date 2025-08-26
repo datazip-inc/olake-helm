@@ -6,7 +6,7 @@ metadata:
   annotations: {}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: init
+    {{- include "olake.ui.init.labels" . | nindent 4 }}
 spec:
   # Ensure job runs only once
   completions: 1
@@ -16,7 +16,7 @@ spec:
     metadata:
       labels:
         {{- include "olake.labels" . | nindent 8 }}
-        app.kubernetes.io/component: init
+        {{- include "olake.ui.init.labels" . | nindent 8 }}
     spec:
       restartPolicy: Never
       initContainers:

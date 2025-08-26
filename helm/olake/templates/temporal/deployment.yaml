@@ -6,13 +6,13 @@ metadata:
   annotations: {}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-engine
+    {{- include "olake.temporal.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-    {{- include "olake.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: workflow-engine
+      {{- include "olake.selectorLabels" . | nindent 6 }}
+      {{- include "olake.temporal.labels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -20,8 +20,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-      {{- include "olake.labels" . | nindent 8 }}
-        app.kubernetes.io/component: workflow-engine
+        {{- include "olake.labels" . | nindent 8 }}
+        {{- include "olake.temporal.labels" . | nindent 8 }}
         {{- with .Values.temporal.server.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

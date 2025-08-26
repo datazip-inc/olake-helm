@@ -17,7 +17,7 @@ metadata:
     "helm.sh/resource-policy": keep
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: storage-class
+    {{- include "olake.sg.labels" . | nindent 4 }}
 provisioner: {{ include "olake.fullname" . }}/nfs-server
 parameters: {}
 reclaimPolicy: Delete

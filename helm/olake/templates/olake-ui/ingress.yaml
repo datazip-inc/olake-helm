@@ -21,7 +21,7 @@ metadata:
   {{- end }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: olake-ui
+    {{- include "olake.ui.labels" . | nindent 4 }}
 spec:
   {{- if and .Values.olakeUI.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.olakeUI.ingress.className }}

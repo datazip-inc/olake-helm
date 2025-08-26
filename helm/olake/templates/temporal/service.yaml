@@ -9,7 +9,7 @@ metadata:
   {{- end }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-engine
+    {{- include "olake.temporal.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -19,4 +19,4 @@ spec:
     name: grpc
   selector:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-engine
+    {{- include "olake.temporal.labels" . | nindent 4 }}

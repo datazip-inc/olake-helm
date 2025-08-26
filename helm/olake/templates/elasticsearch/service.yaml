@@ -9,7 +9,7 @@ metadata:
   {{- end }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: search
+    {{- include "olake.elasticsearch.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -19,4 +19,4 @@ spec:
     name: http
   selector:
     {{- include "olake.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: search
+    {{- include "olake.elasticsearch.labels" . | nindent 4 }}
