@@ -14,16 +14,13 @@ data:
   app.conf: |
     appname = olake-server
     httpport = {{ .Values.olakeUI.env.HTTP_PORT | default "8000" }}
-    runmode = {{ .Values.olakeUI.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "dev" }}
+    runmode = {{ .Values.olakeUI.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "staging" }}
     autorender = false
     copyrequestbody = true
     EnableDocs = true
     postgresdb = postgres://{{ .Values.postgresql.auth.postgresUser }}:{{ .Values.postgresql.auth.postgresPassword }}@postgresql.{{ include "olake.namespace" . }}.svc.cluster.local:5432/postgres?sslmode=disable
     logsdir = ./logger/logs
     sessionon = true
-    
-    # Deployment Mode
-    DEPLOYMENT_MODE = kubernetes
     
     # Temporal Configuration
     TEMPORAL_ADDRESS = temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233
