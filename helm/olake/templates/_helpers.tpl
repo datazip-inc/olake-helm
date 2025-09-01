@@ -39,6 +39,15 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 olake.io/part-of: olake
 {{- end }}
 
+
+{{/*
+Cron labels
+*/}}
+{{- define "olake.cron.labels" -}}
+app.kubernetes.io/name: {{ include "olake.name" . }}-cron
+app.kubernetes.io/component: scheduling
+{{- end }}
+
 {{/*
 Create the name of the service account to use for olake-workers
 */}}
@@ -88,4 +97,3 @@ Reserves 2Gi for filesystem overhead
 {{- $adjustedSize := sub $sizeValue 2 -}}
 {{- printf "%d%s" $adjustedSize $sizeUnit -}}
 {{- end -}}
-

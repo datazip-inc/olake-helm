@@ -1,0 +1,104 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.cronJob.name }}
+  namespace: {{ .Release.namespace }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.cron.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronJob.schedule | quote }}
+  suspend: {{ .Values.cronJob.suspend }}
+  concurrencyPolicy: {{ .Values.cronJob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.cronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.cronJob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "olake.labels" . | nindent 12 }}
+            {{- include "olake.cron.labels" . | nindent 12 }}
+        spec:
+          {{- if .Values.cronJob.nodeSelector }}
+          nodeSelector:
+          {{ toYaml .Values.cronJob.nodeSelector | indent 12 }}
+          {{- end }}
+          {{- if .Values.cronJob.affinity }}
+          affinity:
+          {{ toYaml .Values.cronJob.affinity | indent 12 }}
+          {{- end }}
+          {{- if .Values.cronJob.tolerations }}
+          tolerations:
+          {{ toYaml .Values.cronJob.tolerations | indent 12 }}
+          {{- end }}
+          {{- with .Values.cronJob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: olake
+              image: {{ .Values.cronJob.container.image.repository }}:{{ .Values.cronJob.container.image.tag }}
+              imagePullPolicy: {{ .Values.cronJob.container.image.pullPolicy }}
+              args:
+                - 'sync'
+                - '--config'
+                - '/mnt/config/source.json'
+                - '--catalog'
+                - '/mnt/config/streams.json'
+                - '--destination'
+                - '/mnt/config/destination.json'
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /mnt/config
+              {{- if .Values.cronJob.container.resources }}
+              resources:
+              {{- toYaml .Values.cronJob.container.resources | nindent 16 }}
+              {{- end }}
+          initContainers:
+            - name: init-config
+              image: {{ .Values.cronJob.initContainer.image.repository }}:{{ .Values.cronJob.initContainer.image.tag }}
+              imagePullPolicy: {{ .Values.cronJob.initContainer.image.pullPolicy }}
+              command: ['sh', '-c']
+              args:
+                - |
+                  cp /etc/source/source.json /mnt/shared/source.json &&
+                  cp /etc/catalog/streams.json /mnt/shared/streams.json &&
+                  cp /etc/writer/destination.json /mnt/shared/destination.json
+              volumeMounts:
+                - name: source-config-volume
+                  mountPath: /etc/source
+                  readOnly: true
+                - name: streams-config-volume
+                  mountPath: /etc/catalog
+                  readOnly: true
+                - name: destination-config-volume
+                  mountPath: /etc/writer
+                  readOnly: true
+                - name: config-volume
+                  mountPath: /mnt/shared
+          volumes:
+            - name: source-config-volume
+              secret:
+                secretName: {{ .Values.source.secret.name }}
+                items:
+                  - key: source.json
+                    path: source.json
+            - name: streams-config-volume
+              configMap:
+                name: {{ .Values.streams.configMapName }}
+                items:
+                  - key: streams.json
+                    path: streams.json
+            - name: destination-config-volume
+              secret:
+                secretName: {{ .Values.destination.secret.name }}
+                items:
+                  - key: destination.json
+                    path: destination.json
+            - name: config-volume
+              persistentVolumeClaim:
+                claimName: {{ .Values.cronJob.persistentVolumeClaim.name }}
+          restartPolicy: Never
