@@ -80,6 +80,8 @@ spec:
         {{- end }}
         volumeMounts:
         - name: olake-config
+          mountPath: /opt/backend/conf
+        - name: olake-config
           mountPath: /app/olake-ui/conf
         - name: shared-storage
           mountPath: /tmp/olake-config
