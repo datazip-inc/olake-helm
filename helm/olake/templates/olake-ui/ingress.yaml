@@ -20,10 +20,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: olake-ui
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: olake-ui
     {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.ui.labels" . | nindent 4 }}
 spec:
   {{- if and .Values.olakeUI.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.olakeUI.ingress.className }}

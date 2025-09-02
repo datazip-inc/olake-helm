@@ -7,9 +7,8 @@ metadata:
   annotations:
     "helm.sh/resource-policy": keep
   labels:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: nfs-server
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.nfs.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -50,7 +49,6 @@ spec:
     port: 875
     protocol: UDP
   selector:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-nfs-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: nfs-server
+    {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.nfs.labels" . | nindent 4 }}
 {{- end }}

@@ -7,17 +7,14 @@ metadata:
     "helm.sh/hook": post-install
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
   labels:
-    app.kubernetes.io/name: {{ include "olake.name" . }}-post-install-wait
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: post-install-wait
     {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: post-install-wait
 spec:
   backoffLimit: 3
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "olake.name" . }}-post-install-wait
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "olake.labels" . | nindent 8 }}
         app.kubernetes.io/component: post-install-wait
     spec:
       restartPolicy: Never
@@ -56,9 +53,9 @@ spec:
           }
 
           echo "Waiting for OLake stack to be ready..."
-          
+
           check_service "olake-workers" "http://olake-workers.{{ include "olake.namespace" . }}.svc.cluster.local:8090/ready"
-          
+
           echo "✓ OLake stack is fully operational."
           exit 0
         resources:

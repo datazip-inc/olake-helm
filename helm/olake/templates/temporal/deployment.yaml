@@ -5,17 +5,14 @@ metadata:
   namespace: {{ include "olake.namespace" . }}
   annotations: {}
   labels:
-    app.kubernetes.io/name: temporal
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: workflow-engine
     {{- include "olake.labels" . | nindent 4 }}
+    {{- include "olake.temporal.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: temporal
-      app.kubernetes.io/instance: {{ .Release.Name }}
-      app.kubernetes.io/component: workflow-engine
+      {{- include "olake.selectorLabels" . | nindent 6 }}
+      {{- include "olake.temporal.labels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -23,9 +20,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        app.kubernetes.io/name: temporal
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/component: workflow-engine
+        {{- include "olake.labels" . | nindent 8 }}
+        {{- include "olake.temporal.labels" . | nindent 8 }}
         {{- with .Values.temporal.server.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -91,13 +87,13 @@ spec:
           value: "elasticsearch.{{ include "olake.namespace" . }}.svc.cluster.local"
         - name: ES_VERSION
           value: "v7"
-        {{- $defaultResources := dict 
+        {{- $defaultResources := dict
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
         {{- $resources := mergeOverwrite $defaultResources (.Values.temporal.server.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
-        {{- $defaultReadinessProbe := dict 
+        {{- $defaultReadinessProbe := dict
           "initialDelaySeconds" 10
           "periodSeconds" 10
           "timeoutSeconds" 5
@@ -108,7 +104,7 @@ spec:
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.temporal.server.readinessProbe | default dict) }}
         readinessProbe:
           {{- toYaml $readinessProbe | nindent 10 }}
-        {{- $defaultLivenessProbe := dict 
+        {{- $defaultLivenessProbe := dict
           "initialDelaySeconds" 150
           "periodSeconds" 60
           "timeoutSeconds" 10
