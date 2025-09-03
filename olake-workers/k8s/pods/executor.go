@@ -265,7 +265,6 @@ func (k *K8sPodManager) buildNodeAffinity(nodeSelectorMap map[string]string) (*c
 }
 
 // buildAffinityForJob builds affinity rules for the given jobID and operation type
-// Implements operation-based anti-affinity and JobID-based node affinity
 func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command) *corev1.Affinity {
 	// Skip affinity rules for jobID 0 (test/discover operations)
 	if jobID == 0 {
@@ -274,27 +273,6 @@ func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command)
 
 	var affinity *corev1.Affinity
 
-	// Apply anti-affinity rules for sync operations to spread pods across nodes
-	if operation == shared.Sync {
-		logger.Debugf("Applying sync operation anti-affinity rules for jobID %d", jobID)
-		affinity = &corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-					{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"olake.io/operation-type": "sync",
-							},
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		}
-	} else {
-		logger.Debugf("No anti-affinity rules applied for %s operation (jobID %d)", operation, jobID)
-	}
-
 	// Add JobID-based node affinity using jobMapping configuration
 	nodeMapping := k.getNodeSelectorForJob(jobID, operation)
 	if len(nodeMapping) > 0 {
@@ -302,10 +280,9 @@ func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command)
 		if err != nil {
 			logger.Errorf("Failed to build node affinity for JobID %d: %v", jobID, err)
 		} else if nodeAffinity != nil {
-			if affinity == nil {
-				affinity = &corev1.Affinity{}
+			affinity = &corev1.Affinity{
+				NodeAffinity: nodeAffinity,
 			}
-			affinity.NodeAffinity = nodeAffinity
 			logger.Infof("Applied node affinity for JobID %d: preferring nodes with %v", jobID, nodeMapping)
 		}
 	} else {
