@@ -9,6 +9,7 @@ import (
 	appConfig "github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/filesystem"
+	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
 )
 
 // K8sPodManager handles Kubernetes Pod operations only
@@ -16,10 +17,11 @@ import (
 // It maintains the Kubernetes client connection, target namespace, filesystem utilities,
 // and configuration needed to create, manage, and clean up activity pods.
 type K8sPodManager struct {
-	clientset        kubernetes.Interface // Kubernetes API client for pod operations
-	namespace        string               // Target namespace where all activity pods are created
-	filesystemHelper *filesystem.Helper   // Utility for managing shared storage and config files
-	config           *appConfig.Config    // Application configuration including timeouts, storage, etc.
+	clientset        kubernetes.Interface  // Kubernetes API client for pod operations
+	namespace        string                // Target namespace where all activity pods are created
+	filesystemHelper *filesystem.Helper    // Utility for managing shared storage and config files
+	config           *appConfig.Config     // Application configuration including timeouts, storage, etc.
+	configWatcher    *k8s.ConfigMapWatcher // ConfigMap watcher for live job mapping updates
 }
 
 // NewK8sPodManager creates a new Kubernetes Pod manager
@@ -46,12 +48,25 @@ func NewK8sPodManager(cfg *appConfig.Config) (*K8sPodManager, error) {
 
 	logger.Infof("Initialized K8s pod manager for namespace: %s", namespace)
 
+	// Create and start ConfigMap watcher for live job mapping updates
+	configWatcher := k8s.NewConfigMapWatcher(
+		clientset,
+		namespace,
+	)
+
+	if err := configWatcher.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start config watcher: %v", err)
+	}
+
+	logger.Infof("Started ConfigMap watcher for live job mapping updates")
+
 	// Initialize and return the pod manager with all required dependencies
 	return &K8sPodManager{
 		clientset:        clientset,              // K8s API client
 		namespace:        namespace,              // Target namespace for pods
 		filesystemHelper: filesystem.NewHelper(), // Shared storage utilities
 		config:           cfg,                    // Application configuration
+		configWatcher:    configWatcher,          // Live job mapping watcher
 	}, nil
 }
 
@@ -68,4 +83,9 @@ func (k *K8sPodManager) GetDockerImageName(sourceType, version string) (string, 
 	// Construct the full image name using the olakego registry convention
 	// Examples: olakego/source-mysql:v0.1.7, olakego/source-postgres:v1.2.3
 	return fmt.Sprintf("olakego/source-%s:%s", sourceType, version), nil
+}
+
+// GetConfigWatcher returns the ConfigMap watcher for graceful shutdown
+func (k *K8sPodManager) GetConfigWatcher() *k8s.ConfigMapWatcher {
+	return k.configWatcher
 }

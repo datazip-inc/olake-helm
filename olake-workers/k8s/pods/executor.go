@@ -216,7 +216,8 @@ func (k *K8sPodManager) getNodeSelectorForJob(jobID int, operation shared.Comman
 		return make(map[string]string)
 	}
 
-	if mapping, exists := k.config.Kubernetes.JobMapping[jobID]; exists {
+	// Use live mapping from ConfigMapWatcher
+	if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		logger.Infof("Found node mapping for JobID %d: %v", jobID, mapping)
 		return mapping
 	}

@@ -1,0 +1,209 @@
+package k8s
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+
+	appConfig "github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
+	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
+)
+
+// ConfigMapWatcher watches for ConfigMap changes and provides thread-safe access to job mapping
+type ConfigMapWatcher struct {
+	// Kubernetes infrastructure
+	clientset       kubernetes.Interface
+	informerFactory informers.SharedInformerFactory
+	namespace       string
+	configMapName   string
+
+	// Thread-safe job mapping storage
+	mu         sync.RWMutex
+	jobMapping map[int]map[string]string
+
+	// Debouncing and control
+	debounceTimer *time.Timer
+	debounceDelay time.Duration
+	ctx           context.Context
+	cancel        context.CancelFunc
+}
+
+// NewConfigMapWatcher creates a new ConfigMap watcher
+func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *ConfigMapWatcher {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &ConfigMapWatcher{
+		clientset:     clientset,
+		namespace:     namespace,
+		configMapName: "olake-workers-config",
+		jobMapping:    make(map[int]map[string]string),
+		debounceDelay: 2 * time.Second,
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+}
+
+// Start begins watching the ConfigMap for changes
+func (w *ConfigMapWatcher) Start() error {
+	logger.Infof("Starting ConfigMap watcher for %s/%s", w.namespace, w.configMapName)
+
+	// Load initial configuration
+	if err := w.loadInitialConfig(); err != nil {
+		logger.Errorf("Failed to load initial config: %v", err)
+		// Continue anyway - watcher will pick up changes
+	}
+
+	// Create informer factory scoped to our namespace
+	w.informerFactory = informers.NewSharedInformerFactoryWithOptions(
+		w.clientset,
+		30*time.Second, // Resync period
+		informers.WithNamespace(w.namespace),
+	)
+
+	// Get ConfigMap informer
+	configMapInformer := w.informerFactory.Core().V1().ConfigMaps()
+
+	// Add event handlers
+	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+				logger.Debugf("ConfigMap %s added", w.configMapName)
+				w.handleConfigMapUpdate(cm)
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			if cm, ok := newObj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+				logger.Debugf("ConfigMap %s updated", w.configMapName)
+				w.handleConfigMapUpdate(cm)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+				logger.Warnf("ConfigMap %s deleted - using cached mapping", w.configMapName)
+				// Keep existing mapping on delete
+			}
+		},
+	})
+
+	// Start informer factory
+	w.informerFactory.Start(w.ctx.Done())
+
+	// Wait for cache to sync
+	if !cache.WaitForCacheSync(w.ctx.Done(), configMapInformer.Informer().HasSynced) {
+		logger.Errorf("Failed to sync ConfigMap cache")
+		return fmt.Errorf("failed to sync ConfigMap cache")
+	}
+
+	logger.Infof("ConfigMap watcher started successfully")
+	return nil
+}
+
+// Stop gracefully shuts down the watcher
+func (w *ConfigMapWatcher) Stop() error {
+	logger.Infof("Stopping ConfigMap watcher")
+
+	if w.debounceTimer != nil {
+		w.debounceTimer.Stop()
+	}
+
+	if w.cancel != nil {
+		w.cancel()
+	}
+
+	logger.Infof("ConfigMap watcher stopped")
+	return nil
+}
+
+// GetJobMapping returns mapping for specific jobID (thread-safe)
+// Uses RWMutex because this function is called concurrently by multiple pod creation goroutines
+// while the ConfigMap informer goroutine may be updating w.jobMapping in the background.
+// RLock allows multiple concurrent readers while preventing data races with writer updates.
+func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	mapping, exists := w.jobMapping[jobID]
+	if !exists {
+		return make(map[string]string), false
+	}
+
+	// Return a copy to prevent external modification
+	result := make(map[string]string)
+	for k, v := range mapping {
+		result[k] = v
+	}
+	return result, true
+}
+
+// loadInitialConfig loads the initial configuration from the ConfigMap
+func (w *ConfigMapWatcher) loadInitialConfig() error {
+	cm, err := w.clientset.CoreV1().ConfigMaps(w.namespace).Get(
+		w.ctx,
+		w.configMapName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		logger.Errorf("Failed to get initial ConfigMap %s: %v", w.configMapName, err)
+		return fmt.Errorf("failed to get initial ConfigMap %s: %v", w.configMapName, err)
+	}
+
+	w.handleConfigMapUpdate(cm)
+	return nil
+}
+
+// handleConfigMapUpdate processes ConfigMap updates with debouncing
+func (w *ConfigMapWatcher) handleConfigMapUpdate(cm *corev1.ConfigMap) {
+	// Cancel existing debounce timer
+	if w.debounceTimer != nil {
+		w.debounceTimer.Stop()
+	}
+
+	// Set up new debounce timer
+	w.debounceTimer = time.AfterFunc(w.debounceDelay, func() {
+		w.updateJobMapping(cm)
+	})
+}
+
+// updateJobMapping updates the job mapping using existing validation logic
+func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
+	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
+	if !exists {
+		logger.Debugf("No OLAKE_JOB_MAPPING found in ConfigMap %s", w.configMapName)
+		w.mu.Lock()
+		w.jobMapping = make(map[int]map[string]string)
+		w.mu.Unlock()
+		return
+	}
+
+	if rawMapping == "" {
+		logger.Debugf("Empty OLAKE_JOB_MAPPING in ConfigMap %s", w.configMapName)
+		w.mu.Lock()
+		w.jobMapping = make(map[int]map[string]string)
+		w.mu.Unlock()
+		return
+	}
+
+	// Create a fake config struct to reuse existing LoadJobMapping logic
+	fakeConfig := &appConfig.Config{
+		Kubernetes: appConfig.KubernetesConfig{
+			JobMappingRaw: rawMapping,
+		},
+	}
+
+	// Use existing validation logic from scheduling.go
+	newMapping := LoadJobMapping(fakeConfig)
+
+	// Update thread-safe storage
+	w.mu.Lock()
+	w.jobMapping = newMapping
+	w.mu.Unlock()
+
+	logger.Infof("Job mapping updated from ConfigMap: %d entries loaded", len(newMapping))
+}
