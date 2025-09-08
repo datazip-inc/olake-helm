@@ -58,7 +58,7 @@ func NewK8sPodManager(cfg *appConfig.Config) (*K8sPodManager, error) {
 		return nil, fmt.Errorf("failed to start config watcher: %v", err)
 	}
 
-	logger.Infof("Started ConfigMap watcher for live job mapping updates")
+	// logger.Infof("Started ConfigMap watcher for live job mapping updates")
 
 	// Initialize and return the pod manager with all required dependencies
 	return &K8sPodManager{

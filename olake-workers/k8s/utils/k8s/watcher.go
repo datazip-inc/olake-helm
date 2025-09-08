@@ -73,19 +73,29 @@ func (w *ConfigMapWatcher) Start() error {
 	// Add event handlers
 	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s added", w.configMapName)
 				w.handleConfigMapUpdate(cm)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			if cm, ok := newObj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+			oldCm, oldValid := oldObj.(*corev1.ConfigMap)
+			newCm, newValid := newObj.(*corev1.ConfigMap)
+
+			// Skip resync events: client-go informers trigger UpdateFunc every resyncPeriod (30s)
+			// even when ConfigMap hasn't changed. Compare ResourceVersion to detect actual updates.
+			// ResourceVersion changes only when the object is modified in etcd.
+			if oldValid && newValid && oldCm.ResourceVersion == newCm.ResourceVersion {
+				return // This is a resync, not a real update
+			}
+
+			if newValid && newCm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s updated", w.configMapName)
-				w.handleConfigMapUpdate(cm)
+				w.handleConfigMapUpdate(newCm)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Warnf("ConfigMap %s deleted - using cached mapping", w.configMapName)
 				// Keep existing mapping on delete
 			}
@@ -190,17 +200,20 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 		return
 	}
 
-	// Create a fake config struct to reuse existing LoadJobMapping logic
-	fakeConfig := &appConfig.Config{
+	// Create a temporary config struct to reuse existing LoadJobMapping logic
+	tempConfig := &appConfig.Config{
 		Kubernetes: appConfig.KubernetesConfig{
 			JobMappingRaw: rawMapping,
 		},
 	}
 
 	// Use existing validation logic from scheduling.go
-	newMapping := LoadJobMapping(fakeConfig)
+	newMapping := LoadJobMapping(tempConfig)
 
-	// Update thread-safe storage
+	// Update thread-safe storage with exclusive lock
+	// Multiple Temporal activity goroutines call GetJobMapping() concurrently (readers)
+	// while this ConfigMap informer goroutine updates jobMapping (writer).
+	// RWMutex prevents data races and map corruption during concurrent access.
 	w.mu.Lock()
 	w.jobMapping = newMapping
 	w.mu.Unlock()
