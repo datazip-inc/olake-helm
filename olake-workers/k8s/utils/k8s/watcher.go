@@ -75,8 +75,8 @@ func (w *ConfigMapWatcher) Start() error {
 	// Get ConfigMap informer
 	configMapInformer := w.informerFactory.Core().V1().ConfigMaps()
 
-	// Add event handlers
-	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	// Add event handlers with error handling
+	_, err := configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s added", w.configMapName)
@@ -106,6 +106,9 @@ func (w *ConfigMapWatcher) Start() error {
 			}
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("failed to add ConfigMap event handler: %v", err)
+	}
 
 	// Start informer factory
 	w.informerFactory.Start(w.ctx.Done())
