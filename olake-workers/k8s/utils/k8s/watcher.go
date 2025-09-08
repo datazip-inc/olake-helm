@@ -28,9 +28,14 @@ type ConfigMapWatcher struct {
 	mu         sync.RWMutex
 	jobMapping map[int]map[string]string
 
-	// Debouncing and control
-	debounceTimer *time.Timer
-	debounceDelay time.Duration
+	// Debouncing mechanism to handle rapid successive ConfigMap updates
+	// Problem: Helm upgrades or kubectl apply operations can trigger multiple ConfigMap
+	// update events within milliseconds (e.g., updating multiple fields sequentially).
+	// Without debouncing, each event would trigger expensive JSON parsing and validation.
+	// Solution: Wait for a quiet period (debounceDelay) after the last update before processing.
+	// This ensures we only process the final state, not every intermediate change.
+	debounceTimer *time.Timer   // Active timer that gets reset on each update
+	debounceDelay time.Duration // Wait period for updates to settle
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
