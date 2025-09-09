@@ -77,13 +77,13 @@ func (w *ConfigMapWatcher) Start() error {
 
 	// Add event handlers with error handling
 	_, err := configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s added", w.configMapName)
 				w.handleConfigMapUpdate(cm)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			oldCm, oldValid := oldObj.(*corev1.ConfigMap)
 			newCm, newValid := newObj.(*corev1.ConfigMap)
 
@@ -99,7 +99,7 @@ func (w *ConfigMapWatcher) Start() error {
 				w.handleConfigMapUpdate(newCm)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Warnf("ConfigMap %s deleted - using cached mapping", w.configMapName)
 				// Keep existing mapping on delete
