@@ -218,6 +218,4 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	w.mu.Lock()
 	w.jobMapping = newMapping
 	w.mu.Unlock()
-
-	logger.Infof("Job mapping updated from ConfigMap: %d entries loaded", len(newMapping))
 }

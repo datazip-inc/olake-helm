@@ -100,7 +100,7 @@ func LoadJobMapping(cfg *appConfig.Config) map[int]map[string]string {
 
 	// Enhanced validation and conversion with detailed error tracking
 	stats := JobMappingStats{
-		TotalEntries:    len(cfg.Kubernetes.JobMapping),
+		TotalEntries:    0, // Start at 0, increment for each entry processed
 		InvalidMappings: make([]string, 0),
 	}
 
@@ -112,6 +112,7 @@ func LoadJobMapping(cfg *appConfig.Config) map[int]map[string]string {
 	}
 
 	for jobID, nodeLabels := range result {
+		stats.TotalEntries++
 		if validMapping, ok := validateJobMapping(jobID, nodeLabels, &stats); ok {
 			result[jobID] = validMapping
 			stats.ValidEntries++
@@ -125,7 +126,7 @@ func LoadJobMapping(cfg *appConfig.Config) map[int]map[string]string {
 	// Print the valid job mapping configuration as JSON
 	if len(result) > 0 {
 		if jsonBytes, err := json.Marshal(result); err == nil {
-			logger.Infof("Job mapping configuration: %s", string(jsonBytes))
+			logger.Debugf("Job mapping configuration: %s", string(jsonBytes))
 		}
 	}
 
@@ -150,6 +151,14 @@ func LoadJobMapping(cfg *appConfig.Config) map[int]map[string]string {
 	if len(result) > 0 || stats.ValidEntries > 0 {
 		lastValidMapping = result
 		logger.Debugf("Cached valid mapping with %d entries for future fallback", len(result))
+		logger.Infof("Valid Job mappings:")
+		for jobID, mapping := range result {
+			var labels []string
+			for key, value := range mapping {
+				labels = append(labels, fmt.Sprintf("%s:%s", key, value))
+			}
+			logger.Infof("  JobID %d: %s", jobID, strings.Join(labels, " "))
+		}
 	}
 
 	return result
