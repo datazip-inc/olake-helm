@@ -126,15 +126,8 @@ func (w *ConfigMapWatcher) Start() error {
 // Stop gracefully shuts down the watcher
 func (w *ConfigMapWatcher) Stop() error {
 	logger.Infof("Stopping ConfigMap watcher")
-
-	if w.debounceTimer != nil {
-		w.debounceTimer.Stop()
-	}
-
-	if w.cancel != nil {
-		w.cancel()
-	}
-
+	w.debounceTimer.Stop()
+	w.cancel()
 	logger.Infof("ConfigMap watcher stopped")
 	return nil
 }
