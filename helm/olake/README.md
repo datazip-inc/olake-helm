@@ -140,7 +140,6 @@ global:
 ```
 
 **Note on Default Behavior:** 
-- A **rollout restart** of the olake-workers deployment is necessary after updating this map and running helm upgrade.
 - For any JobID that is not specified in the jobMapping configuration, the corresponding job's pod will be scheduled by the standard Kubernetes scheduler, which places it on any available node in the cluster. 
 
 ### Cloud IAM Integration

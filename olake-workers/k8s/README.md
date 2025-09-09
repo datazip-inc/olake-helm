@@ -5,7 +5,7 @@ A cloud-native Temporal worker that executes OLake Jobs as Kubernetes Pods. This
 ## 🚀 Quickstart
 
 ### Prerequisites
-- Go 1.24+
+- Go 1.23+
 - [DevSpace CLI](https://www.devspace.sh/docs/getting-started/installation) installed
 - Access to a Kubernetes cluster (minikube or remote cluster)
 - kubectl configured to access the cluster

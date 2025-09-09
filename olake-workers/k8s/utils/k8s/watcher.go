@@ -12,8 +12,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	appConfig "github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
+	appConfig "github.com/datazip-inc/olake-helm/olake-workers/k8s/config"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
 )
 
 // ConfigMapWatcher watches for ConfigMap changes and provides thread-safe access to job mapping
@@ -77,13 +77,13 @@ func (w *ConfigMapWatcher) Start() error {
 
 	// Add event handlers with error handling
 	_, err := configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s added", w.configMapName)
 				w.handleConfigMapUpdate(cm)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			oldCm, oldValid := oldObj.(*corev1.ConfigMap)
 			newCm, newValid := newObj.(*corev1.ConfigMap)
 
@@ -99,7 +99,7 @@ func (w *ConfigMapWatcher) Start() error {
 				w.handleConfigMapUpdate(newCm)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Warnf("ConfigMap %s deleted - using cached mapping", w.configMapName)
 				// Keep existing mapping on delete
@@ -126,15 +126,8 @@ func (w *ConfigMapWatcher) Start() error {
 // Stop gracefully shuts down the watcher
 func (w *ConfigMapWatcher) Stop() error {
 	logger.Infof("Stopping ConfigMap watcher")
-
-	if w.debounceTimer != nil {
-		w.debounceTimer.Stop()
-	}
-
-	if w.cancel != nil {
-		w.cancel()
-	}
-
+	w.debounceTimer.Stop()
+	w.cancel()
 	logger.Infof("ConfigMap watcher stopped")
 	return nil
 }
@@ -225,6 +218,4 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	w.mu.Lock()
 	w.jobMapping = newMapping
 	w.mu.Unlock()
-
-	logger.Infof("Job mapping updated from ConfigMap: %d entries loaded", len(newMapping))
 }
