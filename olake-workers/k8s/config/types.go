@@ -49,16 +49,15 @@ type DatabaseConfig struct {
 
 // KubernetesConfig contains K8s-related settings
 type KubernetesConfig struct {
-	Namespace         string                    `mapstructure:"namespace"`
-	ImageRegistry     string                    `mapstructure:"image_registry"`
-	ImagePullPolicy   string                    `mapstructure:"image_pull_policy"`
-	ServiceAccount    string                    `mapstructure:"service_account"`
-	PVCName           string                    `mapstructure:"storage_pvc_name"`
-	Labels            map[string]string         `mapstructure:"labels"`
-	JobMappingRaw     string                    `mapstructure:"job_mapping_raw"`
-	JobMapping        map[int]map[string]string `mapstructure:"job_mapping"`
-	JobServiceAccount string                    `mapstructure:"job_service_account"`
-	OLakeSecretKey    string                    `mapstructure:"secret_key"`
+	Namespace         string            `mapstructure:"namespace"`
+	ImageRegistry     string            `mapstructure:"image_registry"`
+	ImagePullPolicy   string            `mapstructure:"image_pull_policy"`
+	ServiceAccount    string            `mapstructure:"service_account"`
+	PVCName           string            `mapstructure:"storage_pvc_name"`
+	Labels            map[string]string `mapstructure:"labels"`
+	JobMappingRaw     string            `mapstructure:"job_mapping_raw"`
+	JobServiceAccount string            `mapstructure:"job_service_account"`
+	OLakeSecretKey    string            `mapstructure:"secret_key"`
 }
 
 // KubernetesResourceLimits defines CPU and memory limits for K8s jobs
