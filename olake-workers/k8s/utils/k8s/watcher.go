@@ -28,16 +28,8 @@ type ConfigMapWatcher struct {
 	mu         sync.RWMutex
 	jobMapping map[int]map[string]string
 
-	// Debouncing mechanism to handle rapid successive ConfigMap updates
-	// Problem: Helm upgrades or kubectl apply operations can trigger multiple ConfigMap
-	// update events within milliseconds (e.g., updating multiple fields sequentially).
-	// Without debouncing, each event would trigger expensive JSON parsing and validation.
-	// Solution: Wait for a quiet period (debounceDelay) after the last update before processing.
-	// This ensures we only process the final state, not every intermediate change.
-	debounceTimer *time.Timer   // Active timer that gets reset on each update
-	debounceDelay time.Duration // Wait period for updates to settle
-	ctx           context.Context
-	cancel        context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewConfigMapWatcher creates a new ConfigMap watcher
@@ -49,7 +41,6 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 		namespace:     namespace,
 		configMapName: "olake-workers-config",
 		jobMapping:    make(map[int]map[string]string),
-		debounceDelay: 2 * time.Second,
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -80,7 +71,7 @@ func (w *ConfigMapWatcher) Start() error {
 		AddFunc: func(obj any) {
 			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s added", w.configMapName)
-				w.handleConfigMapUpdate(cm)
+				w.updateJobMapping(cm)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
@@ -96,7 +87,7 @@ func (w *ConfigMapWatcher) Start() error {
 
 			if newValid && newCm.Name == w.configMapName {
 				logger.Debugf("ConfigMap %s updated", w.configMapName)
-				w.handleConfigMapUpdate(newCm)
+				w.updateJobMapping(newCm)
 			}
 		},
 		DeleteFunc: func(obj any) {
@@ -126,7 +117,6 @@ func (w *ConfigMapWatcher) Start() error {
 // Stop gracefully shuts down the watcher
 func (w *ConfigMapWatcher) Stop() error {
 	logger.Infof("Stopping ConfigMap watcher")
-	w.debounceTimer.Stop()
 	w.cancel()
 	logger.Infof("ConfigMap watcher stopped")
 	return nil
@@ -165,21 +155,8 @@ func (w *ConfigMapWatcher) loadInitialConfig() error {
 		return fmt.Errorf("failed to get initial ConfigMap %s: %v", w.configMapName, err)
 	}
 
-	w.handleConfigMapUpdate(cm)
+	w.updateJobMapping(cm)
 	return nil
-}
-
-// handleConfigMapUpdate processes ConfigMap updates with debouncing
-func (w *ConfigMapWatcher) handleConfigMapUpdate(cm *corev1.ConfigMap) {
-	// Cancel existing debounce timer
-	if w.debounceTimer != nil {
-		w.debounceTimer.Stop()
-	}
-
-	// Set up new debounce timer
-	w.debounceTimer = time.AfterFunc(w.debounceDelay, func() {
-		w.updateJobMapping(cm)
-	})
 }
 
 // updateJobMapping updates the job mapping using existing validation logic
