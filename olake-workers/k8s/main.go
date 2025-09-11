@@ -17,6 +17,7 @@ func main() {
 	logger.Init(&cfg.Logging)
 
 	logger.Infof("Temporal Address: %s", cfg.Temporal.Address)
+	logger.Infof("Database Address: %s:%s", cfg.Database.Host, cfg.Database.Port)
 	logger.Infof("Task Queue: %s", cfg.Temporal.TaskQueue)
 	logger.Infof("Namespace: %s", cfg.Kubernetes.Namespace)
 	logger.Infof("Environment: %s", cfg.Database.RunMode)

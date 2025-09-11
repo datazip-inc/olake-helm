@@ -7,7 +7,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -49,12 +48,6 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 // Start begins watching the ConfigMap for changes
 func (w *ConfigMapWatcher) Start() error {
 	logger.Infof("Starting ConfigMap watcher for %s/%s", w.namespace, w.configMapName)
-
-	// Load initial configuration
-	if err := w.loadInitialConfig(); err != nil {
-		logger.Errorf("Failed to load initial config: %v", err)
-		// Continue anyway - watcher will pick up changes
-	}
 
 	// Create informer factory scoped to our namespace
 	w.informerFactory = informers.NewSharedInformerFactoryWithOptions(
@@ -141,22 +134,6 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 		result[k] = v
 	}
 	return result, true
-}
-
-// loadInitialConfig loads the initial configuration from the ConfigMap
-func (w *ConfigMapWatcher) loadInitialConfig() error {
-	cm, err := w.clientset.CoreV1().ConfigMaps(w.namespace).Get(
-		w.ctx,
-		w.configMapName,
-		metav1.GetOptions{},
-	)
-	if err != nil {
-		logger.Errorf("Failed to get initial ConfigMap %s: %v", w.configMapName, err)
-		return fmt.Errorf("failed to get initial ConfigMap %s: %v", w.configMapName, err)
-	}
-
-	w.updateJobMapping(cm)
-	return nil
 }
 
 // updateJobMapping updates the job mapping using existing validation logic

@@ -46,7 +46,7 @@ func NewK8sPodManager(cfg *appConfig.Config) (*K8sPodManager, error) {
 	// Use namespace from config
 	namespace := cfg.Kubernetes.Namespace
 
-	logger.Infof("Initialized K8s pod manager for namespace: %s", namespace)
+	logger.Debugf("Initialized K8s pod manager for namespace: %s", namespace)
 
 	// Create and start ConfigMap watcher for live job mapping updates
 	configWatcher := k8s.NewConfigMapWatcher(
