@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
 )
 
 const healthPort = 8090

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
 )
 
 // Helper handles file system operations for job configuration

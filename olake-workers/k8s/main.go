@@ -1,9 +1,9 @@
 package main
 
 import (
-	appConfig "github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/worker"
+	appConfig "github.com/datazip-inc/olake-helm/olake-workers/k8s/config"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/worker"
 )
 
 func main() {
@@ -17,6 +17,7 @@ func main() {
 	logger.Init(&cfg.Logging)
 
 	logger.Infof("Temporal Address: %s", cfg.Temporal.Address)
+	logger.Infof("Database Address: %s:%s", cfg.Database.Host, cfg.Database.Port)
 	logger.Infof("Task Queue: %s", cfg.Temporal.TaskQueue)
 	logger.Infof("Namespace: %s", cfg.Kubernetes.Namespace)
 	logger.Infof("Environment: %s", cfg.Database.RunMode)

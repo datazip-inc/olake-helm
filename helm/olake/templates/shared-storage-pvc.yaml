@@ -1,4 +1,8 @@
-{{- if .Values.nfsServer.enabled }}
+{{- if not .Values.nfsServer.enabled }}
+{{- if not .Values.nfsServer.external.storageClass }}
+{{- fail "nfsServer.external.storageClass is required when nfsServer.enabled is false" }}
+{{- end }}
+{{- end }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -16,6 +20,5 @@ spec:
     - ReadWriteMany
   resources:
     requests:
-      storage: {{ include "olake.sharedStorageSize" . }}
-  storageClassName: {{ .Values.nfsServer.storageClass.name | default "nfs-server" }}
-{{- end }}
+      storage: {{- if .Values.nfsServer.enabled }} {{ include "olake.sharedStorageSize" . }}{{- else }} {{ .Values.nfsServer.external.size }}{{- end }}
+  storageClassName: {{- if .Values.nfsServer.enabled }} {{ .Values.nfsServer.storageClass.name | default "nfs-server" }}{{- else }} {{ .Values.nfsServer.external.storageClass }}{{- end }}

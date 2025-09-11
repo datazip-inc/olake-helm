@@ -273,9 +273,9 @@ nfsServer:
   enabled: true
 
   # -- External storage configuration (used when enabled: false)
-  # When disabled, you must provide an existing ReadWriteMany (RWX) PersistentVolumeClaim
+  # When disabled, you must provide an existing ReadWriteMany (RWX) supported StorageClass
   # 
-  # CLOUD PROVIDER GUIDES FOR RWX STORAGE:
+  # CLOUD PROVIDER GUIDES FOR RWX STORAGECLASS:
   # 
   # AWS EFS: Use the Amazon EFS CSI driver with 'efs.csi.aws.com' provisioner
   # See: https://github.com/kubernetes-sigs/aws-efs-csi-driver
@@ -286,10 +286,13 @@ nfsServer:
   # GCP Filestore: Use Google Cloud Filestore CSI driver with 'filestore.csi.storage.gke.io' provisioner
   # See: https://cloud.google.com/filestore/docs/csi-driver
   external:
-    # -- The name of the PersistentVolumeClaim for the external RWX storage
-    # Example: "efs-pvc" or "azure-files-pvc" or "gcp-filestore-pvc"
-    name: ""
-  
+    # -- StorageClass for dynamic RWX PVC creation
+    # Required when nfsServer.enabled is false
+    # Examples: "efs-sc", "azurefile", "filestore-csi", "longhorn", "rook-cephfs"
+    storageClass: ""
+    
+    # -- Size for the dynamically created external PVC
+    size: "20Gi"
   
   # -- Pod scheduling constraints
   nodeSelector: {}
