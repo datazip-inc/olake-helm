@@ -70,6 +70,7 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 	w.RegisterWorkflow(workflows.DiscoverCatalogWorkflow)
 	w.RegisterWorkflow(workflows.TestConnectionWorkflow)
 	w.RegisterWorkflow(workflows.RunSyncWorkflow)
+	w.RegisterWorkflow(workflows.FetchSpecWorkflow)
 
 	// Create activities with injected dependencies
 	activitiesInstance := activities.NewActivities(db, podManager, cfg)
@@ -78,6 +79,7 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 	w.RegisterActivity(activitiesInstance.DiscoverCatalogActivity)
 	w.RegisterActivity(activitiesInstance.TestConnectionActivity)
 	w.RegisterActivity(activitiesInstance.SyncActivity)
+	w.RegisterActivity(activitiesInstance.FetchSpecActivity)
 
 	logger.Info("Successfully registered all workflows and activities")
 	logger.Infof("Worker Identity: %s", cfg.Worker.WorkerIdentity)
