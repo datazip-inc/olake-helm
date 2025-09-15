@@ -79,16 +79,41 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
+        # Database configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+        - name: DB_NAME
+          {{- if .Values.postgresql.enabled }}
+          value: "postgres"
+          {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ .Values.postgresql.external.secretKeys.database }}
+          {{- end }}
         - name: DB_USER
           valueFrom:
             secretKeyRef:
-              name: postgresql-secret
-              key: POSTGRES_USER
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgresql-secret
-              key: POSTGRES_PASSWORD
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+        - name: DB_SSLMODE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
         {{- range $key, $value := .Values.global.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
