@@ -80,7 +80,7 @@ func (k *K8sPodManager) getPodResults(podName string, operation shared.Command, 
 		if logs, err := k.getPodLogs(context.Background(), podName); err == nil {
 			if result, err := parser.ExtractJSON(logs); err == nil {
 				logger.Infof("Successfully parsed spec output from pod %s", podName)
-				return map[string]interface{}{"spec": result}, nil
+				return result, nil
 			} else {
 				logger.Errorf("Failed to parse spec output from pod %s: %v", podName, err)
 				return nil, fmt.Errorf("failed to parse spec output from pod %s: %v", podName, err)

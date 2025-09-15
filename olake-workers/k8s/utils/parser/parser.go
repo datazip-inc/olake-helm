@@ -145,7 +145,7 @@ func ExtractJSON(output string) (map[string]interface{}, error) {
 			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
 				continue // Skip invalid JSON
 			}
-			return result, nil
+			return map[string]interface{}{"spec": result}, nil
 		}
 	}
 
