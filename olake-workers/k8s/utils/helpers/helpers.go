@@ -34,6 +34,8 @@ func GetActivityTimeout(operation string) time.Duration {
 		return parseTimeout("timeouts.activity.test", 2*time.Hour)
 	case "sync":
 		return parseTimeout("timeouts.activity.sync", 700*time.Hour)
+	case "spec":
+		return parseTimeout("timeouts.activity.spec", 5*time.Minute)
 	default:
 		return 30 * time.Minute
 	}

@@ -60,3 +60,15 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	err := workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
 	return result, err
 }
+
+func FetchSpecWorkflow(ctx workflow.Context, params *shared.ActivityParams) (map[string]interface{}, error) {
+	options := workflow.ActivityOptions{
+		StartToCloseTimeout: helpers.GetActivityTimeout("spec"),
+		RetryPolicy:         DefaultRetryPolicy,
+	}
+	ctx = workflow.WithActivityOptions(ctx, options)
+
+	var result map[string]interface{}
+	err := workflow.ExecuteActivity(ctx, "FetchSpecActivity", params).Get(ctx, &result)
+	return result, err
+}

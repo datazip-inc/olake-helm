@@ -120,3 +120,34 @@ func parseConnectionTestOutput(output string) (map[string]interface{}, error) {
 		"status":  logMessage.ConnectionStatus.Status,
 	}, nil
 }
+
+// ParseSpecOutput extracts JSON specification from connector output
+func ExtractJSON(output string) (map[string]interface{}, error) {
+	outputStr := strings.TrimSpace(output)
+	if outputStr == "" {
+		return nil, fmt.Errorf("empty output")
+	}
+
+	lines := strings.Split(outputStr, "\n")
+
+	// Find the last non-empty line with valid JSON
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		start := strings.Index(line, "{")
+		end := strings.LastIndex(line, "}")
+		if start != -1 && end != -1 && end > start {
+			jsonPart := line[start : end+1]
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
+				continue // Skip invalid JSON
+			}
+			return result, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON block found in output")
+}
