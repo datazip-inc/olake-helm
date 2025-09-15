@@ -9,6 +9,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/spf13/viper v1.20.1
 	go.temporal.io/sdk v1.25.1
+	golang.org/x/mod v0.17.0
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.4
