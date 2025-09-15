@@ -25,6 +25,7 @@ type ActivityParams struct {
 	JobID           int
 	Flag            string
 	DestinationType string
+	JobName         string
 }
 
 // SyncParams contains parameters for sync activities

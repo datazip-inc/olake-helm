@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/sdk/activity"
+	"golang.org/x/mod/semver"
 
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/database"
@@ -48,6 +49,10 @@ func (a *Activities) DiscoverCatalogActivity(ctx context.Context, params shared.
 	args := []string{string(shared.Discover), "--config", "/mnt/config/config.json"}
 	configs := []shared.JobConfig{
 		{Name: "config.json", Data: params.Config},
+	}
+
+	if params.JobName != "" && semver.Compare(params.Version, "v0.2.0") >= 0 {
+		args = append(args, "--destination-database-prefix", params.JobName)
 	}
 
 	// Add streams configuration if provided (for stream merging)
