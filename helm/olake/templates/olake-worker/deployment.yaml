@@ -97,7 +97,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
-              key: {{ .Values.postgresql.external.secretKeys.database }}
+              key: {{ .Values.postgresql.external.secretKeys.olake_database }}
           {{- end }}
         - name: DB_USER
           valueFrom:
