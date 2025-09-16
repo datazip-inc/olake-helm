@@ -73,6 +73,24 @@ func (k *K8sPodManager) getPodResults(podName string, operation shared.Command, 
 		}
 	}
 
+	// SPEC OPERATIONS: Extract results from pod logs using log parsing
+	// Spec operations output JSON specification to stdout
+	// Similar to check operations, spec operations don't write files - they only output to logs
+	if operation == shared.Spec {
+		logs, err := k.getPodLogs(context.Background(), podName)
+		if err != nil {
+			logger.Errorf("Failed to get logs for spec pod %s: %v", podName, err)
+			return nil, fmt.Errorf("failed to get logs for spec pod %s: %v", podName, err)
+		}
+		result, err := parser.ExtractJSON(logs)
+		if err != nil {
+			logger.Errorf("Failed to parse spec output from pod %s: %v", podName, err)
+			return nil, fmt.Errorf("failed to parse spec output from pod %s: %v", podName, err)
+		}
+		logger.Infof("Successfully parsed spec output from pod %s", podName)
+		return result, nil
+	}
+
 	// No fallback available - return error indicating file-based results are required
 	return nil, fmt.Errorf("failed to read results from filesystem for pod %s, operation %s", podName, operation)
 }

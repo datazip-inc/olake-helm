@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/sdk/activity"
+	"golang.org/x/mod/semver"
 
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/database"
@@ -48,6 +49,10 @@ func (a *Activities) DiscoverCatalogActivity(ctx context.Context, params shared.
 	args := []string{string(shared.Discover), "--config", "/mnt/config/config.json"}
 	configs := []shared.JobConfig{
 		{Name: "config.json", Data: params.Config},
+	}
+
+	if params.JobName != "" && semver.Compare(params.Version, "v0.2.0") >= 0 {
+		args = append(args, "--destination-database-prefix", params.JobName)
 	}
 
 	// Add streams configuration if provided (for stream merging)
@@ -218,4 +223,44 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 	}
 
 	return result, nil
+}
+
+// FetchSpecActivity fetches connector specifications using Kubernetes Pod
+func (a *Activities) FetchSpecActivity(ctx context.Context, params shared.ActivityParams) (map[string]interface{}, error) {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Debug("Starting K8s spec activity",
+		"sourceType", params.SourceType,
+		"version", params.Version,
+		"workflowID", params.WorkflowID)
+
+	activity.RecordHeartbeat(ctx, "Creating Kubernetes Pod for spec fetch")
+
+	// Transform Temporal activity parameters into Kubernetes pod execution request
+	// Maps connector type/version to container image for spec retrieval
+	imageName, err := a.podManager.GetDockerImageName(params.SourceType, params.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get docker image name: %v", err)
+	}
+
+	// Build args slice for spec command
+	args := []string{string(shared.Spec)}
+
+	// Add destination-type flag if DestConfig is provided (for destination specs)
+	if params.DestinationType != "" {
+		args = append(args, "--destination-type", params.DestinationType)
+	}
+	// TODO: remove JobID in refactor
+	request := pods.PodActivityRequest{
+		WorkflowID:    params.WorkflowID,
+		JobID:         params.JobID,
+		Operation:     shared.Spec,
+		ConnectorType: params.SourceType,
+		Image:         imageName,
+		Args:          args,
+		Configs:       []shared.JobConfig{}, // No config files needed for spec
+		Timeout:       helpers.GetActivityTimeout("spec"),
+	}
+
+	// Execute spec operation by creating K8s pod, wait for completion, retrieve results from pod logs
+	return a.podManager.ExecutePodActivity(ctx, request)
 }
