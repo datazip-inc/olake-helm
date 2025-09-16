@@ -71,6 +71,7 @@ func bindEnvironmentVariables(v *viper.Viper) {
 	_ = v.BindEnv("timeouts.activity.discover", "TIMEOUT_ACTIVITY_DISCOVER")
 	_ = v.BindEnv("timeouts.activity.test", "TIMEOUT_ACTIVITY_TEST")
 	_ = v.BindEnv("timeouts.activity.sync", "TIMEOUT_ACTIVITY_SYNC")
+	_ = v.BindEnv("timeouts.activity.spec", "TIMEOUT_ACTIVITY_SPEC")
 
 	// Logging bindings
 	_ = v.BindEnv("logging.level", "LOG_LEVEL")
