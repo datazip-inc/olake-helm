@@ -258,6 +258,7 @@ olakeWorker:
         discover: 2h
         test: 2h
         sync: 700h
+        spec: 5m
     
     # -- Logging configuration
     logging:
