@@ -22,6 +22,7 @@ data:
   TIMEOUT_ACTIVITY_DISCOVER: {{ .Values.olakeWorker.config.timeouts.activity.discover | quote }}
   TIMEOUT_ACTIVITY_TEST: {{ .Values.olakeWorker.config.timeouts.activity.test | quote }}
   TIMEOUT_ACTIVITY_SYNC: {{ .Values.olakeWorker.config.timeouts.activity.sync | quote }}
+  TIMEOUT_ACTIVITY_SPEC: {{ .Values.olakeWorker.config.timeouts.activity.spec | quote }}
   
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
