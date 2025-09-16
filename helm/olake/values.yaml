@@ -362,6 +362,36 @@ temporal:
 
 # PostgreSQL is used as the backend database for Temporal and OLake
 postgresql:
+  # -- Enable internal PostgreSQL deployment
+  # Set to false to use an external PostgreSQL database
+  enabled: true
+
+  # -- External PostgreSQL configuration (used when enabled: false)
+  # Provide Kubernetes secret containing database credentials
+  external:
+    # -- Name of the Kubernetes secret containing external database credentials
+    # The secret must contain keys: host, port, database, username, password
+    # Example secret creation:
+    #   kubectl create secret generic my-postgres-secret \
+    #     --from-literal=host=my-postgres.example.com \
+    #     --from-literal=port=5432 \
+    #     --from-literal=olake_database=olake \
+    #     --from-literal=temporal_database=temporal \
+    #     --from-literal=username=olake_user \
+    #     --from-literal=password=my_secure_password \
+    #     --from-literal=ssl_mode=disable
+    existingSecret: ""
+
+    # -- Map the keys from existing secret to the required fields
+    secretKeys:
+      host:               "host"
+      port:               "port"
+      olake_database:     "olake_database"
+      temporal_database:  "temporal_database"
+      username:           "username"
+      password:           "password"
+      ssl_mode:           "ssl_mode"
+
   # -- PostgreSQL image configuration
   image:
     repository: postgres

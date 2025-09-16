@@ -12,12 +12,6 @@ data:
   TEMPORAL_ADDRESS: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
   TEMPORAL_TASK_QUEUE: {{ .Values.olakeWorker.env.TEMPORAL_TASK_QUEUE | default "OLAKE_DOCKER_TASK_QUEUE" }}
   
-  # Database Configuration
-  DB_HOST: "postgresql.{{ include "olake.namespace" . }}.svc.cluster.local"
-  DB_PORT: "5432"
-  DB_NAME: "postgres"
-  DB_SSLMODE: "disable"
-  
   # Timeout Configuration
   TIMEOUT_ACTIVITY_DISCOVER: {{ .Values.olakeWorker.config.timeouts.activity.discover | quote }}
   TIMEOUT_ACTIVITY_TEST: {{ .Values.olakeWorker.config.timeouts.activity.test | quote }}
