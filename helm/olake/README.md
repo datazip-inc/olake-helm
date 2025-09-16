@@ -203,6 +203,40 @@ nfsServer:
 
 **Note:** For development and quick starts, a simple NFS server is included and enabled by default. This provides an out-of-the-box shared storage solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
 
+### External PostgreSQL Configuration
+
+External PostgreSQL databases can be used instead of the built-in postgresql deployment.
+
+**1. Create database secret:**
+```bash
+kubectl create secret generic external-postgres-secret \
+  --from-literal=host="postgres-host" \
+  --from-literal=port="5432" \
+  --from-literal=database="database_name" \
+  --from-literal=username="username" \
+  --from-literal=password="password" \
+  --from-literal=ssl_mode="require"
+```
+
+**2. Configure values.yaml:**
+```yaml
+postgresql:
+  enabled: false
+  external:
+    existingSecret: "external-postgres-secret"
+    secretKeys:
+      host:     "host"
+      port:     "port"
+      database: "database"
+      username: "username"
+      password: "password"
+      ssl_mode: "ssl_mode"
+```
+
+**Requirements:**
+- PostgreSQL 12+ with `btree_gin` extension enabled
+- Network connectivity from Kubernetes cluster to PostgreSQL instance
+
 ## Monitoring and Troubleshooting
 
 ### View Logs
