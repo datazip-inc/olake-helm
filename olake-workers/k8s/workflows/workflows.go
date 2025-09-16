@@ -61,6 +61,7 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	return result, err
 }
 
+// FetchSpecWorkflow is a workflow for fetching connector specifications using K8s Jobs
 func FetchSpecWorkflow(ctx workflow.Context, params *shared.ActivityParams) (map[string]interface{}, error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("spec"),

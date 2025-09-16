@@ -131,8 +131,8 @@ func ExtractJSON(output string) (map[string]interface{}, error) {
 	lines := strings.Split(outputStr, "\n")
 
 	// Find the last non-empty line with valid JSON
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
+	for lineIndex := len(lines) - 1; lineIndex >= 0; lineIndex-- {
+		line := strings.TrimSpace(lines[lineIndex])
 		if line == "" {
 			continue
 		}
