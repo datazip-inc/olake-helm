@@ -205,14 +205,20 @@ nfsServer:
 
 ### External PostgreSQL Configuration
 
-External PostgreSQL databases can be used instead of the built-in postgresql deployment.
+External PostgreSQL databases can be used instead of the built-in postgresql deployment. It is the primary database for storing job data, configurations, and sync state.
+
+**Requirements:**
+- PostgreSQL 12+ with `btree_gin` extension enabled
+- Both OLake and Temporal databases created on the PostgreSQL instance
+- Network connectivity from Kubernetes cluster to PostgreSQL instance
 
 **1. Create database secret:**
 ```bash
 kubectl create secret generic external-postgres-secret \
   --from-literal=host="postgres-host" \
   --from-literal=port="5432" \
-  --from-literal=database="database_name" \
+  --from-literal=olake_database="olakeDB" \
+  --from-literal=temporal_database="temporalDB" \
   --from-literal=username="username" \
   --from-literal=password="password" \
   --from-literal=ssl_mode="require"
@@ -225,17 +231,14 @@ postgresql:
   external:
     existingSecret: "external-postgres-secret"
     secretKeys:
-      host:     "host"
-      port:     "port"
-      database: "database"
-      username: "username"
-      password: "password"
-      ssl_mode: "ssl_mode"
+      host:              "host"
+      port:              "port"
+      olake_database:    "olake_database"
+      temporal_database: "temporal_database"
+      username:          "username"
+      password:          "password"
+      ssl_mode:          "ssl_mode"
 ```
-
-**Requirements:**
-- PostgreSQL 12+ with `btree_gin` extension enabled
-- Network connectivity from Kubernetes cluster to PostgreSQL instance
 
 ## Monitoring and Troubleshooting
 

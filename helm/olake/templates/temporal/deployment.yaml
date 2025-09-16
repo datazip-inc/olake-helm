@@ -109,7 +109,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
-              key: {{ .Values.postgresql.external.secretKeys.database }}
+              key: {{ .Values.postgresql.external.secretKeys.temporal_database }}
           {{- end }}
         {{- if and (not .Values.postgresql.enabled) (ne (.Values.postgresql.external.secretKeys.ssl_mode | default "disable") "disable") }}
         - name: SQL_TLS

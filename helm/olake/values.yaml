@@ -374,7 +374,8 @@ postgresql:
     #   kubectl create secret generic my-postgres-secret \
     #     --from-literal=host=my-postgres.example.com \
     #     --from-literal=port=5432 \
-    #     --from-literal=database=olake \
+    #     --from-literal=olake_database=olake \
+    #     --from-literal=temporal_database=temporal \
     #     --from-literal=username=olake_user \
     #     --from-literal=password=my_secure_password \
     #     --from-literal=ssl_mode=disable
@@ -382,12 +383,13 @@ postgresql:
 
     # -- Map the keys from existing secret to the required fields
     secretKeys:
-      host: "host"
-      port: "port"
-      database: "database"
-      username: "username"
-      password: "password"
-      ssl_mode: "ssl_mode"
+      host:               "host"
+      port:               "port"
+      olake_database:     "olake_database"
+      temporal_database:  "temporal_database"
+      username:           "username"
+      password:           "password"
+      ssl_mode:           "ssl_mode"
 
   # -- PostgreSQL image configuration
   image:
