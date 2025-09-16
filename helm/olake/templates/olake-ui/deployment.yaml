@@ -83,17 +83,17 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         # Database configuration
-        - name: POSTGRES_DB_HOST
+        - name: OLAKE_POSTGRES_HOST
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
-        - name: POSTGRES_DB_PORT
+        - name: OLAKE_POSTGRES_PORT
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
-        - name: POSTGRES_DB_NAME
+        - name: OLAKE_POSTGRES_DBNAME
           {{- if .Values.postgresql.enabled }}
           value: "postgres"
           {{- else }}
@@ -102,17 +102,17 @@ spec:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ .Values.postgresql.external.secretKeys.database }}
           {{- end }}
-        - name: POSTGRES_DB_USER
+        - name: OLAKE_POSTGRES_USER
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
-        - name: POSTGRES_DB_PASSWORD
+        - name: OLAKE_POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
-        - name: POSTGRES_DB_SSLMODE
+        - name: OLAKE_POSTGRES_SSLMODE
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
