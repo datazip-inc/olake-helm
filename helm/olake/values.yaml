@@ -397,9 +397,6 @@ postgresql:
   
   # -- Authentication configuration
   auth:
-    # -- PostgreSQL database name
-    postgresDatabase: "temporal"
-
     # -- PostgreSQL super user name
     postgresUser: "temporal"
 
