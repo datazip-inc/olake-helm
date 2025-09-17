@@ -266,14 +266,24 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl get events --sort-by='.lastTimestamp' --field-selector type!=Normal
    ```
 
-2. **OLake UI not starting**
+2. **Rollout restart pods**
+
+   To pull the latest images and restart the deployments without downtime, trigger a rollout restart:
+
+   ```bash
+   # Restart OLake components
+   kubectl rollout restart deployment/olake-ui
+   kubectl rollout restart deployment/olake-workers
+   ```
+
+3. **OLake UI not starting**
    ```bash
    # Check UI pod status and logs
    kubectl get pods -l app.kubernetes.io/name=olake-ui
    kubectl logs -l app.kubernetes.io/name=olake-ui -f
    ```
 
-3. **OLake Worker issues**
+4. **OLake Worker issues**
    ```bash
    # Check worker pod status and logs
    kubectl get pods -l app.kubernetes.io/name=olake-workers
@@ -283,7 +293,7 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl describe configmap olake-workers-config
    ```
 
-4. **Storage provisioning failures**
+5. **Storage provisioning failures**
    ```bash
    # Check PVC and PV status
    kubectl get pv,pvc
