@@ -63,13 +63,23 @@ Perform the login with the default credentials: `admin` / `password`.
 
 ```bash
 # Upgrade to latest version
-helm upgrade olake ./helm/olake
+helm upgrade olake olake/olake
 
 # Upgrade with new values
-helm upgrade olake ./helm/olake -f new-values.yaml
+helm upgrade olake olake/olake -f new-values.yaml
 ```
 
 ## Configuring the Helm Chart
+
+### Updating OLake UI Version
+
+Pull the latest images and restart the deployments without downtime:
+
+```bash
+# Restart OLake components
+kubectl rollout restart deployment/olake-ui
+kubectl rollout restart deployment/olake-workers
+```
 
 ### Initial User Setup
 
@@ -266,24 +276,14 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl get events --sort-by='.lastTimestamp' --field-selector type!=Normal
    ```
 
-2. **Pull latest images for deployment**
-
-   To pull the latest images and restart the deployments without downtime, trigger a rollout restart:
-
-   ```bash
-   # Restart OLake components
-   kubectl rollout restart deployment/olake-ui
-   kubectl rollout restart deployment/olake-workers
-   ```
-
-3. **OLake UI not starting**
+2. **OLake UI not starting**
    ```bash
    # Check UI pod status and logs
    kubectl get pods -l app.kubernetes.io/name=olake-ui
    kubectl logs -l app.kubernetes.io/name=olake-ui -f
    ```
 
-4. **OLake Worker issues**
+3. **OLake Worker issues**
    ```bash
    # Check worker pod status and logs
    kubectl get pods -l app.kubernetes.io/name=olake-workers
@@ -293,7 +293,7 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl describe configmap olake-workers-config
    ```
 
-5. **Storage provisioning failures**
+4. **Storage provisioning failures**
    ```bash
    # Check PVC and PV status
    kubectl get pv,pvc
