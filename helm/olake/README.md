@@ -266,7 +266,7 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl get events --sort-by='.lastTimestamp' --field-selector type!=Normal
    ```
 
-2. **Rollout restart pods**
+2. **Fetch latest images for deployment**
 
    To pull the latest images and restart the deployments without downtime, trigger a rollout restart:
 
