@@ -63,13 +63,23 @@ Perform the login with the default credentials: `admin` / `password`.
 
 ```bash
 # Upgrade to latest version
-helm upgrade olake ./helm/olake
+helm upgrade olake olake/olake
 
 # Upgrade with new values
-helm upgrade olake ./helm/olake -f new-values.yaml
+helm upgrade olake olake/olake -f new-values.yaml
 ```
 
 ## Configuring the Helm Chart
+
+### Updating OLake UI Version
+
+Pull the latest images and restart the deployments without downtime:
+
+```bash
+# Restart OLake components
+kubectl rollout restart deployment/olake-ui
+kubectl rollout restart deployment/olake-workers
+```
 
 ### Initial User Setup
 
