@@ -15,15 +15,18 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	MaximumAttempts:    1,
 }
 
+
+// TODO: Check if we can follow the current approach or have separate workflows and a single actiity
 func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: req.Timeout,
 		RetryPolicy:         DefaultRetryPolicy,
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
+	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(ctx, ExecuteActivity, req).Get(ctx, &result); err != nil {
+	if err := workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, &result); err != nil {
 		return nil, err
 	}
 	return result, nil

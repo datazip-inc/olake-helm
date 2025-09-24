@@ -35,3 +35,10 @@ func WriteFile(filePath string, data []byte, perm os.FileMode) error {
 	}
 	return nil
 }
+
+func Ternary(condition bool, trueValue, falseValue interface{}) interface{} {
+	if condition {
+		return trueValue
+	}
+	return falseValue
+}

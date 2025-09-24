@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,8 +29,8 @@ func GetDockerImageName(sourceType, version string) string {
 	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
 }
 
-func SetupWorkDirectory(baseDir, subDir string) (string, error) {
-	dir := filepath.Join(baseDir, subDir)
+func (d *DockerExecutor) SetupWorkDirectory(subDir string) (string, error) {
+	dir := filepath.Join(d.workingDir, subDir)
 	if err := os.MkdirAll(dir, constants.DefaultDirPermissions); err != nil {
 		return "", fmt.Errorf("failed to create work directory: %w", err)
 	}
@@ -160,5 +161,37 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 	}
 
 	logger.Infof("Using local image: %s", imageName)
+	return nil
+}
+
+func UpdateStateFile(jobID int, stateFile string) error {
+	endpoint := utils.GetEnv("OLAKE_UI_WEBHOOK_URL", constants.DefaultOlakeUIWebhookURL)
+
+	state, err := ReadJSONFile(stateFile)
+	if err != nil {
+		return fmt.Errorf("failed to read state file: %v", err)
+	}
+
+	payload := map[string]interface{}{
+		"job_id": jobID,
+		"state":  state,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	resp, err := http.Post(endpoint, "application/json", strings.NewReader(string(jsonData)))
+	if err != nil {
+		return fmt.Errorf("failed to send state update: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("state update failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
 	return nil
 }
