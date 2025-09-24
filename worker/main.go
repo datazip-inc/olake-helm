@@ -8,9 +8,16 @@ import (
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
+	"github.com/datazip-inc/olake-helm/worker/types"
 )
 
 func main() {
+	logConfig := &types.LoggingConfig{
+		Level:  "info", // or get from env var
+		Format: "console",
+	}
+	logger.Init(logConfig)
+
 	tClient, err := temporal.NewClient()
 	if err != nil {
 		logger.Fatalf("Failed to create Temporal client: %v", err)
@@ -32,7 +39,7 @@ func main() {
 
 	// wait for termination signal
 	sig := <-signalChan
-	logger.Info("Received signal %v, shutting down worker.", sig)
+	logger.Infof("Received signal %v, shutting down worker.", sig)
 
 	// stop the worker
 	worker.Stop()

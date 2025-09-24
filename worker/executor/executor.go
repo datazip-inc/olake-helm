@@ -19,15 +19,16 @@ type NewFunc func() (Executor, error)
 var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
 type ExecutionRequest struct {
-	Type          ExecutorEnvironment
-	Command       string
-	ConnectorType string
-	Version       string
-	Args          []string
-	Configs       []types.JobConfig
-	WorkflowID    string
-	JobID         int
-	Timeout       time.Duration
+	Type          string            `json:"type"`
+	Command       string            `json:"command"`
+	ConnectorType string            `json:"connector_type"`
+	Version       string            `json:"version"`
+	Args          []string          `json:"args"`
+	Configs       []types.JobConfig `json:"configs"`
+	WorkflowID    string            `json:"workflow_id"`
+	JobID         int               `json:"job_id"`
+	Timeout       time.Duration     `json:"timeout"`
+	OutputFile    string            `json:"output_file"`
 }
 
 type ExecutorEnvironment string
