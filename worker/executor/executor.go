@@ -20,7 +20,7 @@ var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
 type ExecutionRequest struct {
 	Type          string            `json:"type"`
-	Command       string            `json:"command"`
+	Command       types.Command     `json:"command"`
 	ConnectorType string            `json:"connector_type"`
 	Version       string            `json:"version"`
 	Args          []string          `json:"args"`

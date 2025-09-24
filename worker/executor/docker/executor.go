@@ -8,6 +8,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/docker/docker/client"
 )
@@ -27,7 +28,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	subDir := utils.Ternary(req.Command == "sync", fmt.Sprintf("%x", sha256.Sum256([]byte(req.WorkflowID))), req.WorkflowID).(string)
+	subDir := utils.Ternary(req.Command == types.Sync, fmt.Sprintf("%x", sha256.Sum256([]byte(req.WorkflowID))), req.WorkflowID).(string)
 	workDir, err := d.SetupWorkDirectory(subDir)
 	if err != nil {
 		return nil, err
@@ -45,7 +46,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 		return nil, err
 	}
 
-	if req.Command == "sync" {
+	if req.Command == types.Sync {
 		stateFile := filepath.Join(workDir, "state.json")
 		if err := UpdateStateFile(req.JobID, stateFile); err != nil {
 			return nil, err
