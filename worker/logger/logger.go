@@ -12,8 +12,16 @@ import (
 
 var logger zerolog.Logger
 
-// Init initializes the global logger based on the provided configuration
-func Init(config *types.LoggingConfig) {
+// Init initializes the global logger
+func Init() {
+	logConfig := &types.LoggingConfig{
+		Level:  "info", // TODO: Get from env var
+		Format: "console",
+	}
+	SetupConfig(logConfig)
+}
+
+func SetupConfig(config *types.LoggingConfig) {
 	zerolog.TimestampFunc = func() time.Time { return time.Now().UTC() }
 
 	var writer io.Writer

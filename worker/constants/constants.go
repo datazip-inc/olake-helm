@@ -5,6 +5,7 @@ const (
 	DefaultTemporalAddress     = "localhost:7233"
 	DefaultExecutorEnvironment = "docker"
 	DefaultOlakeUIWebhookURL   = "http://host.docker.internal:8000/internal/worker/sync/callback"
+	DefaultHealthPort          = 8090
 
 	// Directory paths
 	DefaultConfigDir  = "/tmp/olake-config"
@@ -16,6 +17,7 @@ const (
 	EnvPersistentDir       = "PERSISTENT_DIR"
 	EnvDockerImagePrefix   = "DOCKER_IMAGE_PREFIX"
 	EnvOlakeUIWebhookURL   = "OLAKE_UI_WEBHOOK_URL"
+	EnvHealthPort          = "HEALTH_PORT"
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755

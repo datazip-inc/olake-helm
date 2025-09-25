@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+
+	"github.com/datazip-inc/olake-helm/worker/constants"
 )
 
 func GetEnv(key, defaultValue string) string {
@@ -41,4 +44,17 @@ func Ternary(condition bool, trueValue, falseValue interface{}) interface{} {
 		return trueValue
 	}
 	return falseValue
+}
+
+func GetExecutorEnvironment() string {
+	return GetEnv(constants.EnvExecutorEnvironment, constants.DefaultExecutorEnvironment)
+}
+
+func GetHealthPort() int {
+	portStr := GetEnv(constants.EnvHealthPort, strconv.Itoa(constants.DefaultHealthPort))
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return constants.DefaultHealthPort
+	}
+	return port
 }

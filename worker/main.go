@@ -5,18 +5,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
-	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 )
 
 func main() {
-	logConfig := &types.LoggingConfig{
-		Level:  "info", // or get from env var
-		Format: "console",
-	}
-	logger.Init(logConfig)
+	logger.Init()
 
 	tClient, err := temporal.NewClient()
 	if err != nil {
@@ -33,6 +30,17 @@ func main() {
 		}
 	}()
 
+	// start health server for kubernetes environment
+	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
+		healthServer := temporal.NewHealthServer(worker, utils.GetHealthPort())
+		go func() {
+			err := healthServer.Start()
+			if err != nil {
+				logger.Fatalf("Failed to start Kubernetes health server: %v", err)
+			}
+		}()
+	}
+
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
@@ -40,6 +48,13 @@ func main() {
 	// wait for termination signal
 	sig := <-signalChan
 	logger.Infof("Received signal %v, shutting down worker.", sig)
+
+	// clean up executor
+	if instance, _ := executor.GetExecutor(); instance != nil {
+		if err := instance.Close(); err != nil {
+			logger.Fatalf("Failed to close executor: %v", err)
+		}
+	}
 
 	// stop the worker
 	worker.Stop()

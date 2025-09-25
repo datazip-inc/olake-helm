@@ -7,7 +7,7 @@ import (
 )
 
 func ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	exec, err := executor.NewExecutor()
+	exec, err := executor.GetExecutor()
 	if err != nil {
 		return nil, err
 	}

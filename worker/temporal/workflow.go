@@ -15,14 +15,16 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	MaximumAttempts:    1,
 }
 
-
-// TODO: Check if we can follow the current approach or have separate workflows and a single actiity
+// TODO: Check if we can follow the current approach or have separate workflows and a single activity
 func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: req.Timeout,
 		RetryPolicy:         DefaultRetryPolicy,
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	// Each scheduled workflow execution gets a unique WorkflowID.
+	// We're assigning that here to distinguish between different scheduled executions.
 	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	var result map[string]interface{}
