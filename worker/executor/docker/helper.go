@@ -165,7 +165,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 }
 
 func UpdateStateFile(jobID int, stateFile string) error {
-	endpoint := utils.GetEnv("OLAKE_UI_WEBHOOK_URL", constants.DefaultOlakeUIWebhookURL)
+	endpoint := utils.GetEnv("OLAKE_UI_WEBHOOK_URL", constants.DefaultOlakeCallbackURL)
 
 	state, err := ReadJSONFile(stateFile)
 	if err != nil {

@@ -17,7 +17,11 @@ type Worker struct {
 func NewWorker(c *Client) *Worker {
 	w := worker.New(c.GetClient(), TaskQueue, worker.Options{})
 
+	// regsiter workflows
+	w.RegisterWorkflow(ExecuteSyncWorkflow)
 	w.RegisterWorkflow(ExecuteWorkflow)
+
+	// regsiter activities
 	w.RegisterActivity(ExecuteActivity)
 
 	return &Worker{

@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -101,12 +99,6 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *executor.Executio
 	rawLogs, err := k.runPod(ctx, req, workDir)
 	if err != nil {
 		return nil, err
-	}
-
-	if req.Command == types.Sync {
-		if err := k.updateStateFile(req.JobID, workDir); err != nil {
-			return nil, err
-		}
 	}
 
 	if req.OutputFile != "" {
@@ -389,39 +381,6 @@ func (k *KubernetesExecutor) sanitizeName(name string) string {
 func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
 	q, _ := resource.ParseQuantity(s)
 	return q
-}
-
-func (k *KubernetesExecutor) updateStateFile(jobID int, workDir string) error {
-	endpoint := utils.GetEnv("OLAKE_UI_WEBHOOK_URL", constants.DefaultOlakeUIWebhookURL)
-
-	stateFile := filepath.Join(workDir, "state.json")
-	state, err := k.readOutputFile(stateFile)
-	if err != nil {
-		return fmt.Errorf("failed to read state file: %v", err)
-	}
-
-	payload := map[string]interface{}{
-		"job_id": jobID,
-		"state":  state,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %v", err)
-	}
-
-	resp, err := http.Post(endpoint, "application/json", strings.NewReader(string(jsonData)))
-	if err != nil {
-		return fmt.Errorf("failed to send state update: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("state update failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
 }
 
 func (k *KubernetesExecutor) readOutputFile(filePath string) (string, error) {

@@ -46,13 +46,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 		return nil, err
 	}
 
-	if req.Command == types.Sync {
-		stateFile := filepath.Join(workDir, "state.json")
-		if err := UpdateStateFile(req.JobID, stateFile); err != nil {
-			return nil, err
-		}
-	}
-
 	// if output file is specified, return it
 	if req.OutputFile != "" {
 		response, err := ReadJSONFile(filepath.Join(workDir, req.OutputFile))
