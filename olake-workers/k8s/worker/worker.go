@@ -18,7 +18,7 @@ import (
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/workflows"
 )
 
-const telemetryIDPath = "/data/olake-jobs/telemetry/user_id.txt"
+const telemetryIDPath = "/data/olake-jobs/telemetry/user_id"
 
 type K8sWorker struct {
 	temporalClient client.Client
@@ -45,7 +45,7 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 	logger.Info("Created database connection")
 
 	if cfg.TelemetryConfig.Disabled == "true" || cfg.TelemetryConfig.Disabled == "TRUE" {
-		logger.Debug("Telemetry disabled; skipping user id bootstrap")
+		logger.Debug("Telemetry is disabled")
 	} else {
 		cfg.TelemetryConfig.UserID = helpers.WaitForTelemetryID(telemetryIDPath)
 		logger.Debug("Telemetry user id detected")
