@@ -21,6 +21,9 @@ type Config struct {
 
 	// Logging configuration
 	Logging LoggingConfig `mapstructure:"logging"`
+
+	// Telemetry configuration
+	TelemetryConfig TelemetryConfig `mapstructure:"telemetry"`
 }
 
 // TemporalConfig contains Temporal-related settings
@@ -94,4 +97,10 @@ type ActivityTimeouts struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+// TelemetryConfig contains telemetry settings
+type TelemetryConfig struct {
+	Disabled string `mapstructure:"disabled"`
+	UserID   string `mapstructure:"user_id"`
 }

@@ -13,9 +13,12 @@ import (
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/database"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/pods"
+	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/workflows"
 )
+
+const telemetryIDPath = "/data/olake-jobs/telemetry/user_id.txt"
 
 type K8sWorker struct {
 	temporalClient client.Client
@@ -40,6 +43,13 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 		return nil, fmt.Errorf("failed to create database: %v", err)
 	}
 	logger.Info("Created database connection")
+
+	if cfg.TelemetryConfig.Disabled == "true" || cfg.TelemetryConfig.Disabled == "TRUE" {
+		logger.Debug("Telemetry disabled; skipping user id bootstrap")
+	} else {
+		cfg.TelemetryConfig.UserID = helpers.WaitForTelemetryID(telemetryIDPath)
+		logger.Debug("Telemetry user id detected")
+	}
 
 	// Create pod manager
 	podManager, err := pods.NewK8sPodManager(cfg)

@@ -76,4 +76,8 @@ func bindEnvironmentVariables(v *viper.Viper) {
 	// Logging bindings
 	_ = v.BindEnv("logging.level", "LOG_LEVEL")
 	_ = v.BindEnv("logging.format", "LOG_FORMAT")
+
+	// Telemetry bindings
+	v.SetDefault("telemetry.disabled", "FALSE")
+	_ = v.BindEnv("telemetry.disabled", "TELEMETRY_DISABLED")
 }
