@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 )
@@ -14,10 +15,6 @@ type Executor interface {
 	Execute(ctx context.Context, req *ExecutionRequest) (map[string]interface{}, error)
 	Close() error
 }
-
-type NewFunc func() (Executor, error)
-
-var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
 type ExecutionRequest struct {
 	Type          string            `json:"type"`
@@ -39,14 +36,9 @@ const (
 	Docker     ExecutorEnvironment = "docker"
 )
 
-func NewExecutor() (Executor, error) {
-	executorEnv := utils.GetExecutorEnvironment()
-	newFunc, ok := RegisteredExecutors[ExecutorEnvironment(executorEnv)]
-	if !ok {
-		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
-	}
-	return newFunc()
-}
+type NewFunc func() (Executor, error)
+
+var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
 // Singleton instance of the executor
 var (
@@ -54,6 +46,15 @@ var (
 	execInstance Executor
 	execErr      error
 )
+
+func NewExecutor() (Executor, error) {
+	executorEnv := utils.GetEnv(constants.EnvExecutorEnvironment, constants.DefaultExecutorEnvironment)
+	newFunc, ok := RegisteredExecutors[ExecutorEnvironment(executorEnv)]
+	if !ok {
+		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
+	}
+	return newFunc()
+}
 
 func GetExecutor() (Executor, error) {
 	execOnce.Do(func() {

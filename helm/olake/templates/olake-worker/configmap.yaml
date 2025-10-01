@@ -40,6 +40,16 @@ data:
   
   # Runtime Configuration
   RUN_MODE: {{ .Values.olakeWorker.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "staging" }}
+
+  # Worker runtime
+  EXECUTOR_ENVIRONMENT: {{ .Values.olakeWorker.env.EXECUTOR_ENVIRONMENT | default "kubernetes" | quote }}
+  HEALTH_PORT: {{ .Values.olakeWorker.env.HEALTH_PORT | default 8090 | quote }}
+
+  # API Callback
+  OLAKE_CALLBACK_URL: {{ .Values.olakeWorker.env.OLAKE_CALLBACK_URL | default (printf "http://olake-ui.%s.svc.cluster.local:8000/internal/worker/callback" (include "olake.namespace" .)) | quote }}
+
+  # Docker executor
+  DOCKER_IMAGE_PREFIX: {{ .Values.olakeWorker.env.DOCKER_IMAGE_PREFIX | default "olakego/source" | quote }}
   
   # =================================================================
   # JOB MAPPING CONFIGURATION

@@ -7,6 +7,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
+	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -20,6 +21,9 @@ func main() {
 		logger.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer tClient.Close()
+
+	// init log cleaner
+	utils.InitLogCleaner(utils.GetConfigDir(), utils.GetLogRetentionPeriod())
 
 	worker := temporal.NewWorker(tClient)
 	go func() {

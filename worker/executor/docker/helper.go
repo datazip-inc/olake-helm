@@ -2,82 +2,24 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 )
 
-func GetDockerImageName(sourceType, version string) string {
-	if version == "" {
-		version = "latest"
-	}
-	prefix := utils.GetEnv(constants.EnvDockerImagePrefix, constants.DockerImagePrefix)
-	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
-}
-
-func (d *DockerExecutor) SetupWorkDirectory(subDir string) (string, error) {
-	dir := filepath.Join(d.workingDir, subDir)
-	if err := os.MkdirAll(dir, constants.DefaultDirPermissions); err != nil {
-		return "", fmt.Errorf("failed to create work directory: %w", err)
-	}
-	return dir, nil
-}
-
-func WriteConfigFiles(workDir string, configs []types.JobConfig) error {
-	for _, cfg := range configs {
-		path := filepath.Join(workDir, cfg.Name)
-		if err := os.WriteFile(path, []byte(cfg.Data), constants.DefaultFilePermissions); err != nil {
-			return fmt.Errorf("failed to write %s: %w", cfg.Name, err)
-		}
-	}
-	return nil
-}
-
-func DeleteConfigFiles(workDir string, configs []types.JobConfig) {
-	for _, cfg := range configs {
-		_ = os.Remove(filepath.Join(workDir, cfg.Name))
-	}
-}
-
-func getHostOutputDir(outputDir string) string {
-	if persistentDir := os.Getenv(constants.EnvPersistentDir); persistentDir != "" {
-		hostOutputDir := strings.Replace(outputDir, constants.DefaultConfigDir, persistentDir, 1)
-		return hostOutputDir
-	}
-	return outputDir
-}
-
-// ReadJSONFile parses a JSON file into a map
-func ReadJSONFile(filePath string) (string, error) {
-	fileData, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file %s: %v", filePath, err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(fileData, &result); err != nil {
-		return "", fmt.Errorf("failed to parse JSON from file %s: %v", filePath, err)
-	}
-
-	return string(fileData), nil
-}
-
+// RunContainer runs a container with the given execution request and work directory
 func (d *DockerExecutor) RunContainer(ctx context.Context, req *executor.ExecutionRequest, workDir string) (string, error) {
-	imageName := GetDockerImageName(req.ConnectorType, req.Version)
+	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	logger.Infof("ImageName: %s", imageName)
 
 	if err := d.PullImage(ctx, imageName, req.Version); err != nil {
@@ -145,7 +87,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 	// For other versions, pull only if not exists locally
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if errdefs.IsNotFound(err) {
-		logger.Infof("Image not found locally, pulling: %s", imageName)
+		logger.Infof("Pulling image: %s", imageName)
 		rc, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 		if err != nil {
 			return fmt.Errorf("image pull %s: %s", imageName, err)
@@ -164,34 +106,11 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 	return nil
 }
 
-func UpdateStateFile(jobID int, stateFile string) error {
-	endpoint := utils.GetEnv("OLAKE_UI_WEBHOOK_URL", constants.DefaultOlakeCallbackURL)
-
-	state, err := ReadJSONFile(stateFile)
-	if err != nil {
-		return fmt.Errorf("failed to read state file: %v", err)
+// getHostOutputDir returns the host output directory
+func getHostOutputDir(outputDir string) string {
+	if persistentDir := os.Getenv(constants.EnvPersistentDir); persistentDir != "" {
+		hostOutputDir := strings.Replace(outputDir, constants.DefaultConfigDir, persistentDir, 1)
+		return hostOutputDir
 	}
-
-	payload := map[string]interface{}{
-		"job_id": jobID,
-		"state":  state,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %v", err)
-	}
-
-	resp, err := http.Post(endpoint, "application/json", strings.NewReader(string(jsonData)))
-	if err != nil {
-		return fmt.Errorf("failed to send state update: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("state update failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return outputDir
 }

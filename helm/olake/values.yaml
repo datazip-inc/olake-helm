@@ -230,7 +230,11 @@ olakeWorker:
   #   env:
   #     CUSTOM_VAR: "value"
   #     FEATURE_FLAG: "true"
-  env: {}
+  env:
+    EXECUTOR_ENVIRONMENT: "kubernetes"
+    HEALTH_PORT: 8090
+    OLAKE_CALLBACK_URL: ""
+    DOCKER_IMAGE_PREFIX: "olakego/source"
 
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:

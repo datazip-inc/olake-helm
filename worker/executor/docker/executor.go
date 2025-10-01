@@ -29,37 +29,34 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	subDir := utils.Ternary(req.Command == types.Sync, fmt.Sprintf("%x", sha256.Sum256([]byte(req.WorkflowID))), req.WorkflowID).(string)
-	workDir, err := d.SetupWorkDirectory(subDir)
+	workDir, err := utils.SetupWorkDirectory(d.workingDir, subDir)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(req.Configs) > 0 {
-		if err := WriteConfigFiles(workDir, req.Configs); err != nil {
-			return nil, err
-		}
-		defer DeleteConfigFiles(workDir, req.Configs)
+	if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
+		return nil, err
 	}
+	// Question: Telemetry requires streams.json, so cleaning up fails telemetry. Do we need cleanup?
+	// defer utils.CleanupConfigFiles(workDir, req.Configs)
 
-	rawLogs, err := d.RunContainer(ctx, req, workDir)
+	out, err := d.RunContainer(ctx, req, workDir)
 	if err != nil {
 		return nil, err
 	}
 
-	// if output file is specified, return it
 	if req.OutputFile != "" {
-		response, err := ReadJSONFile(filepath.Join(workDir, req.OutputFile))
+		fileContent, err := utils.ReadFile(filepath.Join(workDir, req.OutputFile))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse JSON file: %s", err)
 		}
 		return map[string]interface{}{
-			"response": response,
+			"response": fileContent,
 		}, nil
 	}
 
-	// Default: return raw logs
 	return map[string]interface{}{
-		"response": rawLogs,
+		"response": out,
 	}, nil
 }
 

@@ -10,7 +10,6 @@ metadata:
     app.kubernetes.io/component: olake-ui
     {{- include "olake.labels" . | nindent 4 }}
 data:
-  # Beego App Configuration File
   app.conf: |
     appname = olake-server
     httpport = {{ .Values.olakeUI.env.HTTP_PORT | default "8000" }}
@@ -18,9 +17,16 @@ data:
     autorender = false
     copyrequestbody = true
     EnableDocs = true
-    postgresdb = postgres://{{ .Values.postgresql.auth.postgresUser }}:{{ .Values.postgresql.auth.postgresPassword }}@postgresql.{{ include "olake.namespace" . }}.svc.cluster.local:5432/postgres?sslmode=disable
-    logsdir = ./logger/logs
+    logsdir = /tmp/olake/logs
     sessionon = true
-    
-    # Temporal Configuration
+
+    # Postgres (must match server required keys)
+    OLAKE_POSTGRES_USER     = {{ .Values.postgresql.auth.postgresUser }}
+    OLAKE_POSTGRES_PASSWORD = {{ .Values.postgresql.auth.postgresPassword }}
+    OLAKE_POSTGRES_HOST     = postgresql.{{ include "olake.namespace" . }}.svc.cluster.local
+    OLAKE_POSTGRES_PORT     = 5432
+    OLAKE_POSTGRES_DBNAME   = postgres
+    OLAKE_POSTGRES_SSLMODE  = disable
+
+    # Temporal
     TEMPORAL_ADDRESS = temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233
