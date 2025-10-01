@@ -208,11 +208,15 @@ func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workD
 
 func (k *KubernetesExecutor) sanitizeName(name string) string {
 	name = strings.ToLower(name)
+
+	// Replace invalid characters with hyphens
 	name = strings.ReplaceAll(name, "_", "-")
 	name = strings.ReplaceAll(name, ".", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+
 	name = strings.Trim(name, "-")
 
+	// Truncate if too long (max 63 characters for Kubernetes)
 	if len(name) > 63 {
 		name = name[:63]
 		name = strings.TrimSuffix(name, "-")

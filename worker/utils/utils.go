@@ -4,22 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/robfig/cron"
+	"github.com/spf13/viper"
 )
-
-// GetEnv gets the value of an environment variable or returns a default value if the variable is not set
-func GetEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 // Ternary returns trueValue if condition is true, otherwise returns falseValue
 func Ternary(condition bool, trueValue, falseValue interface{}) interface{} {
@@ -39,24 +31,14 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 
 // GetExecutorEnvironment gets the value of the executor environment variable or returns a default value if the variable is not set
 func GetExecutorEnvironment() string {
-	return GetEnv(constants.EnvExecutorEnvironment, constants.DefaultExecutorEnvironment)
-}
-
-// GetHealthPort gets the value of the health port variable or returns a default value if the variable is not set
-func GetHealthPort() int {
-	portStr := GetEnv(constants.EnvHealthPort, strconv.Itoa(constants.DefaultHealthPort))
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return constants.DefaultHealthPort
-	}
-	return port
+	return viper.GetString(constants.EnvExecutorEnvironment)
 }
 
 func GetDockerImageName(sourceType, version string) string {
 	if version == "" {
 		version = "latest"
 	}
-	prefix := GetEnv(constants.EnvDockerImagePrefix, constants.DockerImagePrefix)
+	prefix := viper.GetString(constants.EnvDockerImagePrefix)
 	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
 }
 
@@ -121,19 +103,9 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 
 // GetRetentionPeriod returns the retention period for logs
 func GetLogRetentionPeriod() int {
-	if val := GetEnv(constants.EnvLogRetentionPeriod, strconv.Itoa(constants.DefaultLogRetentionPeriod)); val != "" {
-		if retentionPeriod, err := strconv.Atoi(val); err == nil && retentionPeriod > 0 {
-			return retentionPeriod
-		}
-	}
-	return constants.DefaultLogRetentionPeriod
+	return viper.GetInt(constants.EnvLogRetentionPeriod)
 }
 
 func GetConfigDir() string {
-	execEnv := GetExecutorEnvironment()
-	if execEnv == "docker" {
-		return constants.DefaultConfigDir
-	}
-	return constants.DefaultK8sConfigDir
-
+	return viper.GetString(constants.EnvContainerPersistentDir)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/containerd/errdefs"
@@ -15,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/spf13/viper"
 )
 
 // RunContainer runs a container with the given execution request and work directory
@@ -108,8 +108,10 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 // getHostOutputDir returns the host output directory
 func getHostOutputDir(outputDir string) string {
-	if persistentDir := os.Getenv(constants.EnvPersistentDir); persistentDir != "" {
-		hostOutputDir := strings.Replace(outputDir, constants.DefaultConfigDir, persistentDir, 1)
+	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
+	persistencePath := utils.GetConfigDir()
+	if hostPersistencePath != "" {
+		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
 		return hostOutputDir
 	}
 	return outputDir

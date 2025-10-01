@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -24,7 +23,9 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
 
-	return &DockerExecutor{client: client, workingDir: constants.DefaultConfigDir}, nil
+	// TODO: Check if we can separate hostPersistence and containerConfigPath
+	// TODO: check backward compatibility after changing
+	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir()}, nil
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {

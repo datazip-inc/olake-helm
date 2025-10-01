@@ -12,12 +12,13 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/spf13/viper"
 )
 
 func FetchJobDetails(jobId int) (map[string]interface{}, error) {
 	url := fmt.Sprintf(
 		"%s/presync/%d",
-		utils.GetEnv(constants.EnvOlakeCallbackURL, constants.DefaultOlakeCallbackURL),
+		viper.GetString(constants.EnvCallbackURL),
 		jobId,
 	)
 
@@ -57,7 +58,7 @@ func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.Ex
 }
 
 func PostSyncUpdate(jobId int, state string) error {
-	url := fmt.Sprintf("%s/postsync", utils.GetEnv(constants.EnvOlakeCallbackURL, constants.DefaultOlakeCallbackURL))
+	url := fmt.Sprintf("%s/postsync", viper.GetString(constants.EnvCallbackURL))
 
 	payload := map[string]interface{}{
 		"job_id": jobId,
@@ -87,7 +88,7 @@ func PostSyncUpdate(jobId int, state string) error {
 func SendTelemetryEvents(jobId int, workflowId string, event string) {
 	url := fmt.Sprintf(
 		"%s/sync-telemetry",
-		utils.GetEnv(constants.EnvOlakeCallbackURL, constants.DefaultOlakeCallbackURL),
+		viper.GetString(constants.EnvCallbackURL),
 	)
 
 	payload := map[string]interface{}{

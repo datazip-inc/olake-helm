@@ -7,12 +7,16 @@ import (
 	"go.temporal.io/sdk/activity"
 )
 
-func ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+type Activity struct {
+	executor executor.Executor
+}
+
+func NewActivity(e executor.Executor) *Activity {
+	return &Activity{executor: e}
+}
+
+func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("Executing %s activity", req.Command)
-	exec, err := executor.GetExecutor()
-	if err != nil {
-		return nil, err
-	}
-	return exec.Execute(ctx, req)
+	return a.executor.Execute(ctx, req)
 }

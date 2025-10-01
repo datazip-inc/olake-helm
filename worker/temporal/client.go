@@ -4,17 +4,9 @@ import (
 	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/spf13/viper"
 	"go.temporal.io/sdk/client"
 )
-
-var (
-	TemporalHostPort string
-)
-
-func init() {
-	TemporalHostPort = utils.GetEnv(constants.EnvTemporalAddress, constants.DefaultTemporalAddress)
-}
 
 // Client provides methods to interact with Temporal
 type Client struct {
@@ -24,7 +16,7 @@ type Client struct {
 // NewClient creates a new Temporal client
 func NewClient() (*Client, error) {
 	c, err := client.Dial(client.Options{
-		HostPort: TemporalHostPort,
+		HostPort: viper.GetString(constants.EnvTemporalAddress),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Temporal client: %v", err)

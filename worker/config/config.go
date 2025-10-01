@@ -1,0 +1,91 @@
+package config
+
+import (
+	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/spf13/viper"
+)
+
+func Init() {
+	viper.AutomaticEnv()
+
+	setDefaults()
+
+	logger.Infof("Initialized config")
+	logger.Info("🟡 HOST_PERSISTENT_DIR: %s", viper.GetString("HOST_PERSISTENT_DIR"))
+	logger.Info("🟡 CONTAINER_PERSISTENT_DIR: %s", viper.GetString("CONTAINER_PERSISTENT_DIR"))
+
+	// TODO: check if we need this
+	// if err := requiredEnvVars(globalViper); err != nil {
+	// 	logger.Fatalf("Failed to initialize config: %v", err)
+	// }
+}
+
+// setDefaults sets default values for configuration
+func setDefaults() {
+	// Temporal defaults
+	viper.SetDefault("TEMPORAL_ADDRESS", "localhost:7233")
+
+	// Worker defaults
+	viper.SetDefault("EXECUTOR_ENVIRONMENT", "docker")
+	viper.SetDefault("HEALTH_PORT", 8090)
+	viper.SetDefault("LOG_RETENTION_PERIOD", 30)
+
+	// Kubernetes defaults
+	viper.SetDefault("WORKER_NAMESPACE", "default")
+
+	// Logging defaults
+	viper.SetDefault("LOG_LEVEL", "info")
+	viper.SetDefault("LOG_FORMAT", "console")
+
+	// API defaults
+	viper.SetDefault("OLAKE_CALLBACK_URL", "http://host.docker.internal:8000/internal/worker/callback")
+
+	// Docker defaults
+	viper.SetDefault("DOCKER_IMAGE_PREFIX", "olakego/source")
+}
+
+// TODO: check if we need this
+// func requiredEnvVars() error {
+// 	// Common required env vars
+// 	required := []string{
+// 		constants.EnvTemporalAddress,
+// 		constants.EnvExecutorEnvironment,
+// 		constants.EnvContainerPersistentDir,
+// 	}
+
+// 	for _, key := range required {
+// 		if !v.IsSet(key) || v.GetString(key) == "" {
+// 			return fmt.Errorf("required config %q is not set", key)
+// 		}
+// 	}
+
+// 	// Environment-specific requirements
+// 	executorEnv := v.GetString(constants.EnvExecutorEnvironment)
+
+// 	if executorEnv == "kubernetes" {
+// 		k8sRequired := []string{
+// 			constants.EnvNamespace,
+// 			constants.EnvStoragePVCName,
+// 		}
+// 		for _, key := range k8sRequired {
+// 			if !v.IsSet(key) || v.GetString(key) == "" {
+// 				return fmt.Errorf("kubernetes mode requires %q to be set", key)
+// 			}
+// 		}
+// 	}
+
+// 	if executorEnv == "docker" {
+// 		dockerRequired := []string{
+// 			constants.EnvHostPersistentDir,
+// 		}
+
+// 		for _, key := range dockerRequired {
+// 			if !v.IsSet(key) || v.GetString(key) == "" {
+// 				return fmt.Errorf("docker mode requires %q to be set", key)
+// 			}
+// 		}
+
+// 	}
+
+// 	return nil
+// }

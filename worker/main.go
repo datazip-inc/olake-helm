@@ -5,16 +5,30 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/datazip-inc/olake-helm/worker/config"
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/spf13/viper"
 )
 
 func main() {
 	logger.Init()
+	config.Init()
+
+	logger.Infof("Starting OLake worker")
+	logger.Infof("Executor environment: %s", utils.GetExecutorEnvironment())
+
+	// Initialize executor
+	exec, err := executor.NewExecutor()
+	if err != nil {
+		logger.Fatalf("Failed to create executor: %v", err)
+	}
+	defer exec.Close()
 
 	tClient, err := temporal.NewClient()
 	if err != nil {
@@ -23,9 +37,9 @@ func main() {
 	defer tClient.Close()
 
 	// init log cleaner
-	utils.InitLogCleaner(utils.GetConfigDir(), utils.GetLogRetentionPeriod())
+	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
-	worker := temporal.NewWorker(tClient)
+	worker := temporal.NewWorker(tClient, exec)
 	go func() {
 		err := worker.Start()
 		if err != nil {
@@ -36,7 +50,7 @@ func main() {
 
 	// start health server for kubernetes environment
 	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
-		healthServer := temporal.NewHealthServer(worker, utils.GetHealthPort())
+		healthServer := temporal.NewHealthServer(worker, viper.GetInt(constants.EnvHealthPort))
 		go func() {
 			err := healthServer.Start()
 			if err != nil {
@@ -52,13 +66,6 @@ func main() {
 	// wait for termination signal
 	sig := <-signalChan
 	logger.Infof("Received signal %v, shutting down worker.", sig)
-
-	// clean up executor
-	if instance, _ := executor.GetExecutor(); instance != nil {
-		if err := instance.Close(); err != nil {
-			logger.Fatalf("Failed to close executor: %v", err)
-		}
-	}
 
 	// stop the worker
 	worker.Stop()

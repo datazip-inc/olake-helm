@@ -1,31 +1,39 @@
 package constants
 
 const (
-	// Default values
-	DefaultOlakeCallbackURL    = "http://host.docker.internal:8000/internal/worker/callback"
-	DefaultTemporalAddress     = "localhost:7233"
-	DefaultExecutorEnvironment = "docker"
-	DefaultHealthPort          = 8090
-	DefaultLogRetentionPeriod  = 30
-
-	// Environment variables
-	EnvOlakeCallbackURL    = "OLAKE_CALLBACK_URL"
-	EnvTemporalAddress     = "TEMPORAL_ADDRESS"
-	EnvExecutorEnvironment = "EXECUTOR_ENVIRONMENT"
-	EnvPersistentDir       = "PERSISTENT_DIR"
-	EnvDockerImagePrefix   = "DOCKER_IMAGE_PREFIX"
-	EnvHealthPort          = "HEALTH_PORT"
-	EnvLogRetentionPeriod  = "LOG_RETENTION_PERIOD"
-
 	// Directory paths
-	DefaultConfigDir    = "/tmp/olake-config"
-	DefaultK8sConfigDir = "/data/olake-jobs/"
-	ContainerMountDir   = "/mnt/config"
+	ContainerMountDir = "/mnt/config"
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755
 	DefaultFilePermissions = 0644
 
-	// Docker
-	DockerImagePrefix = "olakego/source"
+	// Env
+
+	// temporal
+	EnvTemporalAddress = "TEMPORAL_ADDRESS"
+
+	// worker
+	EnvExecutorEnvironment    = "EXECUTOR_ENVIRONMENT"
+	EnvHealthPort             = "HEALTH_PORT"
+	EnvLogRetentionPeriod     = "LOG_RETENTION_PERIOD"
+	EnvOlakeCallbackURL       = "OLAKE_CALLBACK_URL"
+	EnvHostPersistentDir      = "HOST_PERSISTENT_DIR"      // TODO: check backward compatibility
+	EnvContainerPersistentDir = "CONTAINER_PERSISTENT_DIR" // TODO: check backward compatibility
+
+	// kubernetes
+	EnvNamespace             = "WORKER_NAMESPACE"
+	EnvStoragePVCName        = "OLAKE_STORAGE_PVC_NAME"
+	EnvJobServiceAccountName = "JOB_SERVICE_ACCOUNT_NAME"
+	EnvSecretKey             = "OLAKE_SECRET_KEY"
+
+	// logging
+	EnvLogLevel  = "LOG_LEVEL"
+	EnvLogFormat = "LOG_FORMAT"
+
+	// api
+	EnvCallbackURL = "OLAKE_CALLBACK_URL"
+
+	// docker
+	EnvDockerImagePrefix = "DOCKER_IMAGE_PREFIX"
 )

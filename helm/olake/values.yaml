@@ -235,6 +235,7 @@ olakeWorker:
     HEALTH_PORT: 8090
     OLAKE_CALLBACK_URL: ""
     DOCKER_IMAGE_PREFIX: "olakego/source"
+    CONTAINER_PERSISTENT_DIR: "/data/olake-jobs"
 
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:

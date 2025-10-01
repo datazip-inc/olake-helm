@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -33,25 +35,25 @@ type KubernetesConfig struct {
 func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	// Use in-cluster configuration - this reads the service account token and CA cert
 	// that Kubernetes automatically mounts into every pod at /var/run/secrets/kubernetes.io/serviceaccount/
-	config, err := rest.InClusterConfig()
+	clusterConfig, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %v", err)
 	}
 
 	// Create the Kubernetes clientset using the in-cluster config
 	// This clientset provides access to all Kubernetes API operations (pods, services, etc.)
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(clusterConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
 
 	// Get config from environment
-	namespace := utils.GetEnv("WORKER_NAMESPACE", "default")
-	pvcName := utils.GetEnv("OLAKE_STORAGE_PVC_NAME", "olake-storage-pvc")
-	serviceAccount := utils.GetEnv("SERVICE_ACCOUNT", "")
-	jobServiceAccount := utils.GetEnv("JOB_SERVICE_ACCOUNT_NAME", "")
-	secretKey := utils.GetEnv("OLAKE_SECRET_KEY", "")
-	basePath := "/data/olake-jobs"
+	namespace := viper.GetString(constants.EnvNamespace)
+	pvcName := viper.GetString(constants.EnvStoragePVCName)
+	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
+	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
+	secretKey := viper.GetString(constants.EnvSecretKey)
+	basePath := viper.GetString(constants.EnvContainerPersistentDir)
 
 	watcher := NewConfigMapWatcher(clientset, namespace)
 	if err := watcher.Start(); err != nil {
@@ -59,8 +61,9 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	}
 
 	return &KubernetesExecutor{
-		client:    clientset,
-		namespace: namespace,
+		client:        clientset,
+		namespace:     namespace,
+		configWatcher: watcher,
 		config: &KubernetesConfig{
 			Namespace:         namespace,
 			PVCName:           pvcName,
@@ -69,7 +72,6 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 			SecretKey:         secretKey,
 			BasePath:          basePath,
 		},
-		configWatcher: watcher,
 	}, nil
 }
 

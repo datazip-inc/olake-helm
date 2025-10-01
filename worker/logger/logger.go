@@ -6,26 +6,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/rs/zerolog"
+	"github.com/spf13/viper"
 )
 
 var logger zerolog.Logger
 
-// Init initializes the global logger
 func Init() {
-	logConfig := &types.LoggingConfig{
-		Level:  "info", // TODO: Get from env var
-		Format: "console",
-	}
-	SetupConfig(logConfig)
-}
+	format := viper.GetString(constants.EnvLogFormat)
+	level := viper.GetString(constants.EnvLogLevel)
 
-func SetupConfig(config *types.LoggingConfig) {
 	zerolog.TimestampFunc = func() time.Time { return time.Now().UTC() }
 
 	var writer io.Writer
-	switch strings.ToLower(config.Format) {
+	switch strings.ToLower(format) {
 	case "console":
 		// Use ConsoleWriter with built-in colors and formatting
 		writer = zerolog.ConsoleWriter{
@@ -38,7 +33,7 @@ func SetupConfig(config *types.LoggingConfig) {
 	}
 
 	logger = zerolog.New(writer).With().Timestamp().Logger()
-	zerolog.SetGlobalLevel(parseLogLevel(config.Level))
+	zerolog.SetGlobalLevel(parseLogLevel(level))
 }
 
 // parseLogLevel converts a string level to a zerolog.Level

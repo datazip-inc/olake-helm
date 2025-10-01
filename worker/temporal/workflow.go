@@ -26,7 +26,7 @@ func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
 	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(ctx, ExecuteActivity, req).Get(ctx, &result); err != nil {
+	if err := workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -56,7 +56,7 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "started")
 
 	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(ctx, ExecuteActivity, req).Get(ctx, &result); err != nil {
+	if err := workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, &result); err != nil {
 		// send telemetry event - "sync failed"
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
 		return nil, err
