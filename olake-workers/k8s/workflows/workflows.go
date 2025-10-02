@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
 )
@@ -49,14 +50,31 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("sync"),
 		RetryPolicy:         DefaultRetryPolicy,
+		WaitForCancellation: true,
 	}
 	params := shared.SyncParams{
 		JobID:      jobID,
 		WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
 	}
-	ctx = workflow.WithActivityOptions(ctx, options)
 
+	ctx = workflow.WithActivityOptions(ctx, options)
 	var result map[string]interface{}
+
+	// Defer cleanup - runs on both normal completion and cancellation
+	defer func() {
+		logger.Infof("Executing pod cleanup...")
+		newCtx, _ := workflow.NewDisconnectedContext(ctx)
+		cleanupOptions := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 2,
+			RetryPolicy:         DefaultRetryPolicy,
+		}
+		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
+		err := workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
+		if err != nil {
+			logger.Errorf("SyncCleanupActivity failed: %v", err)
+		}
+	}()
+
 	err := workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
 	return result, err
 }
