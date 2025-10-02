@@ -62,7 +62,6 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 
 	// Defer cleanup - runs on both normal completion and cancellation
 	defer func() {
-		logger.Infof("Executing pod cleanup...")
 		newCtx, _ := workflow.NewDisconnectedContext(ctx)
 		cleanupOptions := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Minute * 2,
