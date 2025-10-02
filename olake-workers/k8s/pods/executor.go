@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
@@ -18,14 +19,15 @@ import (
 // This struct encapsulates all the information needed to execute a Temporal activity
 // as a Kubernetes pod, bridging the gap between Temporal's activity model and K8s execution.
 type PodActivityRequest struct {
-	WorkflowID    string             // Unique identifier for the Temporal workflow instance
-	JobID         int                // Database job ID for labeling and resource mapping
-	Operation     shared.Command     // Type of operation (sync, discover, check) - affects result retrieval
-	ConnectorType string             // Source connector type (mysql, postgres, etc.) for labeling
-	Image         string             // Full Docker image name for the connector container
-	Args          []string           // Command-line arguments passed to the connector
-	Configs       []shared.JobConfig // Configuration files to mount into the pod
-	Timeout       time.Duration      // Maximum execution time before pod is considered failed
+	WorkflowID    string                                            // Unique identifier for the Temporal workflow instance
+	JobID         int                                               // Database job ID for labeling and resource mapping
+	Operation     shared.Command                                    // Type of operation (sync, discover, check) - affects result retrieval
+	ConnectorType string                                            // Source connector type (mysql, postgres, etc.) for labeling
+	Image         string                                            // Full Docker image name for the connector container
+	Args          []string                                          // Command-line arguments passed to the connector
+	Configs       []shared.JobConfig                                // Configuration files to mount into the pod
+	Timeout       time.Duration                                     // Maximum execution time before pod is considered failed
+	HeartbeatFunc func(ctx context.Context, details ...interface{}) // Function to record heartbeats for cancellation detection
 }
 
 // PodSpec defines the specification for creating a Kubernetes Pod
@@ -162,11 +164,16 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 }
 
 // WaitForPodCompletion waits for a Pod to complete and returns the result
-func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, operation shared.Command, workflowID string) (map[string]interface{}, error) {
+func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, operation shared.Command, workflowID string, heartbeatFunc func(context.Context, ...interface{})) (map[string]interface{}, error) {
 	logger.Debugf("Waiting for Pod %s to complete (timeout: %v)", podName, timeout)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
+		// Record heartbeat to enable cancellation detection if heartbeat function is provided
+		if heartbeatFunc != nil {
+			heartbeatFunc(ctx, fmt.Sprintf("Waiting for pod %s (status check)", podName))
+		}
+
 		pod, err := k.clientset.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get pod status: %v", err)
@@ -184,8 +191,14 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 			return nil, fmt.Errorf("pod %s failed with status: %s", podName, pod.Status.Phase)
 		}
 
-		// Wait before checking again
-		time.Sleep(5 * time.Second)
+		// Wait before checking again, with responsive cancellation
+		select {
+		case <-time.After(5 * time.Second):
+			// Continue to next iteration
+		case <-ctx.Done():
+			logger.Warnf("Context cancelled while waiting for pod %s", podName)
+			return nil, ctx.Err()
+		}
 	}
 
 	logger.Errorf("Pod %s timed out after %v", podName, timeout)
@@ -199,7 +212,12 @@ func (k *K8sPodManager) CleanupPod(ctx context.Context, podName string) error {
 	// Delete the pod only
 	err := k.clientset.CoreV1().Pods(k.namespace).Delete(ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to delete pod %s in namespace %s: %v", podName, k.namespace, err)
+		// Treat "not found" as success - cleanup is idempotent
+		if apierrors.IsNotFound(err) {
+			logger.Infof("Pod %s already deleted in namespace %s - cleanup complete", podName, k.namespace)
+			return nil
+		}
+		return fmt.Errorf("failed to delete pod %s in namespace %s: %w", podName, k.namespace, err)
 	}
 
 	logger.Debugf("Successfully cleaned up Pod %s in namespace %s",
@@ -338,17 +356,21 @@ func (k *K8sPodManager) ExecutePodActivity(ctx context.Context, req PodActivityR
 		return nil, fmt.Errorf("failed to create pod: %v", err)
 	}
 
-	// Ensure pod cleanup happens regardless of success or failure
-	// This prevents resource leaks and maintains cluster hygiene
-	defer func() {
-		if err := k.CleanupPod(ctx, pod.Name); err != nil {
-			logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
-				pod.Name, req.Operation, req.WorkflowID, err)
-			// Note: We continue execution despite cleanup failure as the core operation may have succeeded
-			// and cleanup failures shouldn't invalidate successful work results
-		}
-	}()
+	// Only perform activity-level cleanup for non-sync operations
+	// Sync workflows have dedicated workflow-level cleanup via SyncCleanupActivity
+	if req.Operation != shared.Sync {
+		defer func() {
+			// Use background context to ensure cleanup runs even if activity context is cancelled
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := k.CleanupPod(cleanupCtx, pod.Name); err != nil {
+				logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
+					pod.Name, req.Operation, req.WorkflowID, err)
+			}
+		}()
+	}
 
 	// Wait for pod completion
-	return k.WaitForPodCompletion(ctx, pod.Name, req.Timeout, req.Operation, req.WorkflowID)
+	return k.WaitForPodCompletion(ctx, pod.Name, req.Timeout, req.Operation, req.WorkflowID, req.HeartbeatFunc)
 }
