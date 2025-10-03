@@ -305,6 +305,8 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
 
 ## Uninstallation
 
+### Quick Uninstall (Manual)
+
 ```bash
 # Uninstall the release
 helm uninstall olake --namespace olake
@@ -323,6 +325,53 @@ kubectl delete namespace olake
   - `ClusterRoleBinding/olake-nfs-server`
   - `StorageClass/nfs-server`
   - `ServiceAccount/olake-nfs-server`
+
+### Complete Uninstall (Using Script)
+
+For a complete cleanup that removes all resources including those protected by resource policies, use the provided uninstallation script:
+
+```bash
+# Navigate to the chart directory
+cd helm/olake
+
+# Basic uninstall (removes everything)
+./uninstall.sh
+
+# Uninstall with options
+./uninstall.sh --help
+
+# Uninstall but keep PVCs for data preservation
+./uninstall.sh --keep-pvcs
+
+# Uninstall with custom namespace and release name
+./uninstall.sh -n my-namespace -r my-release
+
+# Force delete stuck resources
+./uninstall.sh --force
+
+# Keep namespace after cleanup
+./uninstall.sh --keep-namespace
+```
+
+**Script Options:**
+- `-n, --namespace NAMESPACE`: Namespace where OLake is installed (default: olake)
+- `-r, --release RELEASE`: Helm release name (default: olake)
+- `--force`: Force delete stuck resources without waiting
+- `--keep-pvcs`: Keep PersistentVolumeClaims (useful for data preservation)
+- `--keep-namespace`: Keep the namespace after cleanup
+- `-h, --help`: Show help message
+
+The uninstallation script performs the following cleanup steps:
+1. Uninstalls the Helm release
+2. Removes DevSpace resources (if any)
+3. Deletes remaining pods
+4. Removes NFS Server components (StatefulSet, Service, ServiceAccount)
+5. Deletes PersistentVolumeClaims (unless --keep-pvcs is specified)
+6. Cleans up orphaned PersistentVolumes
+7. Removes NFS StorageClass
+8. Deletes ClusterRole and ClusterRoleBinding
+9. Cleans up any remaining ConfigMaps, Secrets, Services
+10. Deletes the namespace (unless --keep-namespace is specified)
 
 ## Contributing
 
