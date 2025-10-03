@@ -49,6 +49,7 @@ func TestConnectionWorkflow(ctx workflow.Context, params *shared.ActivityParams)
 func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("sync"),
+		HeartbeatTimeout:    time.Minute,
 		RetryPolicy:         DefaultRetryPolicy,
 		WaitForCancellation: true,
 	}
