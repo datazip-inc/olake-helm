@@ -192,8 +192,7 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 		HeartbeatFunc: activity.RecordHeartbeat,
 	}
 
-	// Execute sync operation by creating K8s pod, wait for completion, retrieve results from state.json file
-	// Note: Final state saving is handled by SyncCleanupActivity in the workflow defer block
+	// Note: Final state saving is now handled by SyncCleanupActivity in the workflow defer block
 	result, err := a.podManager.ExecutePodActivity(ctx, request)
 	return result, err
 }
