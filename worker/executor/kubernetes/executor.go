@@ -30,6 +30,7 @@ type KubernetesConfig struct {
 	JobServiceAccount string
 	SecretKey         string
 	BasePath          string
+	WorkerIdentity    string
 }
 
 func NewKubernetesExecutor() (*KubernetesExecutor, error) {
@@ -55,6 +56,10 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	secretKey := viper.GetString(constants.EnvSecretKey)
 	basePath := viper.GetString(constants.EnvContainerPersistentDir)
 
+	// Set worker identity
+	podName := viper.GetString(constants.EnvPodName)
+	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
+
 	watcher := NewConfigMapWatcher(clientset, namespace)
 	if err := watcher.Start(); err != nil {
 		logger.Errorf("Failed to start config map watcher: %v", err)
@@ -71,6 +76,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 			JobServiceAccount: jobServiceAccount,
 			SecretKey:         secretKey,
 			BasePath:          basePath,
+			WorkerIdentity:    workerIdenttity,
 		},
 	}, nil
 }

@@ -16,11 +16,13 @@ import (
 
 // ConfigMapWatcher watches for ConfigMap changes and provides thread-safe access to job mapping
 type ConfigMapWatcher struct {
+	// Kubernetes infrastructure
 	clientset       kubernetes.Interface
 	informerFactory informers.SharedInformerFactory
 	namespace       string
 	configMapName   string
 
+	// Thread-safe job mapping storage
 	mu         sync.RWMutex
 	jobMapping map[int]map[string]string
 
@@ -43,33 +45,42 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 func (w *ConfigMapWatcher) Start() error {
 	logger.Infof("Starting ConfigMap watcher for %s/%s", w.namespace, w.configMapName)
 
+	// Create informer factory scoped to our namespace
 	w.informerFactory = informers.NewSharedInformerFactoryWithOptions(
 		w.clientset,
-		30*time.Second,
+		30*time.Second, // Resync period
 		informers.WithNamespace(w.namespace),
 	)
-	cmi := w.informerFactory.Core().V1().ConfigMaps()
 
-	_, err := cmi.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	configMapInformer := w.informerFactory.Core().V1().ConfigMaps()
+
+	_, err := configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
-				w.update(cm)
+			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
+				logger.Debugf("ConfigMap %s added", w.configMapName)
+				w.updateJobMapping(cm)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			oldCm, okOld := oldObj.(*corev1.ConfigMap)
-			newCm, okNew := newObj.(*corev1.ConfigMap)
-			if !okOld || !okNew || newCm.Name != w.configMapName {
-				return
+			oldCm, oldValid := oldObj.(*corev1.ConfigMap)
+			newCm, newValid := newObj.(*corev1.ConfigMap)
+
+			// Skip resync events: client-go informers trigger UpdateFunc every resyncPeriod (30s)
+			// even when ConfigMap hasn't changed. Compare ResourceVersion to detect actual updates.
+			// ResourceVersion changes only when the object is modified in etcd.
+			if oldValid && newValid && oldCm.ResourceVersion == newCm.ResourceVersion {
+				return // This is a resync, not a real update
 			}
-			if oldCm.ResourceVersion == newCm.ResourceVersion {
-				return
+
+			if newValid && newCm.Name == w.configMapName {
+				logger.Debugf("ConfigMap %s updated", w.configMapName)
+				w.updateJobMapping(newCm)
 			}
-			w.update(newCm)
 		},
 		DeleteFunc: func(obj any) {
-			if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == w.configMapName {
+			if cm, valid := obj.(*corev1.ConfigMap); valid && cm.Name == w.configMapName {
 				logger.Warnf("ConfigMap %s deleted - keeping cached mapping", w.configMapName)
+				// keep existing mapping on delete
 			}
 		},
 	})
@@ -77,10 +88,12 @@ func (w *ConfigMapWatcher) Start() error {
 		return fmt.Errorf("failed to add ConfigMap handler: %v", err)
 	}
 
+	// Start informer factory and wait for cache sync
 	w.informerFactory.Start(w.ctx.Done())
-	if !cache.WaitForCacheSync(w.ctx.Done(), cmi.Informer().HasSynced) {
+	if !cache.WaitForCacheSync(w.ctx.Done(), configMapInformer.Informer().HasSynced) {
 		return fmt.Errorf("failed to sync ConfigMap cache")
 	}
+
 	logger.Infof("ConfigMap watcher started")
 	return nil
 }
@@ -90,32 +103,45 @@ func (w *ConfigMapWatcher) Stop() {
 	w.cancel()
 }
 
+// GetJobMapping returns mapping for specific jobID (thread-safe)
+// Uses RWMutex because this function is called concurrently by multiple pod creation goroutines
+// while the ConfigMap informer goroutine may be updating w.jobMapping in the background.
+// RLock allows multiple concurrent readers while preventing data races with writer updates.
 func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	m, ok := w.jobMapping[jobID]
-	if !ok {
+
+	mapping, exists := w.jobMapping[jobID]
+	if !exists {
 		return map[string]string{}, false
 	}
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
+
+	result := make(map[string]string, len(mapping))
+	for k, v := range mapping {
+		result[k] = v
 	}
-	return out, true
+	return result, true
 }
 
-func (w *ConfigMapWatcher) update(cm *corev1.ConfigMap) {
-	raw, ok := cm.Data["OLAKE_JOB_MAPPING"]
-	if !ok || raw == "" {
+func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
+	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
+	if !exists || rawMapping == "" {
 		logger.Debugf("No OLAKE_JOB_MAPPING in %s", w.configMapName)
 		w.mu.Lock()
 		w.jobMapping = map[int]map[string]string{}
 		w.mu.Unlock()
 		return
 	}
-	newMapping := LoadJobMapping(raw)
+
+	newMapping := LoadJobMapping(rawMapping)
+
+	// Update thread-safe storage with exclusive lock
+	// Multiple Temporal activity goroutines call GetJobMapping() concurrently (readers)
+	// while this ConfigMap informer goroutine updates jobMapping (writer).
+	// RWMutex prevents data races and map corruption during concurrent access.
 	w.mu.Lock()
 	w.jobMapping = newMapping
 	w.mu.Unlock()
+
 	logger.Infof("Updated job mapping with %d entries", len(newMapping))
 }

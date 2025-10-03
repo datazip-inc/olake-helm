@@ -9,8 +9,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// Package-level variable to store last known good mapping for fallback
 var lastValidMapping map[int]map[string]string
 
+// JobMappingStats contains statistics about job mapping loading
 type JobMappingStats struct {
 	TotalEntries    int
 	ValidEntries    int
@@ -41,6 +43,7 @@ func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) err
 	return nil
 }
 
+// validateJobMapping validates a single job mapping entry
 func validateJobMapping(jobID int, nodeLabels map[string]string, stats *JobMappingStats) (map[string]string, bool) {
 	if jobID <= 0 {
 		stats.InvalidMappings = append(stats.InvalidMappings, fmt.Sprintf("Invalid JobID: %d", jobID))
@@ -51,22 +54,23 @@ func validateJobMapping(jobID int, nodeLabels map[string]string, stats *JobMappi
 		return nil, false
 	}
 	if len(nodeLabels) == 0 {
-		return map[string]string{}, true
+		return make(map[string]string), true
 	}
-	valid := make(map[string]string)
+
+	validMapping := make(map[string]string)
 	for k, v := range nodeLabels {
 		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
 		if err := validateLabelPair(jobID, k, v, stats); err != nil {
 			return nil, false
 		}
-		valid[k] = v
+		validMapping[k] = v
 	}
-	return valid, true
+	return validMapping, true
 }
 
 // LoadJobMapping parses and validates OLAKE_JOB_MAPPING JSON string
-func LoadJobMapping(raw string) map[int]map[string]string {
-	if strings.TrimSpace(raw) == "" {
+func LoadJobMapping(rawMapping string) map[int]map[string]string {
+	if strings.TrimSpace(rawMapping) == "" {
 		logger.Info("No JobID to Node mapping found, using empty mapping")
 		return map[int]map[string]string{}
 	}
@@ -74,7 +78,7 @@ func LoadJobMapping(raw string) map[int]map[string]string {
 	stats := JobMappingStats{InvalidMappings: make([]string, 0)}
 	result := make(map[int]map[string]string)
 
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+	if err := json.Unmarshal([]byte(rawMapping), &result); err != nil {
 		logger.Errorf("Failed to parse OLAKE_JOB_MAPPING as JSON: %v", err)
 		return map[int]map[string]string{}
 	}
@@ -84,6 +88,13 @@ func LoadJobMapping(raw string) map[int]map[string]string {
 		if valid, ok := validateJobMapping(jobID, nodeLabels, &stats); ok {
 			result[jobID] = valid
 			stats.ValidEntries++
+		}
+	}
+
+	// Print the valid job mapping configuration as JSON
+	if len(result) > 0 {
+		if jsonBytes, err := json.Marshal(result); err == nil {
+			logger.Debugf("Job mapping configuration: %s", string(jsonBytes))
 		}
 	}
 
@@ -101,6 +112,7 @@ func LoadJobMapping(raw string) map[int]map[string]string {
 	if len(result) > 0 || stats.ValidEntries > 0 {
 		lastValidMapping = result
 		logger.Debugf("Cached valid mapping with %d entries for future fallback", len(result))
+		logger.Infof("Valid Job mappings:")
 		for jobID, mapping := range result {
 			var labels []string
 			for k, v := range mapping {

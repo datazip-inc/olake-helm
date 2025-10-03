@@ -139,7 +139,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workD
 
 			// Annotations store metadata that doesn't affect pod selection/scheduling
 			Annotations: map[string]string{
-				"olake.io/created-by-pod": "olake-worker",                  // Which worker pod created this
+				"olake.io/created-by-pod": k.config.WorkerIdentity,         // Which worker pod created this
 				"olake.io/created-at":     time.Now().Format(time.RFC3339), // Creation timestamp
 				"olake.io/workflow-id":    req.WorkflowID,                  // Original unsanitized workflow ID
 				"olake.io/operation-type": string(req.Command),             // Operation type for reference

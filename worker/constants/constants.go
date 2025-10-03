@@ -8,7 +8,7 @@ const (
 	DefaultDirPermissions  = 0755
 	DefaultFilePermissions = 0644
 
-	// Env
+	// Environment variables
 
 	// temporal
 	EnvTemporalAddress = "TEMPORAL_ADDRESS"
@@ -26,6 +26,7 @@ const (
 	EnvStoragePVCName        = "OLAKE_STORAGE_PVC_NAME"
 	EnvJobServiceAccountName = "JOB_SERVICE_ACCOUNT_NAME"
 	EnvSecretKey             = "OLAKE_SECRET_KEY"
+	EnvPodName               = "POD_NAME"
 
 	// logging
 	EnvLogLevel  = "LOG_LEVEL"
