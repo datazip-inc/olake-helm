@@ -82,6 +82,43 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        # Database configuration
+        - name: OLAKE_POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+        - name: OLAKE_POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+        - name: OLAKE_POSTGRES_DBNAME
+          {{- if .Values.postgresql.enabled }}
+          value: "postgres"
+          {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ .Values.postgresql.external.secretKeys.olake_database }}
+          {{- end }}
+        - name: OLAKE_POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+        - name: OLAKE_POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+        - name: OLAKE_POSTGRES_SSLMODE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
+        # - name: POSTGRES_DB
+        #   value: "postgres://$(POSTGRES_DB_USER):$(POSTGRES_DB_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=$(POSTGRES_DB_SSLMODE)"
         volumeMounts:
         - name: olake-config
           mountPath: /opt/backend/conf
