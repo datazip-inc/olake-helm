@@ -162,7 +162,7 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 		// Kubernetes returns AlreadyExists error, which we handle in ExecutePodActivity
 		// by resuming polling on the existing pod instead of failing the activity.
 		// This error is expected during resumption and will be caught upstream.
-		logger.Errorf("Failed to create Pod %s: %v", spec.Name, err)
+		logger.Errorf("Failed to create Pod: %v", err)
 		return nil, err
 	}
 
@@ -363,7 +363,7 @@ func (k *K8sPodManager) ExecutePodActivity(ctx context.Context, req PodActivityR
 		if !apierrors.IsAlreadyExists(err) {
 			return nil, fmt.Errorf("failed to create pod: %v", err)
 		}
-		logger.Infof("Pod %s already exists, resuming polling", podName)
+		logger.Infof("Pod already exists, resuming polling for Pod: %s", podName)
 	}
 
 	if req.Operation != shared.Sync {
