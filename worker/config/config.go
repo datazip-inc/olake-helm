@@ -11,8 +11,6 @@ func Init() {
 	setDefaults()
 
 	logger.Infof("Initialized config")
-	logger.Info("🟡 HOST_PERSISTENT_DIR: %s", viper.GetString("HOST_PERSISTENT_DIR"))
-	logger.Info("🟡 CONTAINER_PERSISTENT_DIR: %s", viper.GetString("CONTAINER_PERSISTENT_DIR"))
 
 	// TODO: check if we need this
 	// if err := requiredEnvVars(globalViper); err != nil {
