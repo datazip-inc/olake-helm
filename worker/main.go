@@ -7,6 +7,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/config"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
@@ -23,8 +24,14 @@ func main() {
 	logger.Infof("Starting OLake worker")
 	logger.Infof("Executor environment: %s", utils.GetExecutorEnvironment())
 
+	db, err := database.NewDatabase()
+	if err != nil {
+		logger.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
 	// Initialize executor
-	exec, err := executor.NewExecutor()
+	exec, err := executor.NewExecutor(db)
 	if err != nil {
 		logger.Fatalf("Failed to create executor: %v", err)
 	}

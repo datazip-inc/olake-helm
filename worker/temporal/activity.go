@@ -20,6 +20,5 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionR
 	activityLogger.Info("Executing %s activity", req.Command)
 	// Record Activity
 	activity.RecordHeartbeat(ctx, "Executing %s activity", req.Command)
-
 	return a.executor.Execute(ctx, req)
 }

@@ -13,7 +13,7 @@ func Init() {
 	logger.Infof("Initialized config")
 
 	// TODO: check if we need this
-	// if err := requiredEnvVars(globalViper); err != nil {
+	// if err := requiredEnvVars(); err != nil {
 	// 	logger.Fatalf("Failed to initialize config: %v", err)
 	// }
 }
@@ -40,6 +40,15 @@ func setDefaults() {
 
 	// Docker defaults
 	viper.SetDefault("DOCKER_IMAGE_PREFIX", "olakego/source")
+
+	// database
+	viper.SetDefault("DB_HOST", "postgresql")
+	viper.SetDefault("DB_PORT", 5432)
+	viper.SetDefault("DB_USER", "temporal")
+	viper.SetDefault("DB_PASSWORD", "temporal")
+	viper.SetDefault("DB_NAME", "postgres")
+	viper.SetDefault("DB_SSLMODE", "disable")
+	viper.SetDefault("RUN_MODE", "dev")
 }
 
 // TODO: check if we need this
@@ -52,13 +61,13 @@ func setDefaults() {
 // 	}
 
 // 	for _, key := range required {
-// 		if !v.IsSet(key) || v.GetString(key) == "" {
+// 		if !viper.IsSet(key) || viper.GetString(key) == "" {
 // 			return fmt.Errorf("required config %q is not set", key)
 // 		}
 // 	}
 
 // 	// Environment-specific requirements
-// 	executorEnv := v.GetString(constants.EnvExecutorEnvironment)
+// 	executorEnv := viper.GetString(constants.EnvExecutorEnvironment)
 
 // 	if executorEnv == "kubernetes" {
 // 		k8sRequired := []string{
@@ -66,7 +75,7 @@ func setDefaults() {
 // 			constants.EnvStoragePVCName,
 // 		}
 // 		for _, key := range k8sRequired {
-// 			if !v.IsSet(key) || v.GetString(key) == "" {
+// 			if !viper.IsSet(key) || viper.GetString(key) == "" {
 // 				return fmt.Errorf("kubernetes mode requires %q to be set", key)
 // 			}
 // 		}
@@ -78,7 +87,7 @@ func setDefaults() {
 // 		}
 
 // 		for _, key := range dockerRequired {
-// 			if !v.IsSet(key) || v.GetString(key) == "" {
+// 			if !viper.IsSet(key) || viper.GetString(key) == "" {
 // 				return fmt.Errorf("docker mode requires %q to be set", key)
 // 			}
 // 		}

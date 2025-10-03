@@ -10,6 +10,19 @@ const (
 
 	// Environment variables
 
+	// Database
+	EnvDatabaseURL           = "DATABASE_URL"
+	EnVDatabaseHost          = "DB_HOST"
+	EnvDatabasePort          = "DB_PORT"
+	EnvDatabaseUser          = "DB_USER"
+	EnvDatabasePassword      = "DB_PASSWORD"
+	EnvDatabaseDatabase      = "DB_NAME"
+	EnvDatabaseSSLMode       = "DB_SSLMODE"
+	EnvDatabaseRunMode       = "RUN_MODE"
+	EnvMaxOpenConnections    = "DB_MAX_OPEN_CONNS"
+	EnvMaxIdleConnections    = "DB_MAX_IDLE_CONNS"
+	EnvConnectionMaxLifetime = "DB_CONN_MAX_LIFETIME"
+
 	// temporal
 	EnvTemporalAddress = "TEMPORAL_ADDRESS"
 

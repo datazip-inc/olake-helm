@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -15,17 +16,18 @@ import (
 type DockerExecutor struct {
 	client     *client.Client
 	workingDir string
+	db         *database.DB
 }
 
-func NewDockerExecutor() (*DockerExecutor, error) {
+func NewDockerExecutor(db *database.DB) (*DockerExecutor, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
 
 	// TODO: Check if we can separate hostPersistence and containerConfigPath
-	// TODO: check backward compatibility after changing
-	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir()}, nil
+	// TODO: check backward compatibility after changing ENV VARIABLE NAME
+	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir(), db: db}, nil
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
@@ -66,7 +68,7 @@ func (d *DockerExecutor) Close() error {
 }
 
 func init() {
-	executor.RegisteredExecutors[executor.Docker] = func() (executor.Executor, error) {
-		return NewDockerExecutor()
+	executor.RegisteredExecutors[executor.Docker] = func(db *database.DB) (executor.Executor, error) {
+		return NewDockerExecutor(db)
 	}
 }
