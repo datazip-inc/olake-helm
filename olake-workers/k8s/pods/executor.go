@@ -155,6 +155,13 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 	logger.Infof("Creating Pod %s with image %s", spec.Name, spec.Image)
 	result, err := k.clientset.CoreV1().Pods(k.namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
+		// IMPORTANT: This is the resumption point for activity retries after worker death.
+		// When a worker dies mid-activity, Temporal retries the activity on a new worker.
+		// Since pod names are deterministic (derived from WorkflowID), the retry attempt
+		// will try to create the same pod that the previous worker already created.
+		// Kubernetes returns AlreadyExists error, which we handle in ExecutePodActivity
+		// by resuming polling on the existing pod instead of failing the activity.
+		// This error is expected during resumption and will be caught upstream.
 		logger.Errorf("Failed to create Pod %s: %v", spec.Name, err)
 		return nil, err
 	}
@@ -336,41 +343,39 @@ func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command)
 // ExecutePodActivity executes a pod activity with common workflow
 // This is the main entry point for executing Temporal activities as Kubernetes pods.
 // It orchestrates the complete lifecycle: pod creation, execution monitoring, result retrieval, and cleanup.
+// Supports activity resumption after worker death - pod name is deterministic from WorkflowID.
 func (k *K8sPodManager) ExecutePodActivity(ctx context.Context, req PodActivityRequest) (map[string]interface{}, error) {
-	// Transform the high-level activity request into a concrete Kubernetes pod specification
-	// This bridges the gap between Temporal's activity model and Kubernetes execution
+	podName := k8s.SanitizeName(req.WorkflowID)
+
+	// Create pod - idempotent operation that handles AlreadyExists gracefully
 	podSpec := &PodSpec{
-		Name:               k8s.SanitizeName(req.WorkflowID), // Safe Kubernetes pod name
-		OriginalWorkflowID: req.WorkflowID,                   // Original ID for directory naming
-		JobID:              req.JobID,                        // Database job reference
-		Image:              req.Image,                        // Connector container image
-		Command:            []string{},                       // Use image default entrypoint
-		Args:               req.Args,                         // Connector-specific arguments
-		Operation:          req.Operation,                    // Operation type (affects result retrieval)
-		ConnectorType:      req.ConnectorType,                // Connector type for labeling
+		Name:               podName,
+		OriginalWorkflowID: req.WorkflowID,
+		JobID:              req.JobID,
+		Image:              req.Image,
+		Command:            []string{},
+		Args:               req.Args,
+		Operation:          req.Operation,
+		ConnectorType:      req.ConnectorType,
 	}
 
-	// Create the Kubernetes pod with all necessary configuration and volume mounts
-	pod, err := k.CreatePod(ctx, podSpec, req.Configs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create pod: %v", err)
+	if _, err := k.CreatePod(ctx, podSpec, req.Configs); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("failed to create pod: %v", err)
+		}
+		logger.Infof("Pod %s already exists, resuming polling", podName)
 	}
 
-	// Only perform activity-level cleanup for non-sync operations
-	// Sync workflows have dedicated workflow-level cleanup via SyncCleanupActivity
 	if req.Operation != shared.Sync {
 		defer func() {
-			// Use background context to ensure cleanup runs even if activity context is cancelled
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 			defer cancel()
-
-			if err := k.CleanupPod(cleanupCtx, pod.Name); err != nil {
+			if err := k.CleanupPod(cleanupCtx, podName); err != nil {
 				logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
-					pod.Name, req.Operation, req.WorkflowID, err)
+					podName, req.Operation, req.WorkflowID, err)
 			}
 		}()
 	}
 
-	// Wait for pod completion
-	return k.WaitForPodCompletion(ctx, pod.Name, req.Timeout, req.Operation, req.WorkflowID, req.HeartbeatFunc)
+	return k.WaitForPodCompletion(ctx, podName, req.Timeout, req.Operation, req.WorkflowID, req.HeartbeatFunc)
 }

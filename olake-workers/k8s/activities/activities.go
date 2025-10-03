@@ -205,7 +205,7 @@ func (a *Activities) SyncCleanupActivity(ctx context.Context, params shared.Sync
 		"workflowID", params.WorkflowID)
 
 	// Use background context to ensure cleanup runs even if workflow is cancelled
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
 	defer cancel()
 
 	// Step 1: Delete the pod

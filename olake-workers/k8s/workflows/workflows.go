@@ -16,7 +16,7 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	InitialInterval:    time.Second * 5,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Minute * 5,
-	MaximumAttempts:    1,
+	MaximumAttempts:    3,
 }
 
 // DiscoverCatalogWorkflow is a workflow for discovering catalogs using K8s Jobs
@@ -65,7 +65,7 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	defer func() {
 		newCtx, _ := workflow.NewDisconnectedContext(ctx)
 		cleanupOptions := workflow.ActivityOptions{
-			StartToCloseTimeout: time.Minute * 2,
+			StartToCloseTimeout: time.Minute * 15,
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
