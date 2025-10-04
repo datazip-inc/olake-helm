@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
@@ -22,7 +21,6 @@ type KubernetesExecutor struct {
 	namespace     string
 	config        *KubernetesConfig
 	configWatcher *ConfigMapWatcher
-	db            *database.DB
 }
 
 type KubernetesConfig struct {
@@ -35,7 +33,7 @@ type KubernetesConfig struct {
 	WorkerIdentity    string
 }
 
-func NewKubernetesExecutor(db *database.DB) (*KubernetesExecutor, error) {
+func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	// Use in-cluster configuration - this reads the service account token and CA cert
 	// that Kubernetes automatically mounts into every pod at /var/run/secrets/kubernetes.io/serviceaccount/
 	clusterConfig, err := rest.InClusterConfig()
@@ -71,7 +69,6 @@ func NewKubernetesExecutor(db *database.DB) (*KubernetesExecutor, error) {
 		client:        clientset,
 		namespace:     namespace,
 		configWatcher: watcher,
-		db:            db,
 		config: &KubernetesConfig{
 			Namespace:         namespace,
 			PVCName:           pvcName,
@@ -119,7 +116,7 @@ func (k *KubernetesExecutor) Close() error {
 }
 
 func init() {
-	executor.RegisteredExecutors[executor.Kubernetes] = func(db *database.DB) (executor.Executor, error) {
-		return NewKubernetesExecutor(db)
+	executor.RegisteredExecutors[executor.Kubernetes] = func() (executor.Executor, error) {
+		return NewKubernetesExecutor()
 	}
 }

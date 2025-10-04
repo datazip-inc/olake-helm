@@ -24,14 +24,13 @@ func main() {
 	logger.Infof("Starting OLake worker")
 	logger.Infof("Executor environment: %s", utils.GetExecutorEnvironment())
 
-	db, err := database.NewDatabase()
-	if err != nil {
-		logger.Fatalf("Failed to create database: %v", err)
-	}
+	// Initialize database
+	db := database.GetDB()
+	logger.Infof("Database initialized")
 	defer db.Close()
 
 	// Initialize executor
-	exec, err := executor.NewExecutor(db)
+	exec, err := executor.NewExecutor()
 	if err != nil {
 		logger.Fatalf("Failed to create executor: %v", err)
 	}

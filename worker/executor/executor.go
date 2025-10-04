@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/spf13/viper"
 )
@@ -36,11 +35,11 @@ const (
 	Docker     ExecutorEnvironment = "docker"
 )
 
-type NewFunc func(db *database.DB) (Executor, error)
+type NewFunc func() (Executor, error)
 
 var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
-func NewExecutor(db *database.DB) (Executor, error) {
+func NewExecutor() (Executor, error) {
 	executorEnv := viper.GetString(constants.EnvExecutorEnvironment)
 	if executorEnv == "" {
 		return nil, fmt.Errorf("executor environment is not set")
@@ -49,5 +48,5 @@ func NewExecutor(db *database.DB) (Executor, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
 	}
-	return newFunc(db)
+	return newFunc()
 }

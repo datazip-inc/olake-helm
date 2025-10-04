@@ -3,14 +3,35 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/logger"
+	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
 type DB struct {
-	db *sql.DB
+	client *sql.DB
+	tables map[string]string
+}
+
+var (
+	db   *DB
+	once sync.Once
+)
+
+// TODO: verify about singleton pattern
+func GetDB() *DB {
+	once.Do(func() {
+		var err error
+		db, err = NewDatabase()
+		if err != nil {
+			logger.Fatalf("Failed to create database: %v", err)
+		}
+	})
+	return db
 }
 
 func NewDatabase() (*DB, error) {
@@ -43,9 +64,16 @@ func NewDatabase() (*DB, error) {
 		conn.SetConnMaxLifetime(time.Duration(viper.GetInt(constants.EnvConnectionMaxLifetime)) * time.Second)
 	}
 
-	return &DB{db: conn}, nil
+	runMode := viper.GetString(constants.EnvDatabaseRunMode)
+	tables := map[string]string{
+		"job":    fmt.Sprintf("olake-%s-job", runMode),
+		"source": fmt.Sprintf("olake-%s-source", runMode),
+		"dest":   fmt.Sprintf("olake-%s-destination", runMode),
+	}
+
+	return &DB{client: conn, tables: tables}, nil
 }
 
 func (d *DB) Close() error {
-	return d.db.Close()
+	return d.client.Close()
 }

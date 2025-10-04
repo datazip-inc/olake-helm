@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
@@ -108,4 +109,12 @@ func GetLogRetentionPeriod() int {
 
 func GetConfigDir() string {
 	return viper.GetString(constants.EnvContainerPersistentDir)
+}
+
+func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.ExecutionRequest) error {
+	for idx, config := range req.Configs {
+		configName := strings.Split(config.Name, ".")[0]
+		req.Configs[idx].Data = GetValueOrDefault(details, configName, config.Data)
+	}
+	return nil
 }
