@@ -2,10 +2,12 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"golang.org/x/mod/semver"
 
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
@@ -194,6 +196,9 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 
 	// Note: Final state saving is now handled by SyncCleanupActivity in the workflow defer block
 	result, err := a.podManager.ExecutePodActivity(ctx, request)
+	if err != nil && errors.Is(err, pods.ErrPodFailed) {
+		return nil, temporal.NewNonRetryableApplicationError("sync connector failed", "PodFailed", err)
+	}
 	return result, err
 }
 

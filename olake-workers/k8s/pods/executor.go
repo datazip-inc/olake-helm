@@ -2,6 +2,7 @@ package pods
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -14,6 +15,10 @@ import (
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
 )
+
+// ErrPodFailed is returned when a pod fails due to non-retryable application errors.
+// Infrastructure failures (evictions, image pull errors, etc.) are NOT wrapped with this error.
+var ErrPodFailed = errors.New("pod execution failed")
 
 // PodActivityRequest defines a request for executing a pod activity
 // This struct encapsulates all the information needed to execute a Temporal activity
@@ -194,8 +199,24 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 
 		// Check if pod failed
 		if pod.Status.Phase == corev1.PodFailed {
-			logger.Errorf("Pod %s failed", podName)
-			return nil, fmt.Errorf("pod %s failed with status: %s", podName, pod.Status.Phase)
+			// Check if this is a retryable infrastructure failure
+			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
+			for _, reason := range retryableReasons {
+				if pod.Status.Reason == reason {
+					logger.Warnf("Pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
+					break
+				}
+			}
+
+			var containerInfo string
+			if len(pod.Status.ContainerStatuses) > 0 {
+				status := pod.Status.ContainerStatuses[0]
+				if status.State.Terminated != nil {
+					term := status.State.Terminated
+					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
+				}
+			}
+			return nil, fmt.Errorf("%w: pod %s failed (%s)", ErrPodFailed, podName, containerInfo)
 		}
 
 		// Wait before checking again, with responsive cancellation

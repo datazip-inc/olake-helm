@@ -11,12 +11,20 @@ import (
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
 )
 
-// Retry policy matching server-side configuration
+// Retry policy for non-sync activities (discover, test, spec, cleanup)
 var DefaultRetryPolicy = &temporal.RetryPolicy{
 	InitialInterval:    time.Second * 5,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Minute * 5,
-	MaximumAttempts:    3,
+	MaximumAttempts:    1,
+}
+
+// Retry policy for sync activity with unlimited retries
+var SyncRetryPolicy = &temporal.RetryPolicy{
+	InitialInterval:    time.Second * 5,
+	BackoffCoefficient: 2.0,
+	MaximumInterval:    time.Minute * 5,
+	MaximumAttempts:    0,
 }
 
 // DiscoverCatalogWorkflow is a workflow for discovering catalogs using K8s Jobs
@@ -50,7 +58,7 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("sync"),
 		HeartbeatTimeout:    time.Minute,
-		RetryPolicy:         DefaultRetryPolicy,
+		RetryPolicy:         SyncRetryPolicy,
 		WaitForCancellation: true,
 	}
 	params := shared.SyncParams{
