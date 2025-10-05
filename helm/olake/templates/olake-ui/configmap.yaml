@@ -17,16 +17,17 @@ data:
     autorender = false
     copyrequestbody = true
     EnableDocs = true
-    logsdir = /tmp/olake/logs
+    logsdir = ./logger/logs
     sessionon = true
 
-    # Postgres (must match server required keys)
-    OLAKE_POSTGRES_USER     = {{ .Values.postgresql.auth.postgresUser }}
-    OLAKE_POSTGRES_PASSWORD = {{ .Values.postgresql.auth.postgresPassword }}
-    OLAKE_POSTGRES_HOST     = postgresql.{{ include "olake.namespace" . }}.svc.cluster.local
-    OLAKE_POSTGRES_PORT     = 5432
-    OLAKE_POSTGRES_DBNAME   = postgres
-    OLAKE_POSTGRES_SSLMODE  = disable
-
-    # Temporal
+    # Database Configuration
+    postgresdb              = ${POSTGRES_DB}
+    OLAKE_POSTGRES_USER     = ${OLAKE_POSTGRES_USER}
+    OLAKE_POSTGRES_PASSWORD = ${OLAKE_POSTGRES_PASSWORD}
+    OLAKE_POSTGRES_HOST     = ${OLAKE_POSTGRES_HOST}
+    OLAKE_POSTGRES_PORT     = ${OLAKE_POSTGRES_PORT}
+    OLAKE_POSTGRES_DBNAME   = ${OLAKE_POSTGRES_DBNAME}
+    OLAKE_POSTGRES_SSLMODE  = ${OLAKE_POSTGRES_SSLMODE}
+    
+    # Temporal Configuration
     TEMPORAL_ADDRESS = temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233
