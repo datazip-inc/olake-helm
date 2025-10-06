@@ -3,6 +3,9 @@ package worker
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/client"
@@ -16,6 +19,8 @@ import (
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/workflows"
 )
+
+const telemetryIDPath = "/data/olake-jobs/telemetry/user_id"
 
 type K8sWorker struct {
 	temporalClient client.Client
@@ -40,6 +45,28 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 		return nil, fmt.Errorf("failed to create database: %v", err)
 	}
 	logger.Info("Created database connection")
+
+	// Telemetry logic for worker
+	telemetryDisabled, err := strconv.ParseBool(cfg.TelemetryConfig.Disabled)
+	if err != nil {
+		logger.Warnf("Invalid telemetry.disabled value '%s', defaulting to false", cfg.TelemetryConfig.Disabled)
+		telemetryDisabled = false
+	}
+
+	if !telemetryDisabled {
+		go func() {
+			for {
+				if data, err := os.ReadFile(telemetryIDPath); err == nil {
+					if id := strings.TrimSpace(string(data)); id != "" {
+						cfg.TelemetryConfig.UserID.Store(id)
+						logger.Debug("Telemetry user id detected")
+						return
+					}
+				}
+				time.Sleep(10 * time.Second)
+			}
+		}()
+	}
 
 	// Create pod manager
 	podManager, err := pods.NewK8sPodManager(cfg)

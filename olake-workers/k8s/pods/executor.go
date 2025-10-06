@@ -136,6 +136,10 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 							Name:  "OLAKE_SECRET_KEY",
 							Value: k.config.Kubernetes.OLakeSecretKey,
 						},
+						{
+							Name:  "TELEMETRY_DISABLED",
+							Value: k.config.TelemetryConfig.Disabled,
+						},
 					},
 				},
 			},

@@ -51,6 +51,7 @@ func (a *Activities) DiscoverCatalogActivity(ctx context.Context, params shared.
 	args := []string{string(shared.Discover), "--config", "/mnt/config/config.json"}
 	configs := []shared.JobConfig{
 		{Name: "config.json", Data: params.Config},
+		{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 	}
 
 	if params.JobName != "" && semver.Compare(params.Version, "v0.2.0") >= 0 {
@@ -124,6 +125,7 @@ func (a *Activities) TestConnectionActivity(ctx context.Context, params shared.A
 		Args:          args,
 		Configs: []shared.JobConfig{
 			{Name: "config.json", Data: params.Config},
+			{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 		},
 		Timeout:       helpers.GetActivityTimeout("test"),
 		HeartbeatFunc: activity.RecordHeartbeat,
@@ -189,6 +191,7 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 			{Name: "streams.json", Data: jobData["streams_config"].(string)},
 			{Name: "writer.json", Data: jobData["dest_config"].(string)},
 			{Name: "state.json", Data: stateData},
+			{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 		},
 		Timeout:       helpers.GetActivityTimeout("sync"),
 		HeartbeatFunc: activity.RecordHeartbeat,

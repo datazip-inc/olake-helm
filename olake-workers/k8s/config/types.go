@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // Config holds all configuration for the K8s worker
 type Config struct {
@@ -21,6 +24,9 @@ type Config struct {
 
 	// Logging configuration
 	Logging LoggingConfig `mapstructure:"logging"`
+
+	// Telemetry configuration
+	TelemetryConfig TelemetryConfig `mapstructure:"telemetry"`
 }
 
 // TemporalConfig contains Temporal-related settings
@@ -94,4 +100,10 @@ type ActivityTimeouts struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+// TelemetryConfig contains telemetry settings
+type TelemetryConfig struct {
+	Disabled string `mapstructure:"disabled"`
+	UserID   atomic.Value
 }
