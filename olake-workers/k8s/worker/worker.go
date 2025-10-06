@@ -77,6 +77,7 @@ func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
 	w.RegisterActivity(activitiesInstance.DiscoverCatalogActivity)
 	w.RegisterActivity(activitiesInstance.TestConnectionActivity)
 	w.RegisterActivity(activitiesInstance.SyncActivity)
+	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
 	w.RegisterActivity(activitiesInstance.FetchSpecActivity)
 
 	logger.Info("Successfully registered all workflows and activities")

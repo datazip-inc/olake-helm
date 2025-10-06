@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -10,12 +11,20 @@ import (
 	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/helpers"
 )
 
-// Retry policy matching server-side configuration
+// Retry policy for non-sync activities (discover, test, spec, cleanup)
 var DefaultRetryPolicy = &temporal.RetryPolicy{
 	InitialInterval:    time.Second * 5,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Minute * 5,
 	MaximumAttempts:    1,
+}
+
+// Retry policy for sync activity with unlimited retries
+var SyncRetryPolicy = &temporal.RetryPolicy{
+	InitialInterval:    time.Second * 5,
+	BackoffCoefficient: 2.0,
+	MaximumInterval:    time.Minute * 5,
+	MaximumAttempts:    0,
 }
 
 // DiscoverCatalogWorkflow is a workflow for discovering catalogs using K8s Jobs
@@ -45,19 +54,39 @@ func TestConnectionWorkflow(ctx workflow.Context, params *shared.ActivityParams)
 }
 
 // RunSyncWorkflow is a workflow for running data synchronization using K8s Jobs
-func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, error) {
+func RunSyncWorkflow(ctx workflow.Context, jobID int) (result map[string]interface{}, err error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("sync"),
-		RetryPolicy:         DefaultRetryPolicy,
+		HeartbeatTimeout:    time.Minute,
+		RetryPolicy:         SyncRetryPolicy,
+		WaitForCancellation: true,
 	}
 	params := shared.SyncParams{
 		JobID:      jobID,
 		WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
 	}
+
 	ctx = workflow.WithActivityOptions(ctx, options)
 
-	var result map[string]interface{}
-	err := workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
+	// Defer cleanup - runs on both normal completion and cancellation
+	defer func() {
+		newCtx, _ := workflow.NewDisconnectedContext(ctx)
+		cleanupOptions := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 15,
+			RetryPolicy:         DefaultRetryPolicy,
+		}
+		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
+		cleanupErr := workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
+		if cleanupErr != nil {
+			if err != nil {
+				err = fmt.Errorf("sync failed: %v, cleanup also failed: %v", err, cleanupErr)
+			} else {
+				err = fmt.Errorf("cleanup failed: %v", cleanupErr)
+			}
+		}
+	}()
+
+	err = workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
 	return result, err
 }
 
