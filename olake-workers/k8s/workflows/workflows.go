@@ -1,12 +1,12 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
 	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
 )
@@ -54,7 +54,7 @@ func TestConnectionWorkflow(ctx workflow.Context, params *shared.ActivityParams)
 }
 
 // RunSyncWorkflow is a workflow for running data synchronization using K8s Jobs
-func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, error) {
+func RunSyncWorkflow(ctx workflow.Context, jobID int) (result map[string]interface{}, err error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: helpers.GetActivityTimeout("sync"),
 		HeartbeatTimeout:    time.Minute,
@@ -67,7 +67,6 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, options)
-	var result map[string]interface{}
 	var cleanupErr error
 
 	// Defer cleanup - runs on both normal completion and cancellation
@@ -80,18 +79,15 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
 		cleanupErr = workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
 		if cleanupErr != nil {
-			logger.Errorf("SyncCleanupActivity failed: %v", cleanupErr)
+			if err != nil {
+				err = fmt.Errorf("sync failed: %v, cleanup also failed: %v", err, cleanupErr)
+			} else {
+				err = temporal.NewNonRetryableApplicationError("cleanup failed", "CleanupFailed", cleanupErr)
+			}
 		}
 	}()
 
-	err := workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
-
-	// Return cleanup error as non-retryable if it occurred, even if sync succeeded
-	// Cleanup failures (e.g., DB down during state save) should fail the workflow immediately
-	if cleanupErr != nil {
-		return nil, temporal.NewNonRetryableApplicationError("cleanup failed", "CleanupFailed", cleanupErr)
-	}
-
+	err = workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
 	return result, err
 }
 
