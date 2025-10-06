@@ -67,7 +67,6 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (result map[string]interfa
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, options)
-	var cleanupErr error
 
 	// Defer cleanup - runs on both normal completion and cancellation
 	defer func() {
@@ -77,12 +76,12 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (result map[string]interfa
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
-		cleanupErr = workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
+		cleanupErr := workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
 		if cleanupErr != nil {
 			if err != nil {
 				err = fmt.Errorf("sync failed: %v, cleanup also failed: %v", err, cleanupErr)
 			} else {
-				err = temporal.NewNonRetryableApplicationError("cleanup failed", "CleanupFailed", cleanupErr)
+				err = fmt.Errorf("cleanup failed: %v", cleanupErr)
 			}
 		}
 	}()
