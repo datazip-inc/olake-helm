@@ -16,6 +16,7 @@ import (
 	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
 	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/filesystem"
 	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/helpers"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/k8s"
 )
 
 // Activities holds the dependencies for activity functions
