@@ -146,8 +146,8 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 	// Retrieve job configuration from database to get all required sync parameters
 	jobData, err := a.db.GetJobData(ctx, params.JobID)
 	if err != nil {
-		logger.Errorf("Failed to get job data for jobID %d: %v", params.JobID, err)
-		return nil, fmt.Errorf("failed to get job data: %v", err)
+		errMsg := fmt.Sprintf("failed to get job data for jobID %d", params.JobID)
+		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
 
 	// Validate and fix empty/null state
@@ -161,7 +161,8 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 	// Maps all sync configuration files (config, catalog, destination, state) as mounted files
 	imageName, err := a.podManager.GetDockerImageName(jobData["source_type"].(string), jobData["source_version"].(string))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get docker image name: %v", err)
+		errMsg := fmt.Sprintf("failed to get docker image name for jobID %d", params.JobID)
+		return nil, temporal.NewNonRetryableApplicationError(errMsg, "ConfigurationError", err)
 	}
 
 	// Build args slice with encryption key if configured
