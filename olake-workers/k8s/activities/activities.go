@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -209,13 +208,9 @@ func (a *Activities) SyncCleanupActivity(ctx context.Context, params shared.Sync
 		"jobID", params.JobID,
 		"workflowID", params.WorkflowID)
 
-	// Use background context to ensure cleanup runs even if workflow is cancelled
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
-	defer cancel()
-
 	// Step 1: Delete the pod
 	podName := k8s.SanitizeName(params.WorkflowID)
-	if err := a.podManager.CleanupPod(cleanupCtx, podName); err != nil {
+	if err := a.podManager.CleanupPod(ctx, podName); err != nil {
 		logger.Errorf("Failed to cleanup pod %s for job %d: %v", podName, params.JobID, err)
 		return fmt.Errorf("failed to cleanup pod: %v", err)
 	}
@@ -224,12 +219,12 @@ func (a *Activities) SyncCleanupActivity(ctx context.Context, params shared.Sync
 	// Step 2: Save final state from filesystem to database
 	fsHelper := filesystem.NewHelper()
 	if stateData, readErr := fsHelper.ReadAndValidateStateFile(params.WorkflowID); readErr != nil {
-		// State file might not exist or be invalid - log but don't fail cleanup
+		// Missing or invalid state file is a critical error - fail the workflow
 		logger.Errorf("Could not read state file for job %d: %v", params.JobID, readErr)
 		return readErr
 	} else {
-		// Save state to database using background context
-		if updateErr := a.db.UpdateJobState(cleanupCtx, params.JobID, string(stateData), true); updateErr != nil {
+		// Save state to database
+		if updateErr := a.db.UpdateJobState(ctx, params.JobID, string(stateData), true); updateErr != nil {
 			logger.Errorf("Failed to save final state for job %d: %v", params.JobID, updateErr)
 			return updateErr
 		}

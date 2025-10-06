@@ -204,6 +204,7 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
 			if slices.Contains(retryableReasons, pod.Status.Reason) {
 				logger.Warnf("Pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
+				continue
 			}
 
 			var containerInfo string
