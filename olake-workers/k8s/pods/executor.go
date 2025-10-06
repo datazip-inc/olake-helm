@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -202,8 +203,8 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 			// Check if this is a retryable infrastructure failure
 			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
 			if slices.Contains(retryableReasons, pod.Status.Reason) {
-					logger.Warnf("Pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
-				}
+				logger.Warnf("Pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
+			}
 
 			var containerInfo string
 			if len(pod.Status.ContainerStatuses) > 0 {
