@@ -24,17 +24,17 @@ func (k *KubernetesExecutor) runPod(ctx context.Context, req *executor.Execution
 
 	podSpec := k.CreatePodSpec(req, workDir, imageName)
 
+	logger.Infof("Creating Pod %s with image %s", podSpec.Name, imageName)
 	pod, err := k.client.CoreV1().Pods(k.namespace).Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to create pod: %v", err)
 	}
+	logger.Debugf("Successfully created Pod %s", podSpec.Name)
 	defer func() {
 		if err := k.cleanupPod(ctx, pod.Name); err != nil {
 			logger.Errorf("Failed to cleanup pod: %v", err)
 		}
 	}()
-
-	logger.Infof("Created pod: %s", pod.Name)
 
 	if err := k.waitForPodCompletion(ctx, pod.Name, 10*time.Minute); err != nil {
 		return "", err
@@ -244,5 +244,6 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 		logger.Infof("Found node mapping for JobID %d: %v", jobID, mapping)
 		return mapping
 	}
+	logger.Debugf("No node mapping found for JobID %d, using default scheduling", jobID)
 	return make(map[string]string)
 }

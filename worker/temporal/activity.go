@@ -17,8 +17,12 @@ func NewActivity(e executor.Executor) *Activity {
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Executing %s activity", req.Command)
-	// Record Activity
+	activityLogger.Debug("Executing", req.Command, "activity",
+		"sourceType", req.ConnectorType,
+		"version", req.Version,
+		"workflowID", req.WorkflowID)
+
 	activity.RecordHeartbeat(ctx, "Executing %s activity", req.Command)
+
 	return a.executor.Execute(ctx, req)
 }

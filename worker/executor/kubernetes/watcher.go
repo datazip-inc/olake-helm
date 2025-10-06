@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 )
 
 // ConfigMapWatcher watches for ConfigMap changes and provides thread-safe access to job mapping
@@ -126,7 +127,8 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
 	if !exists || rawMapping == "" {
-		logger.Debugf("No OLAKE_JOB_MAPPING in %s", w.configMapName)
+		log := utils.Ternary(!exists, "No OLAKE_JOB_MAPPING in ConfigMap %s", "Empty OLAKE_JOB_MAPPING in ConfigMap %s").(string)
+		logger.Debugf(log, w.configMapName)
 		w.mu.Lock()
 		w.jobMapping = map[int]map[string]string{}
 		w.mu.Unlock()

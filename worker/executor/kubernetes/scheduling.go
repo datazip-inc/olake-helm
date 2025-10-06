@@ -91,6 +91,10 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 		}
 	}
 
+	// Log comprehensive statistics
+	logger.Infof("Job mapping loaded: %d valid entries out of %d total",
+		stats.ValidEntries, stats.TotalEntries)
+
 	// Print the valid job mapping configuration as JSON
 	if len(result) > 0 {
 		if jsonBytes, err := json.Marshal(result); err == nil {
@@ -98,17 +102,22 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 		}
 	}
 
-	logger.Infof("Job mapping loaded: %d valid entries out of %d total", stats.ValidEntries, stats.TotalEntries)
 	if len(stats.InvalidMappings) > 0 {
 		logger.Errorf("Found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
 	}
+
+	// Warn if no valid mappings were loaded
 	if stats.ValidEntries == 0 && stats.TotalEntries > 0 {
 		logger.Errorf("No valid job mappings loaded despite %d entries in configuration", stats.TotalEntries)
 	}
+
+	// Fallback to last valid mapping if available
 	if stats.ValidEntries == 0 && lastValidMapping != nil {
 		logger.Debugf("Falling back to previous valid mapping with %d entries", len(lastValidMapping))
 		return lastValidMapping
 	}
+
+	// Store successful result as fallback for future failures
 	if len(result) > 0 || stats.ValidEntries > 0 {
 		lastValidMapping = result
 		logger.Debugf("Cached valid mapping with %d entries for future fallback", len(result))
