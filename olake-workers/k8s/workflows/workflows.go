@@ -68,6 +68,7 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 
 	ctx = workflow.WithActivityOptions(ctx, options)
 	var result map[string]interface{}
+	var cleanupErr error
 
 	// Defer cleanup - runs on both normal completion and cancellation
 	defer func() {
@@ -77,13 +78,20 @@ func RunSyncWorkflow(ctx workflow.Context, jobID int) (map[string]interface{}, e
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOptions)
-		err := workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
-		if err != nil {
-			logger.Errorf("SyncCleanupActivity failed: %v", err)
+		cleanupErr = workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", params).Get(newCtx, nil)
+		if cleanupErr != nil {
+			logger.Errorf("SyncCleanupActivity failed: %v", cleanupErr)
 		}
 	}()
 
 	err := workflow.ExecuteActivity(ctx, "SyncActivity", params).Get(ctx, &result)
+
+	// Return cleanup error as non-retryable if it occurred, even if sync succeeded
+	// Cleanup failures (e.g., DB down during state save) should fail the workflow immediately
+	if cleanupErr != nil {
+		return nil, temporal.NewNonRetryableApplicationError("cleanup failed", "CleanupFailed", cleanupErr)
+	}
+
 	return result, err
 }
 

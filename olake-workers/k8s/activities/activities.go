@@ -225,15 +225,15 @@ func (a *Activities) SyncCleanupActivity(ctx context.Context, params shared.Sync
 	fsHelper := filesystem.NewHelper()
 	if stateData, readErr := fsHelper.ReadAndValidateStateFile(params.WorkflowID); readErr != nil {
 		// State file might not exist or be invalid - log but don't fail cleanup
-		logger.Warnf("Could not read state file for job %d: %v", params.JobID, readErr)
+		logger.Errorf("Could not read state file for job %d: %v", params.JobID, readErr)
+		return readErr
 	} else {
 		// Save state to database using background context
 		if updateErr := a.db.UpdateJobState(cleanupCtx, params.JobID, string(stateData), true); updateErr != nil {
 			logger.Errorf("Failed to save final state for job %d: %v", params.JobID, updateErr)
-			// Don't return error - state save failure shouldn't fail the cleanup activity
-		} else {
-			logger.Infof("Successfully saved final state for job %d", params.JobID)
+			return updateErr
 		}
+		logger.Infof("Successfully saved final state for job %d", params.JobID)
 	}
 
 	return nil
