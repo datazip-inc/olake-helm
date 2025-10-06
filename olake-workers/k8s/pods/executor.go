@@ -389,9 +389,7 @@ func (k *K8sPodManager) ExecutePodActivity(ctx context.Context, req PodActivityR
 
 	if req.Operation != shared.Sync {
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-			defer cancel()
-			if err := k.CleanupPod(cleanupCtx, podName); err != nil {
+			if err := k.CleanupPod(ctx, podName); err != nil {
 				logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
 					podName, req.Operation, req.WorkflowID, err)
 			}
