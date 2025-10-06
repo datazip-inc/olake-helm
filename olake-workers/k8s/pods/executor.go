@@ -207,6 +207,12 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 				continue
 			}
 
+			// Common exit codes:
+			// - Exit 0: Success
+			// - Exit 1: General application error
+			// - Exit 2: Misuse of shell command or manual termination
+			// - Exit 137: SIGKILL (OOMKilled or manual kill)
+			// - Exit 143: SIGTERM (graceful termination)
 			var containerInfo string
 			if len(pod.Status.ContainerStatuses) > 0 {
 				status := pod.Status.ContainerStatuses[0]
@@ -223,7 +229,7 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 		case <-time.After(5 * time.Second):
 			// Continue to next iteration
 		case <-ctx.Done():
-			logger.Warnf("Context cancelled while waiting for pod %s", podName)
+			logger.Warnf("Cancellation requested for pod %s", podName)
 			return nil, ctx.Err()
 		}
 	}
