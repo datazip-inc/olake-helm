@@ -12,6 +12,7 @@ import (
 
 type Executor interface {
 	Execute(ctx context.Context, req *ExecutionRequest) (map[string]interface{}, error)
+	SyncCleanup(ctx context.Context, req *ExecutionRequest) error
 	Close() error
 }
 
@@ -26,6 +27,9 @@ type ExecutionRequest struct {
 	JobID         int               `json:"job_id"`
 	Timeout       time.Duration     `json:"timeout"`
 	OutputFile    string            `json:"output_file"`
+
+	// k8s specific fields
+	HeartbeatFunc func(context.Context, ...interface{})
 }
 
 type ExecutorEnvironment string

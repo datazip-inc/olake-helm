@@ -2,12 +2,10 @@ package docker
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/docker/docker/client"
 )
@@ -29,7 +27,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	subDir := utils.Ternary(req.Command == types.Sync, fmt.Sprintf("%x", sha256.Sum256([]byte(req.WorkflowID))), req.WorkflowID).(string)
+	subDir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 	workDir, err := utils.SetupWorkDirectory(d.workingDir, subDir)
 	if err != nil {
 		return nil, err
@@ -59,6 +57,10 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 	return map[string]interface{}{
 		"response": out,
 	}, nil
+}
+
+func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
+	return nil
 }
 
 func (d *DockerExecutor) Close() error {

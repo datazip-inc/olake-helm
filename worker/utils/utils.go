@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
@@ -117,4 +119,13 @@ func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.Ex
 		req.Configs[idx].Data = GetValueOrDefault(details, configName, config.Data)
 	}
 	return nil
+}
+
+// GetWorkflowDirectory determines the directory name based on operation and workflow ID
+func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
+	if operation == types.Sync {
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
+	} else {
+		return originalWorkflowID
+	}
 }

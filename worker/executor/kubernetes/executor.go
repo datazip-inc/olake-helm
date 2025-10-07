@@ -2,14 +2,14 @@ package kubernetes
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 
+	"github.com/datazip-inc/olake-helm/worker/api"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
@@ -54,7 +54,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	secretKey := viper.GetString(constants.EnvSecretKey)
-	basePath := viper.GetString(constants.EnvContainerPersistentDir)
+	basePath := utils.GetConfigDir()
 
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
@@ -82,7 +82,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 }
 
 func (k *KubernetesExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	subDir := utils.Ternary(req.Command == types.Sync, fmt.Sprintf("%x", sha256.Sum256([]byte(req.WorkflowID))), req.WorkflowID).(string)
+	subDir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 	workDir, err := utils.SetupWorkDirectory(k.config.BasePath, subDir)
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *executor.Executio
 	// Question: Telemetry requires streams.json, so cleaning up fails telemetry. Do we need cleanup?
 	// defer utils.CleanupConfigFiles(workDir, req.Configs)
 
-	out, err := k.runPod(ctx, req, workDir)
+	out, err := k.RunPod(ctx, req, workDir)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +112,27 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *executor.Executio
 
 func (k *KubernetesExecutor) Close() error {
 	k.configWatcher.cancel()
+	return nil
+}
+
+func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
+	podName := k.sanitizeName(req.WorkflowID)
+	if err := k.cleanupPod(ctx, podName); err != nil {
+		return fmt.Errorf("failed to cleanup pod: %v", err)
+	}
+
+	stateFilePath := filepath.Join(k.config.BasePath, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
+	stateFile, err := utils.ReadFile(stateFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read state file: %v", err)
+	}
+
+	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
+		return fmt.Errorf("failed to update job state: %v", err)
+	}
+
+	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
+	logger.Infof("Successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 

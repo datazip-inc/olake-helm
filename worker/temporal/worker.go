@@ -26,6 +26,7 @@ func NewWorker(c *Client, e executor.Executor) *Worker {
 	activitiesInstance := NewActivity(e)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
+	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
 
 	return &Worker{
 		worker: w,

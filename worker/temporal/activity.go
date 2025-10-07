@@ -2,13 +2,16 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/api"
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 )
 
 type Activity struct {
@@ -28,6 +31,10 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionR
 
 	activity.RecordHeartbeat(ctx, "Executing %s activity", req.Command)
 
+	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
+		req.HeartbeatFunc = activity.RecordHeartbeat
+	}
+
 	return a.executor.Execute(ctx, req)
 }
 
@@ -38,7 +45,8 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	// Update the configs with latest details from the server
 	jobDetails, err := database.GetDB().GetJobData(req.JobID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get job details: %v", err)
+		errMsg := fmt.Sprintf("failed to get job data: %v", err)
+		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
 
 	if err := utils.UpdateConfigWithJobDetails(jobDetails, req); err != nil {
@@ -48,32 +56,34 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "Executing sync for job %d", req.JobID)
 
+	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
+		req.HeartbeatFunc = activity.RecordHeartbeat
+	}
+
 	// Send telemetry event - "sync started"
 	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "started")
 
 	// Execute the sync operation
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
-		// Send telemetry event - "sync failed"
+		if errors.Is(err, context.Canceled) {
+			// TODO: add telemetry for cancel
+			return nil, temporal.NewCanceledError("sync cancelled")
+		}
+		if errors.Is(err, constants.ErrPodFailed) {
+			// Send telemetry event - "sync failed"
+			api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
+			return nil, temporal.NewNonRetryableApplicationError("sync failed", "Pod failed", err)
+		}
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return nil, fmt.Errorf("sync execution failed: %v", err)
+		return result, err
 	}
-
-	// Extract and validate the new state file
-	newStateFile, ok := result["response"].(string)
-	if !ok {
-		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return nil, fmt.Errorf("invalid response format from worker")
-	}
-
-	// Update the state file with the new state from response
-	if err := database.GetDB().UpdateJobState(req.JobID, newStateFile, true); err != nil {
-		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return nil, fmt.Errorf("failed to update state file: %v", err)
-	}
-
-	// Send telemetry event - "sync completed"
-	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
-
 	return result, nil
+}
+
+func (a *Activity) SyncCleanupActivity(ctx context.Context, req *executor.ExecutionRequest) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("Cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+
+	return a.executor.SyncCleanup(ctx, req)
 }
