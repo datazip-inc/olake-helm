@@ -199,8 +199,13 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 
 	// Note: Final state saving is now handled by SyncCleanupActivity in the workflow defer block
 	result, err := a.podManager.ExecutePodActivity(ctx, request)
-	if err != nil && errors.Is(err, pods.ErrPodFailed) {
-		return nil, temporal.NewNonRetryableApplicationError("sync connector failed", "PodFailed", err)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, temporal.NewCanceledError("sync cancelled")
+		}
+		if errors.Is(err, pods.ErrPodFailed) {
+			return nil, temporal.NewNonRetryableApplicationError("sync connector failed", "PodFailed", err)
+		}
 	}
 	return result, err
 }

@@ -193,6 +193,9 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 
 		pod, err := k.clientset.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, fmt.Errorf("%w: pod %s was not found", ErrPodFailed, podName)
+			}
 			return nil, fmt.Errorf("failed to get pod status: %v", err)
 		}
 
