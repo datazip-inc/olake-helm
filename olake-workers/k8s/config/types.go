@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // Config holds all configuration for the K8s worker
 type Config struct {
@@ -21,6 +24,9 @@ type Config struct {
 
 	// Logging configuration
 	Logging LoggingConfig `mapstructure:"logging"`
+
+	// Telemetry configuration
+	TelemetryConfig TelemetryConfig `mapstructure:"telemetry"`
 }
 
 // TemporalConfig contains Temporal-related settings
@@ -49,16 +55,15 @@ type DatabaseConfig struct {
 
 // KubernetesConfig contains K8s-related settings
 type KubernetesConfig struct {
-	Namespace         string                    `mapstructure:"namespace"`
-	ImageRegistry     string                    `mapstructure:"image_registry"`
-	ImagePullPolicy   string                    `mapstructure:"image_pull_policy"`
-	ServiceAccount    string                    `mapstructure:"service_account"`
-	PVCName           string                    `mapstructure:"storage_pvc_name"`
-	Labels            map[string]string         `mapstructure:"labels"`
-	JobMappingRaw     string                    `mapstructure:"job_mapping_raw"`
-	JobMapping        map[int]map[string]string `mapstructure:"job_mapping"`
-	JobServiceAccount string                    `mapstructure:"job_service_account"`
-	OLakeSecretKey    string                    `mapstructure:"secret_key"`
+	Namespace         string            `mapstructure:"namespace"`
+	ImageRegistry     string            `mapstructure:"image_registry"`
+	ImagePullPolicy   string            `mapstructure:"image_pull_policy"`
+	ServiceAccount    string            `mapstructure:"service_account"`
+	PVCName           string            `mapstructure:"storage_pvc_name"`
+	Labels            map[string]string `mapstructure:"labels"`
+	JobMappingRaw     string            `mapstructure:"job_mapping_raw"`
+	JobServiceAccount string            `mapstructure:"job_service_account"`
+	OLakeSecretKey    string            `mapstructure:"secret_key"`
 }
 
 // KubernetesResourceLimits defines CPU and memory limits for K8s jobs
@@ -94,4 +99,10 @@ type ActivityTimeouts struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+// TelemetryConfig contains telemetry settings
+type TelemetryConfig struct {
+	Disabled string `mapstructure:"disabled"`
+	UserID   atomic.Value
 }

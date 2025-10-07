@@ -111,7 +111,16 @@ spec:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ .Values.postgresql.external.secretKeys.temporal_database }}
           {{- end }}
-        {{- if and (not .Values.postgresql.enabled) (ne (.Values.postgresql.external.secretKeys.ssl_mode | default "disable") "disable") }}
+        {{- $sslConfig := dict "mode" "disable" }}
+        {{- if not .Values.postgresql.enabled }}
+          {{- with lookup "v1" "Secret" .Release.Namespace .Values.postgresql.external.existingSecret }}
+            {{- $key := $.Values.postgresql.external.secretKeys.ssl_mode }}
+            {{- if and .data (hasKey .data $key) }}
+              {{- $_ := set $sslConfig "mode" (index .data $key | b64dec) }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- if ne $sslConfig.mode "disable" }}
         - name: SQL_TLS
           value: "true"
         - name: SQL_TLS_DISABLE_HOST_VERIFICATION

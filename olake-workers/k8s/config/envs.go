@@ -30,6 +30,14 @@ func LoadConfig() (*Config, error) {
 	return &config, nil
 }
 
+// GetTelemetryUserID returns the telemetry user ID in a thread-safe manner
+func (c *Config) GetTelemetryUserID() string {
+	if v := c.TelemetryConfig.UserID.Load(); v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
 // bindEnvironmentVariables binds environment variables to config paths
 func bindEnvironmentVariables(v *viper.Viper) {
 	// Database bindings
@@ -76,4 +84,8 @@ func bindEnvironmentVariables(v *viper.Viper) {
 	// Logging bindings
 	_ = v.BindEnv("logging.level", "LOG_LEVEL")
 	_ = v.BindEnv("logging.format", "LOG_FORMAT")
+
+	// Telemetry bindings
+	v.SetDefault("telemetry.disabled", "FALSE")
+	_ = v.BindEnv("telemetry.disabled", "TELEMETRY_DISABLED")
 }

@@ -2,19 +2,21 @@ package activities
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"golang.org/x/mod/semver"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/database"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/pods"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/filesystem"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/config"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/database"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/pods"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/filesystem"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/helpers"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/k8s"
 )
 
 // Activities holds the dependencies for activity functions
@@ -49,6 +51,7 @@ func (a *Activities) DiscoverCatalogActivity(ctx context.Context, params shared.
 	args := []string{string(shared.Discover), "--config", "/mnt/config/config.json"}
 	configs := []shared.JobConfig{
 		{Name: "config.json", Data: params.Config},
+		{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 	}
 
 	if params.JobName != "" && semver.Compare(params.Version, "v0.2.0") >= 0 {
@@ -78,6 +81,7 @@ func (a *Activities) DiscoverCatalogActivity(ctx context.Context, params shared.
 		Args:          args,
 		Configs:       configs,
 		Timeout:       helpers.GetActivityTimeout("discover"),
+		HeartbeatFunc: activity.RecordHeartbeat,
 	}
 
 	// Execute discover operation by creating K8s pod, wait for completion, retrieve results from streams.json file
@@ -121,8 +125,10 @@ func (a *Activities) TestConnectionActivity(ctx context.Context, params shared.A
 		Args:          args,
 		Configs: []shared.JobConfig{
 			{Name: "config.json", Data: params.Config},
+			{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 		},
-		Timeout: helpers.GetActivityTimeout("test"),
+		Timeout:       helpers.GetActivityTimeout("test"),
+		HeartbeatFunc: activity.RecordHeartbeat,
 	}
 
 	// Execute check operation by creating K8s pod, wait for completion, retrieve results from pod logs
@@ -142,8 +148,8 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 	// Retrieve job configuration from database to get all required sync parameters
 	jobData, err := a.db.GetJobData(ctx, params.JobID)
 	if err != nil {
-		logger.Errorf("Failed to get job data for jobID %d: %v", params.JobID, err)
-		return nil, fmt.Errorf("failed to get job data: %v", err)
+		errMsg := fmt.Sprintf("failed to get job data for jobID %d", params.JobID)
+		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
 
 	// Validate and fix empty/null state
@@ -157,7 +163,8 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 	// Maps all sync configuration files (config, catalog, destination, state) as mounted files
 	imageName, err := a.podManager.GetDockerImageName(jobData["source_type"].(string), jobData["source_version"].(string))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get docker image name: %v", err)
+		errMsg := fmt.Sprintf("failed to get docker image name for jobID %d", params.JobID)
+		return nil, temporal.NewNonRetryableApplicationError(errMsg, "ConfigurationError", err)
 	}
 
 	// Build args slice with encryption key if configured
@@ -184,45 +191,56 @@ func (a *Activities) SyncActivity(ctx context.Context, params shared.SyncParams)
 			{Name: "streams.json", Data: jobData["streams_config"].(string)},
 			{Name: "writer.json", Data: jobData["dest_config"].(string)},
 			{Name: "state.json", Data: stateData},
+			{Name: "user_id.txt", Data: a.config.GetTelemetryUserID()},
 		},
-		Timeout: helpers.GetActivityTimeout("sync"),
+		Timeout:       helpers.GetActivityTimeout("sync"),
+		HeartbeatFunc: activity.RecordHeartbeat,
 	}
 
-	// Execute sync operation by creating K8s pod, wait for completion, retrieve results from state.json file
+	// Note: Final state saving is now handled by SyncCleanupActivity in the workflow defer block
 	result, err := a.podManager.ExecutePodActivity(ctx, request)
 	if err != nil {
-		logger.Warnf("Activity failed for job %d: %v. Attempting final state save", params.JobID, err)
-
-		// Attempt to read final state from shared filesystem even on failure for data recovery
-		fsHelper := filesystem.NewHelper()
-		if stateData, readErr := fsHelper.ReadAndValidateStateFile(params.WorkflowID); readErr != nil {
-			// Log if reading or validation fails, but don't block the process
-			// This covers file not existing or containing invalid JSON
-			logger.Warnf("Failed to read/validate final state on error: %v", readErr)
-		} else {
-			// If the state file is valid, attempt to save it
-			if updateErr := a.db.UpdateJobState(ctx, params.JobID, string(stateData), true); updateErr != nil {
-				logger.Errorf("Failed to save final state on error for job %d: %v", params.JobID, updateErr)
-			} else {
-				logger.Infof("Saved final state on failure for job %d", params.JobID)
-			}
+		if errors.Is(err, context.Canceled) {
+			return nil, temporal.NewCanceledError("sync cancelled")
 		}
-
-		return nil, err
+		if errors.Is(err, pods.ErrPodFailed) {
+			return nil, temporal.NewNonRetryableApplicationError("sync connector failed", "PodFailed", err)
+		}
 	}
+	return result, err
+}
 
-	// Persist final sync state back to database for job tracking and resume capabilities
-	if stateJSON, err := json.Marshal(result); err != nil {
-		logger.Warnf("Failed to marshal result for jobID %d: %v", params.JobID, err)
+// SyncCleanupActivity cleans up Kubernetes pod resources and saves final state after sync workflow
+func (a *Activities) SyncCleanupActivity(ctx context.Context, params shared.SyncParams) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("Starting sync cleanup activity",
+		"jobID", params.JobID,
+		"workflowID", params.WorkflowID)
+
+	// Step 1: Delete the pod
+	podName := k8s.SanitizeName(params.WorkflowID)
+	if err := a.podManager.CleanupPod(ctx, podName); err != nil {
+		logger.Errorf("Failed to cleanup pod %s for job %d: %v", podName, params.JobID, err)
+		return fmt.Errorf("failed to cleanup pod: %v", err)
+	}
+	logger.Infof("Successfully cleaned up pod %s for job %d", podName, params.JobID)
+
+	// Step 2: Save final state from filesystem to database
+	fsHelper := filesystem.NewHelper()
+	if stateData, readErr := fsHelper.ReadAndValidateStateFile(params.WorkflowID); readErr != nil {
+		// Missing or invalid state file is a critical error - fail the workflow
+		logger.Errorf("Could not read state file for job %d: %v", params.JobID, readErr)
+		return readErr
 	} else {
-		if err := a.db.UpdateJobState(ctx, params.JobID, string(stateJSON), true); err != nil {
-			logger.Errorf("Failed to update job state for jobID %d: %v", params.JobID, err)
-			return nil, fmt.Errorf("failed to update job state: %v", err)
+		// Save state to database
+		if updateErr := a.db.UpdateJobState(ctx, params.JobID, string(stateData), true); updateErr != nil {
+			logger.Errorf("Failed to save final state for job %d: %v", params.JobID, updateErr)
+			return updateErr
 		}
-		logger.Infof("Successfully updated job state for jobID %d", params.JobID)
+		logger.Infof("Successfully saved final state for job %d", params.JobID)
 	}
 
-	return result, nil
+	return nil
 }
 
 // FetchSpecActivity fetches connector specifications using Kubernetes Pod
@@ -259,6 +277,7 @@ func (a *Activities) FetchSpecActivity(ctx context.Context, params shared.Activi
 		Args:          args,
 		Configs:       []shared.JobConfig{}, // No config files needed for spec
 		Timeout:       helpers.GetActivityTimeout("spec"),
+		HeartbeatFunc: activity.RecordHeartbeat,
 	}
 
 	// Execute spec operation by creating K8s pod, wait for completion, retrieve results from pod logs

@@ -63,13 +63,23 @@ Perform the login with the default credentials: `admin` / `password`.
 
 ```bash
 # Upgrade to latest version
-helm upgrade olake ./helm/olake
+helm upgrade olake olake/olake
 
 # Upgrade with new values
-helm upgrade olake ./helm/olake -f new-values.yaml
+helm upgrade olake olake/olake -f new-values.yaml
 ```
 
 ## Configuring the Helm Chart
+
+### Updating OLake UI Version
+
+Pull the latest images and restart the deployments without downtime:
+
+```bash
+# Restart OLake components
+kubectl rollout restart deployment/olake-ui
+kubectl rollout restart deployment/olake-workers
+```
 
 ### Initial User Setup
 
@@ -140,7 +150,6 @@ global:
 ```
 
 **Note on Default Behavior:** 
-- A **rollout restart** of the olake-workers deployment is necessary after updating this map and running helm upgrade.
 - For any JobID that is not specified in the jobMapping configuration, the corresponding job's pod will be scheduled by the standard Kubernetes scheduler, which places it on any available node in the cluster. 
 
 ### Cloud IAM Integration
@@ -189,16 +198,16 @@ global:
 
 The OLake application components (UI, Worker, and Activity Pods) require a shared ReadWriteMany (RWX) volume for **coordinating pipeline state and metadata**.
 
-For production, a robust, highly-available RWX-capable storage solution such as [AWS EFS](https://github.com/kubernetes-sigs/aws-efs-csi-driver), [GKE Filestore](https://cloud.google.com/filestore/docs/csi-driver), or [Azure Files](https://docs.microsoft.com/en-us/azure/aks/azure-files-csi) must be used. This is achieved by disabling the built-in NFS server and providing an existing PersistentVolumeClaim (PVC) that is backed by a managed storage service. An example for using external PVC is given below:
+For production, a robust, highly-available RWX-capable storage solution such as [AWS EFS](https://github.com/kubernetes-sigs/aws-efs-csi-driver), [GKE Filestore](https://cloud.google.com/filestore/docs/csi-driver), or [Azure Files](https://docs.microsoft.com/en-us/azure/aks/azure-files-csi) must be used. This is achieved by disabling the built-in NFS server and providing an existing Kubernetes StorageClass that is backed by a managed storage service. An example for using StorageClass given below:
 
 ```yaml
 nfsServer:
   # 1. The development NFS server is disabled
   enabled: false
   
-  # 2. An existing ReadWriteMany PersistentVolumeClaim is specified
+  # 2. An existing ReadWriteMany supported StorageClass is specified
   external:
-    name: "my-rwx-pvc"
+    storageClass: "efs-csi"
 ```
 
 **Note:** For development and quick starts, a simple NFS server is included and enabled by default. This provides an out-of-the-box shared storage solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
