@@ -11,13 +11,12 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/activities"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/config"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/database"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/pods"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/workflows"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/activities"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/config"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/database"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/pods"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/workflows"
 )
 
 const telemetryIDPath = "/data/olake-jobs/telemetry/user_id"
@@ -34,7 +33,6 @@ type K8sWorker struct {
 
 // NewK8sWorkerWithConfig creates a new K8s worker with full configuration
 func NewK8sWorker(cfg *config.Config) (*K8sWorker, error) {
-	cfg.Kubernetes.JobMapping = k8s.LoadJobMapping(cfg)
 	cfg.Worker.WorkerIdentity = fmt.Sprintf("olake.io/olake-workers/%s", cfg.Worker.WorkerIdentity)
 
 	logger.Infof("Connecting to Temporal at: %s", cfg.Temporal.Address)
@@ -134,6 +132,17 @@ func (w *K8sWorker) Start() error {
 	go func() {
 		if err := w.healthServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Errorf("Health server failed: %v", err)
+		}
+	}()
+
+	// Ensure graceful shutdown of ConfigMapWatcher
+	defer func() {
+		if w.podManager != nil {
+			if configWatcher := w.podManager.GetConfigWatcher(); configWatcher != nil {
+				if err := configWatcher.Stop(); err != nil {
+					logger.Errorf("Failed to stop ConfigMap watcher: %v", err)
+				}
+			}
 		}
 	}()
 

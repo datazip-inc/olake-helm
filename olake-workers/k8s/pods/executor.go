@@ -12,9 +12,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/k8s"
 )
 
 // ErrPodFailed is returned when a pod fails due to non-retryable application errors.
@@ -94,19 +94,19 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 
 			// Annotations store metadata that doesn't affect pod selection/scheduling
 			Annotations: map[string]string{
-				"olake.io/created-by-pod": fmt.Sprintf("olake.io/olake-workers/%s", k.config.Worker.WorkerIdentity), // Which worker pod created this
-				"olake.io/created-at":     time.Now().Format(time.RFC3339),                                          // Creation timestamp
-				"olake.io/workflow-id":    spec.OriginalWorkflowID,                                                  // Original unsanitized workflow ID
-				"olake.io/operation-type": string(spec.Operation),                                                   // Operation type for reference
-				"olake.io/connector-type": spec.ConnectorType,                                                       // Connector type for reference
-				"olake.io/job-id":         strconv.Itoa(spec.JobID),                                                 // Job ID for reference
+				"olake.io/created-by-pod": k.config.Worker.WorkerIdentity,  // Which worker pod created this
+				"olake.io/created-at":     time.Now().Format(time.RFC3339), // Creation timestamp
+				"olake.io/workflow-id":    spec.OriginalWorkflowID,         // Original unsanitized workflow ID
+				"olake.io/operation-type": string(spec.Operation),          // Operation type for reference
+				"olake.io/connector-type": spec.ConnectorType,              // Connector type for reference
+				"olake.io/job-id":         strconv.Itoa(spec.JobID),        // Job ID for reference
 			},
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			NodeSelector:  k.getNodeSelectorForJob(spec.JobID, spec.Operation),
 			Tolerations:   []corev1.Toleration{}, // No tolerations supported yet
-			Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
+			// Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
 			Containers: []corev1.Container{
 				{
 					Name:    "connector",
@@ -271,103 +271,13 @@ func (k *K8sPodManager) getNodeSelectorForJob(jobID int, operation shared.Comman
 		return make(map[string]string)
 	}
 
-	if mapping, exists := k.config.Kubernetes.JobMapping[jobID]; exists {
+	// Use live mapping from ConfigMapWatcher
+	if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		logger.Infof("Found node mapping for JobID %d: %v", jobID, mapping)
 		return mapping
 	}
 	logger.Debugf("No node mapping found for JobID %d, using default scheduling", jobID)
 	return make(map[string]string)
-}
-
-// buildNodeAffinity creates node affinity from JobID mapping configuration
-// Converts map[string]string to preferredDuringScheduling node affinity with proper edge case handling
-func (k *K8sPodManager) buildNodeAffinity(nodeSelectorMap map[string]string) (*corev1.NodeAffinity, error) {
-	if len(nodeSelectorMap) == 0 {
-		return nil, nil // No mapping, no node affinity
-	}
-
-	var matchExpressions []corev1.NodeSelectorRequirement
-	for key, value := range nodeSelectorMap {
-		// Edge case: Ensure the key and value from config are not empty
-		if key == "" || value == "" {
-			logger.Warnf("Skipping invalid node mapping entry with empty key or value: key=%s, value=%s", key, value)
-			continue
-		}
-
-		// The 'Values' field for the 'In' operator must be a slice of strings
-		matchExpressions = append(matchExpressions, corev1.NodeSelectorRequirement{
-			Key:      key,
-			Operator: corev1.NodeSelectorOpIn,
-			Values:   []string{value},
-		})
-	}
-
-	// If all entries were invalid, there's nothing to do
-	if len(matchExpressions) == 0 {
-		return nil, fmt.Errorf("all node mapping entries were invalid")
-	}
-
-	return &corev1.NodeAffinity{
-		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
-			{
-				Weight: 100, // High preference for JobID-mapped nodes
-				Preference: corev1.NodeSelectorTerm{
-					MatchExpressions: matchExpressions,
-				},
-			},
-		},
-	}, nil
-}
-
-// buildAffinityForJob builds affinity rules for the given jobID and operation type
-// Implements operation-based anti-affinity and JobID-based node affinity
-func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command) *corev1.Affinity {
-	// Skip affinity rules for jobID 0 (test/discover operations)
-	if jobID == 0 {
-		return nil
-	}
-
-	var affinity *corev1.Affinity
-
-	// Apply anti-affinity rules for sync operations to spread pods across nodes
-	if operation == shared.Sync {
-		logger.Debugf("Applying sync operation anti-affinity rules for jobID %d", jobID)
-		affinity = &corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-					{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"olake.io/operation-type": "sync",
-							},
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		}
-	} else {
-		logger.Debugf("No anti-affinity rules applied for %s operation (jobID %d)", operation, jobID)
-	}
-
-	// Add JobID-based node affinity using jobMapping configuration
-	nodeMapping := k.getNodeSelectorForJob(jobID, operation)
-	if len(nodeMapping) > 0 {
-		nodeAffinity, err := k.buildNodeAffinity(nodeMapping)
-		if err != nil {
-			logger.Errorf("Failed to build node affinity for JobID %d: %v", jobID, err)
-		} else if nodeAffinity != nil {
-			if affinity == nil {
-				affinity = &corev1.Affinity{}
-			}
-			affinity.NodeAffinity = nodeAffinity
-			logger.Infof("Applied node affinity for JobID %d: preferring nodes with %v", jobID, nodeMapping)
-		}
-	} else {
-		logger.Debugf("No JobID-based node affinity applied for JobID %d (no mapping found)", jobID)
-	}
-
-	return affinity
 }
 
 // ExecutePodActivity executes a pod activity with common workflow

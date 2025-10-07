@@ -7,8 +7,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/helpers"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/helpers"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
