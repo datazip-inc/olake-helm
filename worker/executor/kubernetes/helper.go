@@ -66,7 +66,6 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 		// Check if pod failed
 		if pod.Status.Phase == corev1.PodFailed {
-			logger.Errorf("Pod %s failed", podName)
 			return fmt.Errorf("pod %s failed with status: %s", podName, pod.Status.Phase)
 		}
 
@@ -74,7 +73,6 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		time.Sleep(5 * time.Second)
 	}
 
-	logger.Errorf("Pod %s timed out after %v", podName, timeout)
 	return fmt.Errorf("pod timed out after %v", timeout)
 }
 

@@ -7,7 +7,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/api"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/activity"
 )
@@ -39,12 +38,10 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	// Update the configs with latest details from the server
 	jobDetails, err := database.GetDB().GetJobData(req.JobID)
 	if err != nil {
-		logger.Errorf("Failed to get job details: %v", err)
 		return nil, fmt.Errorf("failed to get job details: %v", err)
 	}
 
 	if err := utils.UpdateConfigWithJobDetails(jobDetails, req); err != nil {
-		logger.Errorf("Failed to update config with job details: %v", err)
 		return nil, fmt.Errorf("failed to update config with job details: %v", err)
 	}
 
@@ -57,23 +54,20 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	// Execute the sync operation
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
-		logger.Errorf("Sync execution failed: %v", err)
 		// Send telemetry event - "sync failed"
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return nil, err
+		return nil, fmt.Errorf("sync execution failed: %v", err)
 	}
 
 	// Extract and validate the new state file
 	newStateFile, ok := result["response"].(string)
 	if !ok {
-		logger.Errorf("Invalid response format from worker: %+v", result)
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
 		return nil, fmt.Errorf("invalid response format from worker")
 	}
 
 	// Update the state file with the new state from response
 	if err := database.GetDB().UpdateJobState(req.JobID, newStateFile, true); err != nil {
-		logger.Errorf("Failed to update state file: %v", err)
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
 		return nil, fmt.Errorf("failed to update state file: %v", err)
 	}

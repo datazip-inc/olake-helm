@@ -103,12 +103,12 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	}
 
 	if len(stats.InvalidMappings) > 0 {
-		logger.Errorf("Found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
+		logger.Warnf("Found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
 	}
 
 	// Warn if no valid mappings were loaded
 	if stats.ValidEntries == 0 && stats.TotalEntries > 0 {
-		logger.Errorf("No valid job mappings loaded despite %d entries in configuration", stats.TotalEntries)
+		logger.Warnf("No valid job mappings loaded despite %d entries in configuration", stats.TotalEntries)
 	}
 
 	// Fallback to last valid mapping if available
