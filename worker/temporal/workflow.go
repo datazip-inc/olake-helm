@@ -17,14 +17,6 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	MaximumAttempts:    1,
 }
 
-// Retry policy for sync activity with infinite retries
-var SyncRetryPolicy = &temporal.RetryPolicy{
-	InitialInterval:    time.Second * 5,
-	BackoffCoefficient: 2.0,
-	MaximumInterval:    time.Minute * 5,
-	MaximumAttempts:    0,
-}
-
 // QUESTION: Is the single workflow approach fine or should we create separate workflows
 func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
 	activityOptions := workflow.ActivityOptions{
@@ -44,9 +36,14 @@ func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[
 func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (result map[string]interface{}, err error) {
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: req.Timeout,
-		RetryPolicy:         SyncRetryPolicy,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second * 5,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute * 5,
+			MaximumAttempts:    0,
+		},
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -68,7 +65,7 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 			if err != nil {
 				err = fmt.Errorf("sync failed: %v, cleanup also failed: %v", err, cleanupErr)
 			} else {
-				err = fmt.Errorf("sync failed: %v", cleanupErr)
+				err = fmt.Errorf("cleanup failed: %v", cleanupErr)
 			}
 		}
 	}()

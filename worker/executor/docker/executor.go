@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/docker/docker/client"
 )
@@ -33,9 +35,11 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 		return nil, err
 	}
 
-	if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
-		return nil, err
-	}
+	// Q: Since we are not writing files, when sync is already launched 
+	// it is moved inside the container methods.
+	// if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
+	// 	return nil, err
+	// }
 	// Question: Telemetry requires streams.json, so cleaning up fails telemetry. Do we need cleanup?
 	// defer utils.CleanupConfigFiles(workDir, req.Configs)
 
@@ -60,6 +64,23 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 }
 
 func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
+	// Stop container gracefully
+	logger.Info("Stopping container for cleanup %s", req.WorkflowID)
+	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
+		return fmt.Errorf("failed to stop container: %v", err)
+	}
+
+	stateFilePath := filepath.Join(d.workingDir, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
+	stateFile, err := utils.ReadFile(stateFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read state file: %v", err)
+	}
+
+	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
+		return fmt.Errorf("failed to update job state: %v", err)
+	}
+
+	logger.Infof("Successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 

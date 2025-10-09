@@ -113,6 +113,18 @@ func GetConfigDir() string {
 	return viper.GetString(constants.EnvContainerPersistentDir)
 }
 
+// getHostOutputDir returns the host output directory
+func GetHostOutputDir(outputDir string) string {
+	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
+	persistencePath := GetConfigDir()
+	if hostPersistencePath != "" {
+		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
+		logger.Infof("hostOutputDir %s", hostOutputDir)
+		return hostOutputDir
+	}
+	return outputDir
+}
+
 func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.ExecutionRequest) error {
 	for idx, config := range req.Configs {
 		configName := strings.Split(config.Name, ".")[0]
@@ -128,4 +140,38 @@ func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) st
 	} else {
 		return originalWorkflowID
 	}
+}
+
+// WorkflowHash returns a deterministic hash string for a given workflowID
+func WorkflowHash(workflowID string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+// GetWorkerEnvVars returns the environment variables from the worker container.
+func GetWorkerEnvVars() map[string]string {
+	// ignoredWorkerEnv is a map of environment variables that are ignored from the worker container.
+	var ignoredWorkerEnv = map[string]any{
+		"HOSTNAME":                nil,
+		"PATH":                    nil,
+		"PWD":                     nil,
+		"HOME":                    nil,
+		"SHLVL":                   nil,
+		"TERM":                    nil,
+		"PERSISTENT_DIR":          nil,
+		"CONTAINER_REGISTRY_BASE": nil,
+		"TEMPORAL_ADDRESS":        nil,
+		"OLAKE_SECRET_KEY":        nil,
+		"_":                       nil,
+	}
+
+	vars := make(map[string]string)
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		key := parts[0]
+		if _, ignore := ignoredWorkerEnv[key]; ignore {
+			continue
+		}
+		vars[key] = parts[1]
+	}
+	return vars
 }

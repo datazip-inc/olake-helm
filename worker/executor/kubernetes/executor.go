@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/datazip-inc/olake-helm/worker/api"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
@@ -131,7 +130,6 @@ func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.Exec
 		return fmt.Errorf("failed to update job state: %v", err)
 	}
 
-	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
 	logger.Infof("Successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }

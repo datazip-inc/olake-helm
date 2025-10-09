@@ -36,7 +36,6 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 	}
 	logger.Debugf("Successfully created Pod %s", podSpec.Name)
 
-	
 	if req.Command != types.Sync {
 		defer func() {
 			if err := k.cleanupPod(ctx, podSpec.Name); err != nil {
