@@ -46,7 +46,7 @@ func GetDockerImageName(sourceType, version string) string {
 }
 
 func CleanOldLogs(logDir string, retentionPeriod int) {
-	logger.Info("Running log cleaner...")
+	logger.Info("running log cleaner...")
 	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
 
 	// check if old logs are present
@@ -83,7 +83,7 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 		}
 		dirPath := filepath.Join(logDir, entry.Name())
 		if toDelete := shouldDelete(dirPath, cutoff); toDelete {
-			logger.Info("Deleting folder: %s", dirPath)
+			logger.Info("deleting folder: %s", dirPath)
 			_ = os.RemoveAll(dirPath)
 		}
 	}
@@ -91,14 +91,14 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 
 // starts a log cleaner that removes old logs from the specified directory based on the retention period
 func InitLogCleaner(logDir string, retentionPeriod int) {
-	logger.Info("Log cleaner started...")
+	logger.Info("log cleaner started...")
 	CleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
 	c := cron.New()
 	err := c.AddFunc("@midnight", func() {
 		CleanOldLogs(logDir, retentionPeriod)
 	})
 	if err != nil {
-		logger.Error("Failed to start log cleaner: %v", err)
+		logger.Error("failed to start log cleaner: %v", err)
 		return
 	}
 	c.Start()
@@ -119,7 +119,6 @@ func GetHostOutputDir(outputDir string) string {
 	persistencePath := GetConfigDir()
 	if hostPersistencePath != "" {
 		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
-		logger.Infof("hostOutputDir %s", hostOutputDir)
 		return hostOutputDir
 	}
 	return outputDir

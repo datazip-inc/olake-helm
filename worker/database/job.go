@@ -34,7 +34,7 @@ func (db *DB) GetJobData(jobId int) (map[string]interface{}, error) {
 	)
 
 	if !rows.Next() {
-		logger.Warnf("No job found with ID: %d", jobId)
+		logger.Warnf("no job found with ID: %d", jobId)
 		return nil, fmt.Errorf("no job found with ID: %d", jobId)
 	}
 

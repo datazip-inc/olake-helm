@@ -71,7 +71,7 @@ func validateJobMapping(jobID int, nodeLabels map[string]string, stats *JobMappi
 // LoadJobMapping parses and validates OLAKE_JOB_MAPPING JSON string
 func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	if strings.TrimSpace(rawMapping) == "" {
-		logger.Info("No JobID to Node mapping found, using empty mapping")
+		logger.Info("no JobID to Node mapping found, using empty mapping")
 		return map[int]map[string]string{}
 	}
 
@@ -79,7 +79,7 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	result := make(map[int]map[string]string)
 
 	if err := json.Unmarshal([]byte(rawMapping), &result); err != nil {
-		logger.Errorf("Failed to parse OLAKE_JOB_MAPPING as JSON: %v", err)
+		logger.Errorf("failed to parse OLAKE_JOB_MAPPING as json: %v", err)
 		return map[int]map[string]string{}
 	}
 
@@ -92,42 +92,42 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	}
 
 	// Log comprehensive statistics
-	logger.Infof("Job mapping loaded: %d valid entries out of %d total",
+	logger.Infof("job mapping loaded: %d valid entries out of %d total",
 		stats.ValidEntries, stats.TotalEntries)
 
 	// Print the valid job mapping configuration as JSON
 	if len(result) > 0 {
 		if jsonBytes, err := json.Marshal(result); err == nil {
-			logger.Debugf("Job mapping configuration: %s", string(jsonBytes))
+			logger.Debugf("job mapping configuration: %s", string(jsonBytes))
 		}
 	}
 
 	if len(stats.InvalidMappings) > 0 {
-		logger.Warnf("Found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
+		logger.Warnf("found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
 	}
 
 	// Warn if no valid mappings were loaded
 	if stats.ValidEntries == 0 && stats.TotalEntries > 0 {
-		logger.Warnf("No valid job mappings loaded despite %d entries in configuration", stats.TotalEntries)
+		logger.Warnf("no valid job mappings loaded despite %d entries in configuration", stats.TotalEntries)
 	}
 
 	// Fallback to last valid mapping if available
 	if stats.ValidEntries == 0 && lastValidMapping != nil {
-		logger.Debugf("Falling back to previous valid mapping with %d entries", len(lastValidMapping))
+		logger.Debugf("falling back to previous valid mapping with %d entries", len(lastValidMapping))
 		return lastValidMapping
 	}
 
 	// Store successful result as fallback for future failures
 	if len(result) > 0 || stats.ValidEntries > 0 {
 		lastValidMapping = result
-		logger.Debugf("Cached valid mapping with %d entries for future fallback", len(result))
-		logger.Infof("Valid Job mappings:")
+		logger.Debugf("cached valid mapping with %d entries for future fallback", len(result))
+		logger.Infof("valid Job mappings:")
 		for jobID, mapping := range result {
 			var labels []string
 			for k, v := range mapping {
 				labels = append(labels, fmt.Sprintf("%s:%s", k, v))
 			}
-			logger.Infof("  JobID %d: %s", jobID, strings.Join(labels, " "))
+			logger.Infof("JobID %d: %s", jobID, strings.Join(labels, " "))
 		}
 	}
 	return result

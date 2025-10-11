@@ -21,24 +21,24 @@ func main() {
 	logger.Init()
 	config.Init()
 
-	logger.Infof("Starting OLake worker")
-	logger.Infof("Executor environment: %s", utils.GetExecutorEnvironment())
+	logger.Infof("starting OLake worker")
+	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize database
 	db := database.GetDB()
-	logger.Infof("Database initialized")
+	logger.Infof("database initialized")
 	defer db.Close()
 
 	// Initialize executor
 	exec, err := executor.NewExecutor()
 	if err != nil {
-		logger.Fatalf("Failed to create executor: %v", err)
+		logger.Fatalf("failed to create executor: %v", err)
 	}
 	defer exec.Close()
 
 	tClient, err := temporal.NewClient()
 	if err != nil {
-		logger.Fatalf("Failed to create Temporal client: %v", err)
+		logger.Fatalf("failed to create Temporal client: %v", err)
 	}
 	defer tClient.Close()
 
@@ -49,7 +49,7 @@ func main() {
 	go func() {
 		err := worker.Start()
 		if err != nil {
-			logger.Fatalf("Failed to start Temporal worker: %v", err)
+			logger.Fatalf("failed to start Temporal worker: %v", err)
 			return
 		}
 	}()
@@ -60,7 +60,7 @@ func main() {
 		go func() {
 			err := healthServer.Start()
 			if err != nil {
-				logger.Fatalf("Failed to start Kubernetes health server: %v", err)
+				logger.Fatalf("failed to start Kubernetes health server: %v", err)
 			}
 		}()
 	}
@@ -71,9 +71,9 @@ func main() {
 
 	// wait for termination signal
 	sig := <-signalChan
-	logger.Infof("Received signal %v, shutting down worker.", sig)
+	logger.Infof("received signal %v, shutting down worker.", sig)
 
 	// stop the worker
 	worker.Stop()
-	logger.Info("Worker stopped!")
+	logger.Info("worker stopped!")
 }

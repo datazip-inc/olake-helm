@@ -19,10 +19,10 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 
 	// Use live mapping from ConfigMapWatcher
 	if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
-		logger.Infof("Found node mapping for JobID %d: %v", jobID, mapping)
+		logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
 		return mapping
 	}
-	logger.Debugf("No node mapping found for JobID %d, using default scheduling", jobID)
+	logger.Debugf("no node mapping found for JobID %d, using default scheduling", jobID)
 	return make(map[string]string)
 }
 

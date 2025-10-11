@@ -29,7 +29,7 @@ type ExecutionRequest struct {
 	OutputFile    string            `json:"output_file"`
 
 	// k8s specific fields
-	HeartbeatFunc func(context.Context, ...interface{})
+	HeartbeatFunc func(context.Context, ...interface{}) `json:"-"`
 }
 
 type ExecutorEnvironment string

@@ -10,11 +10,11 @@ func Init() {
 
 	setDefaults()
 
-	logger.Infof("Initialized config")
+	logger.Infof("initialized config")
 
 	// TODO: check if we need this
 	// if err := requiredEnvVars(); err != nil {
-	// 	logger.Fatalf("Failed to initialize config: %v", err)
+	// 	logger.Fatalf("failed to initialize config: %v", err)
 	// }
 }
 

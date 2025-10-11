@@ -61,7 +61,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 
 	watcher := NewConfigMapWatcher(clientset, namespace)
 	if err := watcher.Start(); err != nil {
-		logger.Errorf("Failed to start config map watcher: %v", err)
+		logger.Errorf("failed to start config map watcher: %v", err)
 	}
 
 	return &KubernetesExecutor{
@@ -130,7 +130,7 @@ func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.Exec
 		return fmt.Errorf("failed to update job state: %v", err)
 	}
 
-	logger.Infof("Successfully cleaned up sync for job %d", req.JobID)
+	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 

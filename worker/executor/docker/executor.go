@@ -35,7 +35,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 		return nil, err
 	}
 
-	// Q: Since we are not writing files, when sync is already launched 
+	// Q: Since we are not writing files, when sync is already launched
 	// it is moved inside the container methods.
 	// if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
 	// 	return nil, err
@@ -65,7 +65,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 
 func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
 	// Stop container gracefully
-	logger.Info("Stopping container for cleanup %s", req.WorkflowID)
+	logger.Info("stopping container for cleanup %s", req.WorkflowID)
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		return fmt.Errorf("failed to stop container: %v", err)
 	}
@@ -80,7 +80,7 @@ func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.Executio
 		return fmt.Errorf("failed to update job state: %v", err)
 	}
 
-	logger.Infof("Successfully cleaned up sync for job %d", req.JobID)
+	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 

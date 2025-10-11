@@ -31,13 +31,13 @@ func (d *DockerExecutor) RunContainer(ctx context.Context, req *executor.Executi
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 
-	logger.Infof("Running container - Command: %s, Image: %s, Name: %s", req.Command, imageName, containerName)
+	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
 
 	if req.Command == types.Sync {
 		return d.runSyncContainer(ctx, req, imageName, containerName, workDir)
 	}
 
-	return d.runSimpleContainer(ctx, req, imageName, containerName, workDir)
+	return d.executeContainer(ctx, containerName, imageName, req, workDir)
 }
 
 func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.ExecutionRequest, imageName, containerName, workDir string) (string, error) {
@@ -50,8 +50,7 @@ func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.Exe
 	// 1) If container is running, adopt and wait for completion
 	if state.Exists && state.Running {
 		logger.Infof("workflowID %s: adopting running container %s", req.WorkflowID, containerName)
-		if err := d.waitContainer(ctx, containerName, req.WorkflowID); err != nil {
-			logger.Errorf("workflowID %s: container wait failed: %s", req.WorkflowID, err)
+		if err := d.waitForContainerCompletion(ctx, containerName); err != nil {
 			return "", err
 		}
 		state = d.getContainerState(ctx, containerName, req.WorkflowID)
@@ -69,15 +68,6 @@ func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.Exe
 	// 4) First launch path: only if we never launched and nothing is running
 	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
 		logger.Infof("workflowID %s: first launch path, creating container", req.WorkflowID)
-
-		if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
-			return "", err
-		}
-
-		if err := d.PullImage(ctx, imageName, req.Version); err != nil {
-			return "", err
-		}
-
 		return d.executeContainer(ctx, containerName, imageName, req, workDir)
 	}
 
@@ -86,8 +76,7 @@ func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.Exe
 	return "sync status: skipped", nil
 }
 
-// runSimpleContainer handles non-sync operations (spec, check, discover,...)
-func (d *DockerExecutor) runSimpleContainer(ctx context.Context, req *executor.ExecutionRequest, imageName, containerName, workDir string) (string, error) {
+func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, imageName string, req *executor.ExecutionRequest, workDir string) (string, error) {
 	if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
 		return "", err
 	}
@@ -96,10 +85,6 @@ func (d *DockerExecutor) runSimpleContainer(ctx context.Context, req *executor.E
 		return "", err
 	}
 
-	return d.executeContainer(ctx, containerName, imageName, req, workDir)
-}
-
-func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, imageName string, req *executor.ExecutionRequest, workDir string) (string, error) {
 	// Environment variables propagation
 	var envs []string
 	for k, v := range utils.GetWorkerEnvVars() {
@@ -120,43 +105,29 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 		}
 	}
 
-	logger.Infof("Running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
+	logger.Infof("running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
 
-	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
-	if err != nil && !errdefs.IsAlreadyExists(err) {
-		return "", fmt.Errorf("failed to create container: %v", err)
+	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	if err != nil {
+		return "", err
 	}
-	containerID := resp.ID
-	if containerID == "" {
-		// Container might already exist
-		containerID = containerName
-	}
-	defer d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
-
-	if err := d.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		// If it's already running, continue
-		if !errdefs.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to start container: %v", err)
+	defer func() {
+		if err := d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+			logger.Warnf("failed to remove container: %v", err)
 		}
+	}()
+
+	if err := d.startContainer(ctx, containerID); err != nil {
+		return "", err
 	}
 
-	statusCh, errCh := d.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		if err != nil {
-			return "", fmt.Errorf("error waiting for container: %v", err)
-		}
-	case status := <-statusCh:
-		if status.StatusCode != 0 {
-			// Get container logs for error debugging
-			logOutput, _ := d.getContainerLogs(ctx, containerID)
-			return "", fmt.Errorf("container exited with status %d: %s", status.StatusCode, string(logOutput))
-		}
+	if err := d.waitForContainerCompletion(ctx, containerID); err != nil {
+		return "", err
 	}
 
 	output, err := d.getContainerLogs(ctx, containerID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get container logs: %v", err)
+		return "", err
 	}
 
 	logger.Infof("Docker container output: %s", string(output))
@@ -165,24 +136,39 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 }
 
 func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
-	// Always pull if version is "latest"
-	if strings.EqualFold(version, "latest") {
-		logger.Infof("Pulling latest image: %s", imageName)
+	_, err := d.client.ImageInspect(ctx, imageName)
+	if err != nil {
+		// Image doesn't exist, pull it
+		logger.Infof("image %s not found locally, pulling...", imageName)
 		reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
 		if err != nil {
 			return fmt.Errorf("image pull %s: %s", imageName, err)
 		}
 		defer reader.Close()
 
-		// Read the pull output (optional, for logging)
 		if _, err = io.Copy(io.Discard, reader); err != nil {
-			logger.Warnf("Failed to read image pull output: %v", err)
+			logger.Warnf("failed to read image pull output: %v", err)
 		}
 		return nil
 	}
 
-	logger.Infof("Using image: %s", imageName)
+	logger.Infof("using existing local image: %s", imageName)
 	return nil
+}
+
+// getOrCreateContainer creates a container or returns the ID of an existing one
+func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, error) {
+	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
+	if err != nil {
+		if !errdefs.IsAlreadyExists(err) {
+			return "", fmt.Errorf("failed to create container: %v", err)
+		}
+		// Container already exists, use the name as ID
+		logger.Infof("container %s already exists, resuming", containerName)
+		return containerName, nil
+	}
+	logger.Debugf("created container %s (ID: %s)", containerName, resp.ID)
+	return resp.ID, nil
 }
 
 // getContainerLogs retrieves and properly parses logs from a container using stdcopy
@@ -228,23 +214,6 @@ func (d *DockerExecutor) getContainerState(ctx context.Context, name, workflowID
 	return ContainerState{Exists: true, Running: running, ExitCode: ec}
 }
 
-func (d *DockerExecutor) waitContainer(ctx context.Context, name, workflowID string) error {
-	statusCh, errCh := d.client.ContainerWait(ctx, name, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		if err != nil {
-			logger.Errorf("workflowID %s: container wait failed for %s: %s", workflowID, name, err)
-			return fmt.Errorf("docker wait failed: %s", err)
-		}
-		return nil
-	case status := <-statusCh:
-		if status.StatusCode != 0 {
-			return fmt.Errorf("workflowID %s: container %s exited with code %d", workflowID, name, status.StatusCode)
-		}
-		return nil
-	}
-}
-
 // StopContainer stops a container by name, falling back to kill if needed (for cleanup activity)
 func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) error {
 	containerName := utils.WorkflowHash(workflowID)
@@ -272,4 +241,40 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 		logger.Infof("workflowID %s: container %s removed successfully", workflowID, containerName)
 	}
 	return nil
+}
+
+func (d *DockerExecutor) startContainer(ctx context.Context, containerID string) error {
+	err := d.client.ContainerStart(ctx, containerID, container.StartOptions{})
+	if err != nil && !errdefs.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+	logger.Debugf("container %s started", containerID)
+	return nil
+}
+
+func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, containerID string) error {
+	statusCh, errCh := d.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+		}
+		return nil
+
+	case status := <-statusCh:
+		if status.StatusCode != 0 {
+			logOutput, _ := d.getContainerLogs(ctx, containerID)
+			return fmt.Errorf("%w: container %s exited with status %d: %s",
+				constants.ErrExecutionFailed,
+				containerID,
+				status.StatusCode,
+				string(logOutput))
+		}
+		return nil
+
+	case <-ctx.Done():
+		logger.Warnf("context cancelled while waiting for container %s", containerID)
+		return ctx.Err()
+	}
 }

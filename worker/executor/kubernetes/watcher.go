@@ -44,7 +44,7 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 }
 
 func (w *ConfigMapWatcher) Start() error {
-	logger.Infof("Starting ConfigMap watcher for %s/%s", w.namespace, w.configMapName)
+	logger.Infof("starting ConfigMap watcher for %s/%s", w.namespace, w.configMapName)
 
 	// Create informer factory scoped to our namespace
 	w.informerFactory = informers.NewSharedInformerFactoryWithOptions(
@@ -100,7 +100,7 @@ func (w *ConfigMapWatcher) Start() error {
 }
 
 func (w *ConfigMapWatcher) Stop() {
-	logger.Infof("Stopping ConfigMap watcher")
+	logger.Infof("stopping ConfigMap watcher")
 	w.cancel()
 }
 
@@ -127,7 +127,7 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
 	if !exists || rawMapping == "" {
-		log := utils.Ternary(!exists, "No OLAKE_JOB_MAPPING in ConfigMap %s", "Empty OLAKE_JOB_MAPPING in ConfigMap %s").(string)
+		log := utils.Ternary(!exists, "no OLAKE_JOB_MAPPING in ConfigMap %s", "mmpty OLAKE_JOB_MAPPING in ConfigMap %s").(string)
 		logger.Debugf(log, w.configMapName)
 		w.mu.Lock()
 		w.jobMapping = map[int]map[string]string{}
@@ -145,5 +145,5 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	w.jobMapping = newMapping
 	w.mu.Unlock()
 
-	logger.Infof("Updated job mapping with %d entries", len(newMapping))
+	logger.Infof("updated job mapping with %d entries", len(newMapping))
 }
