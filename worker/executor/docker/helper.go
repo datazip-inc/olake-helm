@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -50,7 +51,7 @@ func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.Exe
 	// 1) If container is running, adopt and wait for completion
 	if state.Exists && state.Running {
 		logger.Infof("workflowID %s: adopting running container %s", req.WorkflowID, containerName)
-		if err := d.waitForContainerCompletion(ctx, containerName); err != nil {
+		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
 			return "", err
 		}
 		state = d.getContainerState(ctx, containerName, req.WorkflowID)
@@ -111,17 +112,19 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 	if err != nil {
 		return "", err
 	}
-	defer func() {
-		if err := d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
-			logger.Warnf("failed to remove container: %v", err)
-		}
-	}()
+	if req.Command != types.Sync {
+		defer func() {
+			if err := d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+				logger.Warnf("failed to remove container: %v", err)
+			}
+		}()
+	}
 
 	if err := d.startContainer(ctx, containerID); err != nil {
 		return "", err
 	}
 
-	if err := d.waitForContainerCompletion(ctx, containerID); err != nil {
+	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
 		return "", err
 	}
 
@@ -130,7 +133,7 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 		return "", err
 	}
 
-	logger.Infof("Docker container output: %s", string(output))
+	logger.Debugf("Docker container output: %s", string(output))
 
 	return string(output), nil
 }
@@ -252,29 +255,38 @@ func (d *DockerExecutor) startContainer(ctx context.Context, containerID string)
 	return nil
 }
 
-func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, containerID string) error {
+func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, containerID string, heartbeatFunc func(context.Context, ...interface{})) error {
 	statusCh, errCh := d.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 
-	select {
-	case err := <-errCh:
-		if err != nil {
-			return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+	for {
+		if heartbeatFunc != nil {
+			heartbeatFunc(ctx, fmt.Sprintf("waiting for container %s", containerID))
 		}
-		return nil
 
-	case status := <-statusCh:
-		if status.StatusCode != 0 {
-			logOutput, _ := d.getContainerLogs(ctx, containerID)
-			return fmt.Errorf("%w: container %s exited with status %d: %s",
-				constants.ErrExecutionFailed,
-				containerID,
-				status.StatusCode,
-				string(logOutput))
+		select {
+		case err := <-errCh:
+			if err != nil {
+				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+			}
+			return nil
+
+		case status := <-statusCh:
+			if status.StatusCode != 0 {
+				logOutput, _ := d.getContainerLogs(ctx, containerID)
+				return fmt.Errorf("%w: container %s exited with status %d: %s",
+					constants.ErrExecutionFailed,
+					containerID,
+					status.StatusCode,
+					string(logOutput))
+			}
+			return nil
+
+		case <-ctx.Done():
+			logger.Warnf("context cancelled while waiting for container %s", containerID)
+			return ctx.Err()
+
+		case <-time.After(5 * time.Second):
+			// continue
 		}
-		return nil
-
-	case <-ctx.Done():
-		logger.Warnf("context cancelled while waiting for container %s", containerID)
-		return ctx.Err()
 	}
 }

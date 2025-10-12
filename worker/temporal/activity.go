@@ -49,9 +49,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
 
-	if err := utils.UpdateConfigWithJobDetails(jobDetails, req); err != nil {
-		return nil, fmt.Errorf("failed to update config with job details: %v", err)
-	}
+	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)

@@ -124,12 +124,11 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.ExecutionRequest) error {
+func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.ExecutionRequest) {
 	for idx, config := range req.Configs {
 		configName := strings.Split(config.Name, ".")[0]
 		req.Configs[idx].Data = GetValueOrDefault(details, configName, config.Data)
 	}
-	return nil
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID

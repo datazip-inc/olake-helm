@@ -8,16 +8,14 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/logger"
 )
 
-func (db *DB) GetJobData(jobId int) (map[string]interface{}, error) {
-	query := fmt.Sprintf(`
-		SELECT j.streams_config, j.state, s.config, d.config
-		FROM %q j
-		JOIN %q s ON j.source_id = s.id
-		JOIN %q d ON j.dest_id = d.id
-		WHERE j.id = $1
-	`, db.tables["job"], db.tables["source"], db.tables["dest"])
+const (
+	queryTimeout = 5 * time.Second
+)
 
-	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (db *DB) GetJobData(jobId int) (map[string]interface{}, error) {
+	query := db.JobDataQuery()
+
+	cctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	rows, err := db.client.QueryContext(cctx, query, jobId)
@@ -51,11 +49,15 @@ func (db *DB) GetJobData(jobId int) (map[string]interface{}, error) {
 }
 
 func (db *DB) UpdateJobState(jobId int, state string, active bool) error {
-	query := fmt.Sprintf(`UPDATE %q SET state = $1, active = $2, updated_at = NOW() WHERE id = $3`, db.tables["job"])
+	query := db.UpdateJobStateQuery()
 
-	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	_, err := db.client.ExecContext(cctx, query, state, active, jobId)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to update job state: %w", err)
+	}
+
+	return nil
 }
