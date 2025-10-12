@@ -38,7 +38,10 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 
 	if req.Command != types.Sync {
 		defer func() {
-			if err := k.cleanupPod(ctx, podSpec.Name); err != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
 				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %v",
 					podSpec.Name, req.Command, req.WorkflowID, err)
 			}

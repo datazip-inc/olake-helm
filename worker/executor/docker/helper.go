@@ -114,7 +114,10 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 	}
 	if req.Command != types.Sync {
 		defer func() {
-			if err := d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
 				logger.Warnf("failed to remove container: %v", err)
 			}
 		}()
