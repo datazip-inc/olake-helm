@@ -38,9 +38,6 @@ func GetExecutorEnvironment() string {
 }
 
 func GetDockerImageName(sourceType, version string) string {
-	if version == "" {
-		version = "latest"
-	}
 	prefix := viper.GetString(constants.EnvDockerImagePrefix)
 	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
 }
