@@ -16,6 +16,55 @@ import (
 	"github.com/docker/docker/api/types/mount"
 )
 
+func (d *DockerExecutor) RunContainer(ctx context.Context, req *executor.ExecutionRequest, workDir string) (string, error) {
+	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
+	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
+
+	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
+
+	if req.Command == types.Sync {
+		return d.runSyncContainer(ctx, req, imageName, containerName, workDir)
+	}
+
+	return d.executeContainer(ctx, containerName, imageName, req, workDir)
+}
+
+func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.ExecutionRequest, imageName, containerName, workDir string) (string, error) {
+	// Marker to indicate we have launched once
+	launchedMarker := filepath.Join(workDir, "logs")
+
+	// Inspect container state
+	state := d.getContainerState(ctx, containerName, req.WorkflowID)
+
+	// 1) If container is running, adopt and wait for completion
+	if state.Exists && state.Running {
+		logger.Infof("workflowID %s: adopting running container %s", req.WorkflowID, containerName)
+		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
+			return "", err
+		}
+		state = d.getContainerState(ctx, containerName, req.WorkflowID)
+	}
+
+	// 2) If container exists and exited, treat as finished: cleanup and return status
+	if state.Exists && !state.Running && state.ExitCode != nil {
+		logger.Infof("workflowID %s: container %s exited with code %d", req.WorkflowID, containerName, *state.ExitCode)
+		if *state.ExitCode == 0 {
+			return "sync status: completed", nil
+		}
+		return "", fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
+	}
+
+	// 4) First launch path: only if we never launched and nothing is running
+	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+		logger.Infof("workflowID %s: first launch path, creating container", req.WorkflowID)
+		return d.executeContainer(ctx, containerName, imageName, req, workDir)
+	}
+
+	// Skip if container is not running, was already launched (logs exist), and no new run is needed.
+	logger.Infof("workflowID %s: container %s already handled, skipping launch", req.WorkflowID, containerName)
+	return "sync status: skipped", nil
+}
+
 func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, imageName string, req *executor.ExecutionRequest, workDir string) (string, error) {
 	if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
 		return "", err
@@ -78,40 +127,4 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 	logger.Debugf("Docker container output: %s", string(output))
 
 	return string(output), nil
-}
-
-func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.ExecutionRequest, imageName, containerName, workDir string) (string, error) {
-	// Marker to indicate we have launched once
-	launchedMarker := filepath.Join(workDir, "logs")
-
-	// Inspect container state
-	state := d.getContainerState(ctx, containerName, req.WorkflowID)
-
-	// 1) If container is running, adopt and wait for completion
-	if state.Exists && state.Running {
-		logger.Infof("workflowID %s: adopting running container %s", req.WorkflowID, containerName)
-		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
-			return "", err
-		}
-		state = d.getContainerState(ctx, containerName, req.WorkflowID)
-	}
-
-	// 2) If container exists and exited, treat as finished: cleanup and return status
-	if state.Exists && !state.Running && state.ExitCode != nil {
-		logger.Infof("workflowID %s: container %s exited with code %d", req.WorkflowID, containerName, *state.ExitCode)
-		if *state.ExitCode == 0 {
-			return "sync status: completed", nil
-		}
-		return "", fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
-	}
-
-	// 4) First launch path: only if we never launched and nothing is running
-	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
-		logger.Infof("workflowID %s: first launch path, creating container", req.WorkflowID)
-		return d.executeContainer(ctx, containerName, imageName, req, workDir)
-	}
-
-	// Skip if container is not running, was already launched (logs exist), and no new run is needed.
-	logger.Infof("workflowID %s: container %s already handled, skipping launch", req.WorkflowID, containerName)
-	return "sync status: skipped", nil
 }

@@ -30,10 +30,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionR
 		"workflowID", req.WorkflowID)
 
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
-
-	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
-		req.HeartbeatFunc = activity.RecordHeartbeat
-	}
+	req.HeartbeatFunc = activity.RecordHeartbeat
 
 	return a.executor.Execute(ctx, req)
 }
@@ -75,7 +72,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 
 		activityLogger.Error("sync command failed", "error", err)
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return result, err
+		return result, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
 	return result, nil

@@ -10,9 +10,7 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -23,19 +21,6 @@ type ContainerState struct {
 	Exists   bool
 	Running  bool
 	ExitCode *int
-}
-
-func (d *DockerExecutor) RunContainer(ctx context.Context, req *executor.ExecutionRequest, workDir string) (string, error) {
-	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
-	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-
-	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
-
-	if req.Command == types.Sync {
-		return d.runSyncContainer(ctx, req, imageName, containerName, workDir)
-	}
-
-	return d.executeContainer(ctx, containerName, imageName, req, workDir)
 }
 
 func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
