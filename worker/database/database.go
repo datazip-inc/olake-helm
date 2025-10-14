@@ -30,7 +30,7 @@ func GetDB() *DB {
 		var err error
 		db, err = newDatabase()
 		if err != nil {
-			logger.Fatalf("failed to create database: %v", err)
+			logger.Fatalf("failed to create database: %s", err)
 		}
 	})
 	return db

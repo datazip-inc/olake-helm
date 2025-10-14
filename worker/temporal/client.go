@@ -19,7 +19,7 @@ func NewClient() (*Client, error) {
 		HostPort: viper.GetString(constants.EnvTemporalAddress),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Temporal client: %v", err)
+		return nil, fmt.Errorf("failed to create Temporal client: %s", err)
 	}
 
 	return &Client{

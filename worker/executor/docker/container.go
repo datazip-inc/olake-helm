@@ -35,7 +35,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		defer reader.Close()
 
 		if _, err = io.Copy(io.Discard, reader); err != nil {
-			logger.Warnf("failed to read image pull output: %v", err)
+			logger.Warnf("failed to read image pull output: %s", err)
 		}
 		return nil
 	}
@@ -49,7 +49,7 @@ func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
 		if !errdefs.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to create container: %v", err)
+			return "", fmt.Errorf("failed to create container: %s", err)
 		}
 		// Container already exists, use the name as ID
 		logger.Infof("container %s already exists, resuming", containerName)
@@ -89,7 +89,7 @@ func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID strin
 func (d *DockerExecutor) getContainerState(ctx context.Context, name, workflowID string) ContainerState {
 	inspect, err := d.client.ContainerInspect(ctx, name)
 	if err != nil || inspect.ContainerJSONBase == nil || inspect.State == nil {
-		logger.Warnf("workflowID %s: container inspect failed or state missing for %s: %v", workflowID, name, err)
+		logger.Warnf("workflowID %s: container inspect failed or state missing for %s: %s", workflowID, name, err)
 		return ContainerState{Exists: false}
 	}
 

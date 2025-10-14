@@ -37,14 +37,14 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	// that Kubernetes automatically mounts into every pod at /var/run/secrets/kubernetes.io/serviceaccount/
 	clusterConfig, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config: %v", err)
+		return nil, fmt.Errorf("failed to get in-cluster config: %s", err)
 	}
 
 	// Create the Kubernetes clientset using the in-cluster config
 	// This clientset provides access to all Kubernetes API operations (pods, services, etc.)
 	clientset, err := kubernetes.NewForConfig(clusterConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+		return nil, fmt.Errorf("failed to create Kubernetes client: %s", err)
 	}
 
 	// Get config from environment
@@ -61,7 +61,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 
 	watcher := NewConfigMapWatcher(clientset, namespace)
 	if err := watcher.Start(); err != nil {
-		logger.Errorf("failed to start config map watcher: %v", err)
+		logger.Errorf("failed to start config map watcher: %s", err)
 	}
 
 	return &KubernetesExecutor{
@@ -117,17 +117,17 @@ func (k *KubernetesExecutor) Close() error {
 func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
 	podName := k.sanitizeName(req.WorkflowID)
 	if err := k.cleanupPod(ctx, podName); err != nil {
-		return fmt.Errorf("failed to cleanup pod: %v", err)
+		return fmt.Errorf("failed to cleanup pod: %s", err)
 	}
 
 	stateFilePath := filepath.Join(k.config.BasePath, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
 	stateFile, err := utils.ReadFile(stateFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read state file: %v", err)
+		return fmt.Errorf("failed to read state file: %s", err)
 	}
 
 	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
-		return fmt.Errorf("failed to update job state: %v", err)
+		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
 	logger.Infof("successfully cleaned up sync for job %d", req.JobID)

@@ -30,7 +30,7 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 
 	if _, err := k.createPod(ctx, podSpec); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to create pod: %v", err)
+			return "", fmt.Errorf("failed to create pod: %s", err)
 		}
 		logger.Infof("pod already exists, resuming polling for Pod: %s", podSpec.Name)
 	}
@@ -42,7 +42,7 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 			defer cancel()
 
 			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
-				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %v",
+				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %s",
 					podSpec.Name, req.Command, req.WorkflowID, err)
 			}
 		}()
@@ -54,7 +54,7 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 
 	logs, err := k.getPodLogs(ctx, podSpec.Name)
 	if err != nil {
-		return "", fmt.Errorf("failed to get pod logs: %v", err)
+		return "", fmt.Errorf("failed to get pod logs: %s", err)
 	}
 
 	return logs, nil
@@ -72,7 +72,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 		pod, err := k.client.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to get pod status: %v", err)
+			return fmt.Errorf("failed to get pod status: %s", err)
 		}
 
 		// Check if pod completed successfully
@@ -127,18 +127,18 @@ func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (st
 
 	logs, err := req.Stream(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get pod logs: %v", err)
+		return "", fmt.Errorf("failed to get pod logs: %s", err)
 	}
 	defer func() {
 		if err := logs.Close(); err != nil {
-			logger.Warnf("failed to close logs: %v", err)
+			logger.Warnf("failed to close logs: %s", err)
 		}
 	}()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
 	if err != nil {
-		return "", fmt.Errorf("failed to read pod logs: %v", err)
+		return "", fmt.Errorf("failed to read pod logs: %s", err)
 	}
 
 	return buf.String(), nil
@@ -155,7 +155,7 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 			logger.Infof("pod %s already deleted in namespace %s - cleanup complete", podName, k.namespace)
 			return nil
 		}
-		return fmt.Errorf("failed to delete pod %s in namespace %s: %v", podName, k.namespace, err)
+		return fmt.Errorf("failed to delete pod %s in namespace %s: %s", podName, k.namespace, err)
 	}
 
 	logger.Debugf("successfully cleaned up pod %s in namespace %s", podName, k.namespace)

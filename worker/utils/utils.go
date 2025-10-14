@@ -70,7 +70,7 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
-		logger.Error("failed to read log dir: %v", err)
+		logger.Error("failed to read log dir: %s", err)
 		return
 	}
 	// delete dir if old logs are found or is empty
@@ -95,7 +95,7 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 		CleanOldLogs(logDir, retentionPeriod)
 	})
 	if err != nil {
-		logger.Error("failed to start log cleaner: %v", err)
+		logger.Error("failed to start log cleaner: %s", err)
 		return
 	}
 	c.Start()

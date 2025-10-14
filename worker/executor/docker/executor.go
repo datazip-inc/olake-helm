@@ -67,17 +67,17 @@ func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.Executio
 	// Stop container gracefully
 	logger.Info("stopping container for cleanup %s", req.WorkflowID)
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
-		return fmt.Errorf("failed to stop container: %v", err)
+		return fmt.Errorf("failed to stop container: %s", err)
 	}
 
 	stateFilePath := filepath.Join(d.workingDir, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
 	stateFile, err := utils.ReadFile(stateFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read state file: %v", err)
+		return fmt.Errorf("failed to read state file: %s", err)
 	}
 
 	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
-		return fmt.Errorf("failed to update job state: %v", err)
+		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
 	logger.Infof("successfully cleaned up sync for job %d", req.JobID)

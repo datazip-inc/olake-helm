@@ -27,13 +27,13 @@ func SendTelemetryEvents(jobId int, workflowId string, event string) {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		logger.Warnf("failed to marshal request: %v", err)
+		logger.Warnf("failed to marshal request: %s", err)
 		return
 	}
 	go func() {
 		resp, err := http.Post(url, "application/json", strings.NewReader(string(jsonData)))
 		if err != nil {
-			logger.Warnf("failed to update sync telemetry: %v", err)
+			logger.Warnf("failed to update sync telemetry: %s", err)
 			return
 		}
 		defer resp.Body.Close()

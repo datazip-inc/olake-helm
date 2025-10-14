@@ -86,7 +86,7 @@ func (w *ConfigMapWatcher) Start() error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to add ConfigMap handler: %v", err)
+		return fmt.Errorf("failed to add ConfigMap handler: %s", err)
 	}
 
 	// Start informer factory and wait for cache sync

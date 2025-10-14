@@ -32,13 +32,13 @@ func main() {
 	// Initialize executor
 	exec, err := executor.NewExecutor()
 	if err != nil {
-		logger.Fatalf("failed to create executor: %v", err)
+		logger.Fatalf("failed to create executor: %s", err)
 	}
 	defer exec.Close()
 
 	tClient, err := temporal.NewClient()
 	if err != nil {
-		logger.Fatalf("failed to create Temporal client: %v", err)
+		logger.Fatalf("failed to create Temporal client: %s", err)
 	}
 	defer tClient.Close()
 
@@ -49,7 +49,7 @@ func main() {
 	go func() {
 		err := worker.Start()
 		if err != nil {
-			logger.Fatalf("failed to start Temporal worker: %v", err)
+			logger.Fatalf("failed to start Temporal worker: %s", err)
 			return
 		}
 	}()
@@ -60,7 +60,7 @@ func main() {
 		go func() {
 			err := healthServer.Start()
 			if err != nil {
-				logger.Fatalf("failed to start Kubernetes health server: %v", err)
+				logger.Fatalf("failed to start Kubernetes health server: %s", err)
 			}
 		}()
 	}

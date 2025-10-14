@@ -31,12 +31,12 @@ func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) err
 		return err
 	}
 	if errs := validation.IsQualifiedName(key); len(errs) > 0 {
-		err := fmt.Errorf("invalid label key '%s': %v", key, errs)
+		err := fmt.Errorf("invalid label key '%s': %s", key, errs)
 		stats.InvalidMappings = append(stats.InvalidMappings, fmt.Sprintf("JobID %d: %s", jobID, err))
 		return err
 	}
 	if errs := validation.IsValidLabelValue(value); len(errs) > 0 {
-		err := fmt.Errorf("invalid label value '%s' for key '%s': %v", value, key, errs)
+		err := fmt.Errorf("invalid label value '%s' for key '%s': %s", value, key, errs)
 		stats.InvalidMappings = append(stats.InvalidMappings, fmt.Sprintf("JobID %d: %s", jobID, err))
 		return err
 	}
@@ -79,7 +79,7 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	result := make(map[int]map[string]string)
 
 	if err := json.Unmarshal([]byte(rawMapping), &result); err != nil {
-		logger.Errorf("failed to parse OLAKE_JOB_MAPPING as json: %v", err)
+		logger.Errorf("failed to parse OLAKE_JOB_MAPPING as json: %s", err)
 		return map[int]map[string]string{}
 	}
 
@@ -103,7 +103,7 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	}
 
 	if len(stats.InvalidMappings) > 0 {
-		logger.Warnf("found %d invalid mappings: %v", len(stats.InvalidMappings), stats.InvalidMappings)
+		logger.Warnf("found %d invalid mappings: %s", len(stats.InvalidMappings), stats.InvalidMappings)
 	}
 
 	// Warn if no valid mappings were loaded
