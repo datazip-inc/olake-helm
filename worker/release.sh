@@ -70,7 +70,7 @@ function release_k8s_worker() {
 
     echo "Building and pushing K8s worker Docker image..."
     
-    # Build K8s worker from script directory (olake-workers/k8s)
+    # Build K8s worker from script directory (worker)
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     pushd "$script_dir" >/dev/null || fail "Failed to change directory to $script_dir"
     docker buildx build --platform "$platform" --push \

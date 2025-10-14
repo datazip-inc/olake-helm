@@ -55,6 +55,6 @@ jobs:
 
       - name: Run Release tool
         run: |
-          chmod +x ./olake-workers/k8s/release.sh
-          ./olake-workers/k8s/release.sh
+          chmod +x ./worker/release.sh
+          ./worker/release.sh
         shell: bash
