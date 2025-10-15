@@ -32,13 +32,8 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 	return defaultValue
 }
 
-// GetExecutorEnvironment gets the value of the executor environment variable or returns a default value if the variable is not set
-func GetExecutorEnvironment() string {
-	return viper.GetString(constants.EnvExecutorEnvironment)
-}
-
 func GetDockerImageName(sourceType, version string) string {
-	prefix := viper.GetString(constants.EnvDockerImagePrefix)
+	prefix := viper.GetString(constants.DefaultDockerImagePrefix)
 	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
 }
 

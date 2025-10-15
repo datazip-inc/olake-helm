@@ -9,11 +9,12 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/logger"
 )
 
+const healthPort = 8090
+
 type Server struct {
-	server     *http.Server
-	worker     *Worker
-	startTime  time.Time
-	healthPort int
+	server    *http.Server
+	worker    *Worker
+	startTime time.Time
 }
 
 type HealthResponse struct {
@@ -22,13 +23,12 @@ type HealthResponse struct {
 	Checks    map[string]string `json:"checks,omitempty"`
 }
 
-func NewHealthServer(worker *Worker, healthPort int) *Server {
+func NewHealthServer(worker *Worker) *Server {
 	mux := http.NewServeMux()
 
 	hs := &Server{
-		worker:     worker,
-		startTime:  time.Now(),
-		healthPort: healthPort,
+		worker:    worker,
+		startTime: time.Now(),
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", healthPort),
 			Handler: mux,
@@ -44,7 +44,7 @@ func NewHealthServer(worker *Worker, healthPort int) *Server {
 }
 
 func (hs *Server) Start() error {
-	logger.Infof("Starting health check server on port %d", hs.healthPort)
+	logger.Infof("Starting health check server on port %d", healthPort)
 	return hs.server.ListenAndServe()
 }
 

@@ -24,8 +24,6 @@ func setDefaults() {
 	viper.SetDefault("TEMPORAL_ADDRESS", "localhost:7233")
 
 	// Worker defaults
-	viper.SetDefault("EXECUTOR_ENVIRONMENT", "docker")
-	viper.SetDefault("HEALTH_PORT", 8090)
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)
 
 	// Kubernetes defaults
@@ -37,9 +35,6 @@ func setDefaults() {
 
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://host.docker.internal:8000/internal/worker/callback")
-
-	// Docker defaults
-	viper.SetDefault("DOCKER_IMAGE_PREFIX", "olakego/source")
 
 	// database
 	viper.SetDefault("DB_HOST", "postgresql")
@@ -60,7 +55,7 @@ func setDefaults() {
 // 		constants.EnvContainerPersistentDir,
 // 	}
 
-// 	for _, key := range required {
+// 	for _, key := range required {w
 // 		if !viper.IsSet(key) || viper.GetString(key) == "" {
 // 			return fmt.Errorf("required config %q is not set", key)
 // 		}

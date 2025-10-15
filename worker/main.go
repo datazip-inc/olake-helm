@@ -22,7 +22,7 @@ func main() {
 	config.Init()
 
 	logger.Infof("starting OLake worker")
-	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
+	logger.Infof("executor environment: %s", executor.GetExecutorEnvironment())
 
 	// Initialize database
 	db := database.GetDB()
@@ -46,17 +46,10 @@ func main() {
 	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	worker := temporal.NewWorker(tClient, exec)
-	go func() {
-		err := worker.Start()
-		if err != nil {
-			logger.Fatalf("failed to start Temporal worker: %s", err)
-			return
-		}
-	}()
 
 	// start health server for kubernetes environment
-	if utils.GetExecutorEnvironment() == string(executor.Kubernetes) {
-		healthServer := temporal.NewHealthServer(worker, viper.GetInt(constants.EnvHealthPort))
+	if executor.GetExecutorEnvironment() == string(executor.Kubernetes) {
+		healthServer := temporal.NewHealthServer(worker)
 		go func() {
 			err := healthServer.Start()
 			if err != nil {
@@ -64,6 +57,14 @@ func main() {
 			}
 		}()
 	}
+
+	go func() {
+		err := worker.Start()
+		if err != nil {
+			logger.Fatalf("failed to start Temporal worker: %s", err)
+			return
+		}
+	}()
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)

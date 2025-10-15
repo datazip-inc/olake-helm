@@ -43,11 +43,15 @@ type NewFunc func() (Executor, error)
 
 var RegisteredExecutors = map[ExecutorEnvironment]NewFunc{}
 
-func NewExecutor() (Executor, error) {
-	executorEnv := viper.GetString(constants.EnvExecutorEnvironment)
-	if executorEnv == "" {
-		return nil, fmt.Errorf("executor environment is not set")
+func GetExecutorEnvironment() string {
+	if viper.GetString(constants.EnvKubernetesServiceHost) != "" {
+		return string(Kubernetes)
 	}
+	return string(Docker)
+}
+
+func NewExecutor() (Executor, error) {
+	executorEnv := GetExecutorEnvironment()
 	newFunc, ok := RegisteredExecutors[ExecutorEnvironment(executorEnv)]
 	if !ok {
 		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)

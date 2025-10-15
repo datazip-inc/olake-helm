@@ -1,6 +1,8 @@
 package constants
 
 const (
+	DefaultDockerImagePrefix = "olakego/source"
+
 	// Directory paths
 	ContainerMountDir = "/mnt/config"
 
@@ -27,10 +29,7 @@ const (
 	EnvTemporalAddress = "TEMPORAL_ADDRESS"
 
 	// worker
-	EnvExecutorEnvironment    = "EXECUTOR_ENVIRONMENT"
-	EnvHealthPort             = "HEALTH_PORT"
 	EnvLogRetentionPeriod     = "LOG_RETENTION_PERIOD"
-	EnvOlakeCallbackURL       = "OLAKE_CALLBACK_URL"
 	EnvHostPersistentDir      = "HOST_PERSISTENT_DIR"      // TODO: check backward compatibility
 	EnvContainerPersistentDir = "CONTAINER_PERSISTENT_DIR" // TODO: check backward compatibility
 
@@ -40,6 +39,7 @@ const (
 	EnvJobServiceAccountName = "JOB_SERVICE_ACCOUNT_NAME"
 	EnvSecretKey             = "OLAKE_SECRET_KEY"
 	EnvPodName               = "POD_NAME"
+	EnvKubernetesServiceHost = "KUBERNETES_SERVICE_HOST"
 
 	// logging
 	EnvLogLevel  = "LOG_LEVEL"
@@ -47,7 +47,4 @@ const (
 
 	// api
 	EnvCallbackURL = "OLAKE_CALLBACK_URL"
-
-	// docker
-	EnvDockerImagePrefix = "DOCKER_IMAGE_PREFIX"
 )
