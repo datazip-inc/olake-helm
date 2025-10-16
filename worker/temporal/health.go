@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/logger"
@@ -78,6 +80,15 @@ func (hs *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	status, ok := checkNFSHealthy(3 * time.Second)
+	if !ok {
+		response.Status = "unhealthy"
+		response.Checks["nfs"] = status
+		writeJSON(w, http.StatusServiceUnavailable, response)
+		return
+	}
+	response.Checks["nfs"] = "healthy"
+
 	writeJSON(w, http.StatusOK, response)
 }
 
@@ -99,6 +110,15 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	status, ok := checkNFSHealthy(3 * time.Second)
+	if !ok {
+		response.Status = "not_ready"
+		response.Checks["nfs"] = status
+		writeJSON(w, http.StatusServiceUnavailable, response)
+		return
+	}
+	response.Checks["nfs"] = "healthy"
+
 	writeJSON(w, http.StatusOK, response)
 }
 
@@ -110,4 +130,25 @@ func (hs *Server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 		"timestamp":      time.Now(),
 	}
 	writeJSON(w, http.StatusOK, metrics)
+}
+
+func checkNFSHealthy(timeout time.Duration) (string, bool) {
+	done := make(chan string, 1)
+
+	go func() {
+		testFile := filepath.Join("/data/olake-jobs", ".healthcheck")
+		err := os.WriteFile(testFile, []byte("ok"), 0644)
+		if err != nil {
+			done <- "mount_unhealthy"
+			return
+		}
+		done <- "healthy"
+	}()
+
+	select {
+	case status := <-done:
+		return status, status == "healthy"
+	case <-time.After(timeout):
+		return "mount_stale_timeout", false
+	}
 }
