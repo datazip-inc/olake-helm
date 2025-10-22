@@ -98,3 +98,7 @@ func buildConnectionString() string {
 func (d *DB) Close() error {
 	return d.client.Close()
 }
+
+func (d *DB) Ping() error {
+	return d.client.Ping()
+}
