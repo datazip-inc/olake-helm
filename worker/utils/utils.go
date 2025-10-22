@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -127,8 +128,8 @@ func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.Ex
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
 func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
-	if operation == types.Sync {
-		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
+	if slices.Contains(constants.AsyncCommands, operation) {
+		return WorkflowHash(originalWorkflowID)
 	} else {
 		return originalWorkflowID
 	}

@@ -58,7 +58,8 @@ func newDatabase() (*DB, error) {
 		conn.SetConnMaxLifetime(time.Duration(lifetime) * time.Second)
 	}
 
-	runMode := viper.GetString(constants.EnvDatabaseRunMode)
+	// runMode := viper.GetString(constants.EnvDatabaseRunMode)
+	runMode := "localdev"
 	tables := map[string]string{
 		"job":    fmt.Sprintf("olake-%s-job", runMode),
 		"source": fmt.Sprintf("olake-%s-source", runMode),

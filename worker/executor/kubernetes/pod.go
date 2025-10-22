@@ -17,7 +17,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/logger"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 )
 
@@ -36,7 +35,7 @@ func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.Execution
 	}
 	logger.Debugf("successfully created Pod %s", podSpec.Name)
 
-	if req.Command != types.Sync {
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

@@ -5,7 +5,6 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
-// TaskQueue is the default task queue for Olake Docker workflows
 const TaskQueue = "OLAKE_DOCKER_TASK_QUEUE"
 
 // Worker handles Temporal worker functionality

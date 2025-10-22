@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -100,7 +101,7 @@ func (d *DockerExecutor) executeContainer(ctx context.Context, containerName, im
 	if err != nil {
 		return "", err
 	}
-	if req.Command != types.Sync {
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
