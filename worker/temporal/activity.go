@@ -11,15 +11,17 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 )
 
 type Activity struct {
-	executor executor.Executor
+	executor   executor.Executor
+	tempClient *Client
 }
 
-func NewActivity(e executor.Executor) *Activity {
-	return &Activity{executor: e}
+func NewActivity(e executor.Executor, c *Client) *Activity {
+	return &Activity{executor: e, tempClient: c}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
@@ -87,5 +89,25 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *executor.Execut
 	}
 
 	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
+	return nil
+}
+
+func (a *Activity) ClearCleanupActivity(ctx context.Context, req *executor.ExecutionRequest) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+
+	if err := a.executor.SyncCleanup(ctx, req); err != nil {
+		if err := a.executor.SyncCleanup(ctx, req); err != nil {
+			activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
+		}
+	}
+
+	// unpause sync schedule
+	syncScheduleID := fmt.Sprintf("schedule-sync-%s-%d", req.ProjectID, req.JobID)
+	handle := a.tempClient.GetClient().ScheduleClient().GetHandle(ctx, syncScheduleID)
+	_ = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
+		Note: "Clear destination cleanup completed",
+	})
+
 	return nil
 }

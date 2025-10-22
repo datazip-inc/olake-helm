@@ -33,7 +33,7 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 }
 
 func GetDockerImageName(sourceType, version string) string {
-	prefix := viper.GetString(constants.DefaultDockerImagePrefix)
+	prefix := constants.DefaultDockerImagePrefix
 	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
 }
 

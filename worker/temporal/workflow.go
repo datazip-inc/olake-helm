@@ -73,3 +73,39 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 	err = workflow.ExecuteActivity(ctx, "ExecuteSyncActivity", req).Get(ctx, &result)
 	return result, err
 }
+
+func ExecuteClearWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (err error) {
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: req.Timeout,
+		HeartbeatTimeout:    time.Minute,
+		WaitForCancellation: true,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second * 5,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute * 5,
+			MaximumAttempts:    1,
+		},
+	}
+
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	defer func() {
+		newCtx, _ := workflow.NewDisconnectedContext(ctx)
+		cleanupOtions := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 15,
+			RetryPolicy:         DefaultRetryPolicy,
+		}
+		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
+		cleanupErr := workflow.ExecuteActivity(newCtx, "ClearCleanupActivity", req).Get(newCtx, nil)
+		if cleanupErr != nil {
+			if err != nil {
+				err = fmt.Errorf("clear failed: %s, cleanup also failed: %s", err, cleanupErr)
+			} else {
+				err = fmt.Errorf("cleanup failed: %s", cleanupErr)
+			}
+		}
+	}()
+
+	err = workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, nil)
+	return err
+}

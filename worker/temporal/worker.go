@@ -21,12 +21,14 @@ func NewWorker(c *Client, e executor.Executor) *Worker {
 	// regsiter workflows
 	w.RegisterWorkflow(ExecuteSyncWorkflow)
 	w.RegisterWorkflow(ExecuteWorkflow)
+	w.RegisterWorkflow(ExecuteClearWorkflow)
 
 	// regsiter activities
-	activitiesInstance := NewActivity(e)
+	activitiesInstance := NewActivity(e, c)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
 	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
+	w.RegisterActivity(activitiesInstance.ClearCleanupActivity)
 
 	return &Worker{
 		worker: w,
