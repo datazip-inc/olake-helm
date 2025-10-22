@@ -231,8 +231,6 @@ olakeWorker:
   #     CUSTOM_VAR: "value"
   #     FEATURE_FLAG: "true"
   env:
-    CONTAINER_PERSISTENT_DIR: "/data/olake-jobs"
-
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:
     # -- Service account name

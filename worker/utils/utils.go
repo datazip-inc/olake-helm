@@ -65,7 +65,7 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
-		logger.Error("failed to read log dir: %s", err)
+		logger.Errorf("failed to read log dir: %s", err)
 		return
 	}
 	// delete dir if old logs are found or is empty
@@ -75,7 +75,7 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 		}
 		dirPath := filepath.Join(logDir, entry.Name())
 		if toDelete := shouldDelete(dirPath, cutoff); toDelete {
-			logger.Info("deleting folder: %s", dirPath)
+			logger.Infof("deleting folder: %s", dirPath)
 			_ = os.RemoveAll(dirPath)
 		}
 	}
@@ -90,19 +90,21 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 		CleanOldLogs(logDir, retentionPeriod)
 	})
 	if err != nil {
-		logger.Error("failed to start log cleaner: %s", err)
+		logger.Errorf("failed to start log cleaner: %s", err)
 		return
 	}
 	c.Start()
 }
 
-// GetRetentionPeriod returns the retention period for logs
-func GetLogRetentionPeriod() int {
-	return viper.GetInt(constants.EnvLogRetentionPeriod)
-}
-
 func GetConfigDir() string {
-	return viper.GetString(constants.EnvContainerPersistentDir)
+	switch executor.ExecutorEnvironment(executor.GetExecutorEnvironment()) {
+	case executor.Kubernetes:
+		return constants.K8sPersistentDir
+	case executor.Docker:
+		return constants.DockerPersistentDir
+	default:
+		return ""
+	}
 }
 
 // getHostOutputDir returns the host output directory

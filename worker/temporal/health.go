@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 )
 
 const healthPort = 8090
@@ -64,16 +66,9 @@ func (hs *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 		Checks:    map[string]string{"worker": "running"},
 	}
 
-	if hs.worker.client == nil {
+	if hs.worker.worker == nil || hs.worker.client == nil {
 		response.Status = "unhealthy"
-		response.Checks["worker"] = "temporal_client_disconnected"
-		writeJSON(w, http.StatusServiceUnavailable, response)
-		return
-	}
-
-	if hs.worker.worker == nil {
-		response.Status = "unhealthy"
-		response.Checks["worker"] = "temporal_worker_failed"
+		response.Checks["worker"] = utils.Ternary(hs.worker.client == nil, "temporal_client_disconnected", "temporal_worker_failed").(string)
 		writeJSON(w, http.StatusServiceUnavailable, response)
 		return
 	}
@@ -92,9 +87,33 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 		},
 	}
 
+	// Check Temporal connection - verifies worker and client are both initialized.
+	// Readiness requires both components to be available before accepting traffic:
+	// - worker: Must be non-nil (initialization completed)
+	// - temporalClient: Must be connected (can communicate with Temporal server)
+	// This prevents routing requests to pods that can't process workflows/activities.
 	if hs.worker == nil || hs.worker.client == nil {
 		response.Status = "not_ready"
 		response.Checks["temporal"] = "disconnected"
+		writeJSON(w, http.StatusServiceUnavailable, response)
+		return
+	}
+
+	// Check database connectivity - ensures job metadata can be read/written.
+	// Database access is required for:
+	// - Fetching job configurations and state
+	// - Updating job progress and results
+	// - Temporal workflow coordination
+	// Without database access, workflows will fail during execution.
+	if database.GetDB().Ping() == nil {
+		response.Checks["database"] = "connected"
+	} else {
+		response.Status = "not_ready"
+		response.Checks["database"] = "disconnected"
+	}
+
+	// Set HTTP status code based on overall health
+	if response.Status == "not_ready" {
 		writeJSON(w, http.StatusServiceUnavailable, response)
 		return
 	}

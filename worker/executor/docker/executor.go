@@ -65,7 +65,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionReq
 
 func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
 	// Stop container gracefully
-	logger.Info("stopping container for cleanup %s", req.WorkflowID)
+	logger.Infof("stopping container for cleanup %s", req.WorkflowID)
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		return fmt.Errorf("failed to stop container: %s", err)
 	}

@@ -18,8 +18,8 @@ import (
 )
 
 func main() {
-	logger.Init()
 	config.Init()
+	logger.Init()
 
 	logger.Infof("starting OLake worker")
 	logger.Infof("executor environment: %s", executor.GetExecutorEnvironment())

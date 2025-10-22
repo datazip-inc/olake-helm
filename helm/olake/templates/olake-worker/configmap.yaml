@@ -30,7 +30,6 @@ data:
   MAX_CONCURRENT_WORKFLOWS: {{ .Values.olakeWorker.config.worker.maxConcurrentWorkflows | quote }}
 
   # Persistent Configuration
-  CONTAINER_PERSISTENT_DIR: {{ .Values.olakeWorker.env.CONTAINER_PERSISTENT_DIR | default "/data/olake-jobs" | quote }}
   
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}
