@@ -4,7 +4,9 @@ const (
 	DefaultDockerImagePrefix = "olakego/source"
 
 	// Directory paths
-	ContainerMountDir = "/mnt/config"
+	ContainerMountDir   = "/mnt/config"
+	K8sPersistentDir    = "/data/olake-jobs"
+	DockerPersistentDir = "/tmp/olake-config"
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755
@@ -29,9 +31,8 @@ const (
 	EnvTemporalAddress = "TEMPORAL_ADDRESS"
 
 	// worker
-	EnvLogRetentionPeriod     = "LOG_RETENTION_PERIOD"
-	EnvHostPersistentDir      = "HOST_PERSISTENT_DIR"      // TODO: check backward compatibility
-	EnvContainerPersistentDir = "CONTAINER_PERSISTENT_DIR" // TODO: check backward compatibility
+	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"
+	EnvHostPersistentDir  = "PERSISTENT_DIR"
 
 	// kubernetes
 	EnvNamespace             = "WORKER_NAMESPACE"

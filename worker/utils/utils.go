@@ -96,13 +96,15 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 	c.Start()
 }
 
-// GetRetentionPeriod returns the retention period for logs
-func GetLogRetentionPeriod() int {
-	return viper.GetInt(constants.EnvLogRetentionPeriod)
-}
-
 func GetConfigDir() string {
-	return viper.GetString(constants.EnvContainerPersistentDir)
+	switch executor.ExecutorEnvironment(executor.GetExecutorEnvironment()) {
+	case executor.Kubernetes:
+		return constants.K8sPersistentDir
+	case executor.Docker:
+		return constants.DockerPersistentDir
+	default:
+		return ""
+	}
 }
 
 // getHostOutputDir returns the host output directory

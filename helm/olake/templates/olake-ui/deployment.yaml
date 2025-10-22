@@ -72,8 +72,6 @@ spec:
           containerPort: {{ .Values.olakeUI.env.HTTP_PORT | default "8000" | int }}
           protocol: TCP
         env:
-        - name: CONTAINER_PERSISTENT_DIR
-          value: "/tmp/olake-config"
         {{- range $key, $value := .Values.global.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
