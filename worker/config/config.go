@@ -1,7 +1,6 @@
 package config
 
 import (
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/spf13/viper"
 )
 
@@ -9,8 +8,6 @@ func Init() {
 	viper.AutomaticEnv()
 
 	setDefaults()
-
-	logger.Infof("initialized config")
 
 	// TODO: check if we need this
 	// if err := requiredEnvVars(); err != nil {
