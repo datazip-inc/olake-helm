@@ -97,9 +97,7 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *executor.Execu
 	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
 	if err := a.executor.SyncCleanup(ctx, req); err != nil {
-		if err := a.executor.SyncCleanup(ctx, req); err != nil {
-			activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
-		}
+		activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
 	}
 
 	// unpause sync schedule
