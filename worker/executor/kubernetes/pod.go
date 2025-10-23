@@ -229,6 +229,25 @@ func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workD
 							Value: k.config.SecretKey,
 						},
 					},
+					// Liveness probe to detect stale NFS mounts
+					// If NFS mount becomes stale (server unreachable), this will fail and pod will be terminated
+					// Writes to pod's own config directory (via SubPath mount)
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							Exec: &corev1.ExecAction{
+								Command: []string{
+									"/bin/sh",
+									"-c",
+									"timeout 3 sh -c 'echo ok > /mnt/config/.healthcheck'",
+								},
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       30,
+						TimeoutSeconds:      10,
+						FailureThreshold:    3,
+						SuccessThreshold:    1,
+					},
 				},
 			},
 			Volumes: []corev1.Volume{
