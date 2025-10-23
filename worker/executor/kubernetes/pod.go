@@ -258,13 +258,13 @@ func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workD
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"timeout 3 sh -c 'echo ok > /mnt/config/.healthcheck'",
+						"echo ok > /mnt/config/.healthcheck",
 					},
 				},
 			},
 			InitialDelaySeconds: 10,
 			PeriodSeconds:       30,
-			TimeoutSeconds:      10,
+			TimeoutSeconds:      5,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 		}
