@@ -230,7 +230,8 @@ olakeWorker:
   #   env:
   #     CUSTOM_VAR: "value"
   #     FEATURE_FLAG: "true"
-  env:
+  env: {}
+
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:
     # -- Service account name

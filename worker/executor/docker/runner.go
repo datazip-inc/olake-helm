@@ -9,9 +9,9 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 )
@@ -31,7 +31,7 @@ func (d *DockerExecutor) RunContainer(ctx context.Context, req *executor.Executi
 
 func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.ExecutionRequest, imageName, containerName, workDir string) (string, error) {
 	// Marker to indicate we have launched once
-	launchedMarker := filepath.Join(workDir, "logs")
+	oldContainerExists := filepath.Join(workDir, "logs")
 
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
@@ -55,7 +55,7 @@ func (d *DockerExecutor) runSyncContainer(ctx context.Context, req *executor.Exe
 	}
 
 	// 4) First launch path: only if we never launched and nothing is running
-	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+	if _, err := os.Stat(oldContainerExists); os.IsNotExist(err) {
 		logger.Infof("workflowID %s: first launch path, creating container", req.WorkflowID)
 		return d.executeContainer(ctx, containerName, imageName, req, workDir)
 	}

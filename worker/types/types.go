@@ -25,3 +25,10 @@ type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
 }
+
+type JobData struct {
+	Source      string
+	Destination string
+	Streams     string
+	State       string
+}

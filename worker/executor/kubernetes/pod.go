@@ -16,9 +16,9 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.ExecutionRequest, workDir string) (string, error) {

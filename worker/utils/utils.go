@@ -10,8 +10,8 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
@@ -33,8 +33,7 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 }
 
 func GetDockerImageName(sourceType, version string) string {
-	prefix := viper.GetString(constants.DefaultDockerImagePrefix)
-	return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
+	return fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
 }
 
 func CleanOldLogs(logDir string, retentionPeriod int) {
@@ -118,10 +117,17 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-func UpdateConfigWithJobDetails(details map[string]interface{}, req *executor.ExecutionRequest) {
+func UpdateConfigWithJobDetails(details types.JobData, req *executor.ExecutionRequest) {
+	jobDetails := map[string]interface{}{
+		"streams":     details.Streams,
+		"state":       details.State,
+		"source":      details.Source,
+		"destination": details.Destination,
+	}
+
 	for idx, config := range req.Configs {
 		configName := strings.Split(config.Name, ".")[0]
-		req.Configs[idx].Data = GetValueOrDefault(details, configName, config.Data)
+		req.Configs[idx].Data = GetValueOrDefault(jobDetails, configName, config.Data)
 	}
 }
 
@@ -132,6 +138,15 @@ func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) st
 	} else {
 		return originalWorkflowID
 	}
+}
+
+func GetStateFileFromWorkdir(workdir, workflowID string, command types.Command) (string, error) {
+	stateFilePath := filepath.Join(workdir, GetWorkflowDirectory(command, workflowID), "state.json")
+	stateFile, err := ReadFile(stateFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read state file: %s", err)
+	}
+	return stateFile, nil
 }
 
 // WorkflowHash returns a deterministic hash string for a given workflowID

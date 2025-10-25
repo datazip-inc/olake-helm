@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/database"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 const healthPort = 8090
@@ -66,9 +66,9 @@ func (hs *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 		Checks:    map[string]string{"worker": "running"},
 	}
 
-	if hs.worker.worker == nil || hs.worker.client == nil {
+	if hs.worker.worker == nil || hs.worker.temporal.client == nil {
 		response.Status = "unhealthy"
-		response.Checks["worker"] = utils.Ternary(hs.worker.client == nil, "temporal_client_disconnected", "temporal_worker_failed").(string)
+		response.Checks["worker"] = utils.Ternary(hs.worker.temporal.client == nil, "temporal_client_disconnected", "temporal_worker_failed").(string)
 		writeJSON(w, http.StatusServiceUnavailable, response)
 		return
 	}
@@ -76,7 +76,7 @@ func (hs *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// Readiness: require Temporal client + worker initialized (no DB in new worker)
+// Readiness: require Temporal client + worker + database initialised
 func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	response := HealthResponse{
 		Status:    "ready",
@@ -92,7 +92,7 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	// - worker: Must be non-nil (initialization completed)
 	// - temporalClient: Must be connected (can communicate with Temporal server)
 	// This prevents routing requests to pods that can't process workflows/activities.
-	if hs.worker == nil || hs.worker.client == nil {
+	if hs.worker == nil || hs.worker.temporal.client == nil {
 		response.Status = "not_ready"
 		response.Checks["temporal"] = "disconnected"
 		writeJSON(w, http.StatusServiceUnavailable, response)

@@ -8,8 +8,8 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -120,14 +120,13 @@ func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.Exec
 		return fmt.Errorf("failed to cleanup pod: %s", err)
 	}
 
-	stateFilePath := filepath.Join(k.config.BasePath, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
-	stateFile, err := utils.ReadFile(stateFilePath)
+	stateFile, err := utils.GetStateFileFromWorkdir(k.config.BasePath, req.WorkflowID, req.Command)
 	if err != nil {
-		return fmt.Errorf("failed to read state file: %s", err)
+		return err
 	}
 
-	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
-		return fmt.Errorf("failed to update job state: %s", err)
+	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile, true); err != nil {
+		return err
 	}
 
 	logger.Infof("successfully cleaned up sync for job %d", req.JobID)

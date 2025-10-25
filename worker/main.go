@@ -1,24 +1,29 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/datazip-inc/olake-helm/worker/config"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/constants/config"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	config.Init()
+	err := config.Init()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	logger.Init()
 
 	logger.Infof("starting OLake worker")

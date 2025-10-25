@@ -8,13 +8,13 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-// Client provides methods to interact with Temporal
-type Client struct {
-	temporalClient client.Client
+// Temporal provides methods to interact with Temporal
+type Temporal struct {
+	client client.Client
 }
 
 // NewClient creates a new Temporal client
-func NewClient() (*Client, error) {
+func NewClient() (*Temporal, error) {
 	c, err := client.Dial(client.Options{
 		HostPort: viper.GetString(constants.EnvTemporalAddress),
 	})
@@ -22,17 +22,17 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("failed to create Temporal client: %s", err)
 	}
 
-	return &Client{
-		temporalClient: c,
+	return &Temporal{
+		client: c,
 	}, nil
 }
 
 // Close closes the Temporal client
-func (c *Client) Close() {
-	if c.temporalClient != nil {
-		c.temporalClient.Close()
+func (t *Temporal) Close() {
+	if t.client != nil {
+		t.client.Close()
 	}
 }
-func (c *Client) GetClient() client.Client {
-	return c.temporalClient
+func (t *Temporal) GetClient() client.Client {
+	return t.client
 }

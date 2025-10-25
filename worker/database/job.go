@@ -5,53 +5,42 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/types"
 )
 
 const (
 	queryTimeout = 5 * time.Second
 )
 
-func (db *DB) GetJobData(jobId int) (map[string]interface{}, error) {
-	query := db.JobDataQuery()
-
-	cctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) {
+	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	rows, err := db.client.QueryContext(cctx, query, jobId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get job data: %w", err)
+	query := fmt.Sprintf(`
+			SELECT j.streams_config, j.state, s.config, d.config
+			FROM %q j
+			JOIN %q s ON j.source_id = s.id
+			JOIN %q d ON j.dest_id = d.id
+			WHERE j.id = $1`,
+		db.tables["job"], db.tables["source"], db.tables["dest"])
+
+	rows := db.client.QueryRowContext(cctx, query, jobId)
+
+	var jobData types.JobData
+	if err := rows.Scan(&jobData.Streams, &jobData.State, &jobData.Source, &jobData.Destination); err != nil {
+		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
-	defer rows.Close()
-
-	var (
-		sourceConfig  string
-		destConfig    string
-		streamsConfig string
-		state         string
-	)
-
-	if !rows.Next() {
-		logger.Warnf("no job found with ID: %d", jobId)
-		return nil, fmt.Errorf("no job found with ID: %d", jobId)
-	}
-
-	if err := rows.Scan(&streamsConfig, &state, &sourceConfig, &destConfig); err != nil {
-		return nil, fmt.Errorf("failed to scan job data: %w", err)
-	}
-
-	return map[string]interface{}{
-		"streams":     streamsConfig,
-		"state":       state,
-		"source":      sourceConfig,
-		"destination": destConfig,
-	}, nil
+	return jobData, nil
 }
 
-func (db *DB) UpdateJobState(jobId int, state string, active bool) error {
-	query := db.UpdateJobStateQuery()
+func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string, active bool) error {
+	query := fmt.Sprintf(`
+			UPDATE %q 
+			SET state = $1, active = $2, updated_at = NOW() 
+			WHERE id = $3`,
+		db.tables["job"])
 
-	cctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := db.client.ExecContext(cctx, query, state, active, jobId)

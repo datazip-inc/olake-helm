@@ -10,8 +10,8 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -89,7 +89,7 @@ func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID strin
 func (d *DockerExecutor) getContainerState(ctx context.Context, name, workflowID string) ContainerState {
 	inspect, err := d.client.ContainerInspect(ctx, name)
 	if err != nil || inspect.ContainerJSONBase == nil || inspect.State == nil {
-		logger.Warnf("workflowID %s: container inspect failed or state missing for %s: %s", workflowID, name, err)
+		logger.Debugf("workflowID %s: container inspect failed or state missing for %s: %s", workflowID, name, err)
 		return ContainerState{Exists: false}
 	}
 
@@ -113,7 +113,7 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 	}
 
 	// Graceful stop with timeout
-	timeout := 5
+	timeout := constants.ContainerStopTimeout
 	if err := d.client.ContainerStop(ctx, containerName, container.StopOptions{Timeout: &timeout}); err != nil {
 		logger.Warnf("workflowID %s: docker stop failed for %s: %s", workflowID, containerName, err)
 		if kerr := d.client.ContainerKill(ctx, containerName, "SIGKILL"); kerr != nil {
@@ -149,11 +149,9 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 		}
 
 		select {
-		case err := <-errCh:
-			if err != nil {
-				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
-			}
-			return nil
+		case <-ctx.Done():
+			logger.Warnf("context cancelled while waiting for container %s", containerID)
+			return ctx.Err()
 
 		case status := <-statusCh:
 			if status.StatusCode != 0 {
@@ -166,9 +164,11 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 			}
 			return nil
 
-		case <-ctx.Done():
-			logger.Warnf("context cancelled while waiting for container %s", containerID)
-			return ctx.Err()
+		case err := <-errCh:
+			if err != nil {
+				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+			}
+			return nil
 
 		case <-time.After(5 * time.Second):
 			// continue
