@@ -81,12 +81,7 @@ func ExecuteClearWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) 
 		StartToCloseTimeout: req.Timeout,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second * 5,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute * 5,
-			MaximumAttempts:    1,
-		},
+		RetryPolicy: DefaultRetryPolicy,
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)

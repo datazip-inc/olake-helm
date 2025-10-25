@@ -17,11 +17,11 @@ import (
 
 type Activity struct {
 	executor   executor.Executor
-	tempClient *Client
+	tempClient client.Client
 }
 
-func NewActivity(e executor.Executor, c *Client) *Activity {
-	return &Activity{executor: e, tempClient: c}
+func NewActivity(e executor.Executor, c *Temporal) *Activity {
+	return &Activity{executor: e, tempClient: c.GetClient()}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
@@ -102,7 +102,7 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *executor.Execu
 
 	// unpause sync schedule
 	syncScheduleID := fmt.Sprintf("schedule-sync-%s-%d", req.ProjectID, req.JobID)
-	handle := a.tempClient.GetClient().ScheduleClient().GetHandle(ctx, syncScheduleID)
+	handle := a.tempClient.ScheduleClient().GetHandle(ctx, syncScheduleID)
 	_ = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
 		Note: "Clear destination cleanup completed",
 	})

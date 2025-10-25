@@ -23,7 +23,7 @@ func NewWorker(t *Temporal, e executor.Executor) *Worker {
 	w.RegisterWorkflow(ExecuteClearWorkflow)
 
 	// regsiter activities
-	activitiesInstance := NewActivity(e, c)
+	activitiesInstance := NewActivity(e, t)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
 	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
