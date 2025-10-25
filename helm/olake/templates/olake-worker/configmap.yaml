@@ -29,8 +29,7 @@ data:
   MAX_CONCURRENT_ACTIVITIES: {{ .Values.olakeWorker.config.worker.maxConcurrentActivities | quote }}
   MAX_CONCURRENT_WORKFLOWS: {{ .Values.olakeWorker.config.worker.maxConcurrentWorkflows | quote }}
 
-  # Persistent Configuration
-  
+
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}
   LOG_FORMAT: {{ .Values.olakeWorker.config.logging.format | quote }}

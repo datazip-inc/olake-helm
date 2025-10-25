@@ -2,8 +2,8 @@ package constants
 
 const (
 	// Database
-	EnvDatabaseURL           = "DATABASE_URL"
-	EnVDatabaseHost          = "DB_HOST"
+	EnvDatabaseURL           = "POSTGRES_DB"
+	EnvDatabaseHost          = "DB_HOST"
 	EnvDatabasePort          = "DB_PORT"
 	EnvDatabaseUser          = "DB_USER"
 	EnvDatabasePassword      = "DB_PASSWORD"

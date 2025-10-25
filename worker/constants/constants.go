@@ -4,6 +4,7 @@ import "github.com/datazip-inc/olake-helm/worker/types"
 
 const (
 	DefaultDockerImagePrefix = "olakego/source"
+	ContainerStopTimeout     = 5 // in seconds
 
 	// Directory paths
 	ContainerMountDir   = "/mnt/config"

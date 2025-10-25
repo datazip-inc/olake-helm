@@ -42,7 +42,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
 	// Update the configs with latest details from the server
-	jobDetails, err := database.GetDB().GetJobData(req.JobID)
+	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)

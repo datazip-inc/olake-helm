@@ -9,13 +9,13 @@ const TaskQueue = "OLAKE_DOCKER_TASK_QUEUE"
 
 // Worker handles Temporal worker functionality
 type Worker struct {
-	worker worker.Worker
-	client *Client
+	worker   worker.Worker
+	temporal *Temporal
 }
 
 // NewWorker creates a new Temporal worker with the provided client
-func NewWorker(c *Client, e executor.Executor) *Worker {
-	w := worker.New(c.GetClient(), TaskQueue, worker.Options{})
+func NewWorker(t *Temporal, e executor.Executor) *Worker {
+	w := worker.New(t.GetClient(), TaskQueue, worker.Options{})
 
 	// regsiter workflows
 	w.RegisterWorkflow(ExecuteSyncWorkflow)
@@ -30,8 +30,8 @@ func NewWorker(c *Client, e executor.Executor) *Worker {
 	w.RegisterActivity(activitiesInstance.ClearCleanupActivity)
 
 	return &Worker{
-		worker: w,
-		client: c,
+		worker:   w,
+		temporal: t,
 	}
 }
 
@@ -43,5 +43,5 @@ func (w *Worker) Start() error {
 // Stop stops the worker and closes the client
 func (w *Worker) Stop() {
 	w.worker.Stop()
-	w.client.Close()
+	w.temporal.Close()
 }

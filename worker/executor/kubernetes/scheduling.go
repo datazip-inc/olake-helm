@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 

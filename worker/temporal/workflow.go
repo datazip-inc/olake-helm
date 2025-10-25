@@ -38,6 +38,8 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 		StartToCloseTimeout: req.Timeout,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
+		// Sync workflows are critical and should not stop on transient errors.
+		// Setting MaximumAttempts to 0 means infinite retries with exponential backoff.
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 5,
 			BackoffCoefficient: 2.0,

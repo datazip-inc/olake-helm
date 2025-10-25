@@ -3,8 +3,8 @@ package kubernetes
 import (
 	"strings"
 
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 

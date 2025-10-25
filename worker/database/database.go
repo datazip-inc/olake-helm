@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 type DB struct {
@@ -73,7 +73,7 @@ func newDatabase() (*DB, error) {
 
 // buildConnectionString safely constructs the Postgres connection string.
 func buildConnectionString() string {
-	host := viper.GetString(constants.EnVDatabaseHost)
+	host := viper.GetString(constants.EnvDatabaseHost)
 	port := viper.GetString(constants.EnvDatabasePort)
 	user := viper.GetString(constants.EnvDatabaseUser)
 	password := viper.GetString(constants.EnvDatabasePassword)

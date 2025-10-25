@@ -7,8 +7,8 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/docker/docker/client"
 )
 
@@ -23,8 +23,6 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
 
-	// TODO: Check if we can separate hostPersistence and containerConfigPath
-	// TODO: check backward compatibility after changing ENV VARIABLE NAME
 	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir()}, nil
 }
 
@@ -70,14 +68,13 @@ func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.Executio
 		return fmt.Errorf("failed to stop container: %s", err)
 	}
 
-	stateFilePath := filepath.Join(d.workingDir, utils.GetWorkflowDirectory(req.Command, req.WorkflowID), "state.json")
-	stateFile, err := utils.ReadFile(stateFilePath)
+	stateFile, err := utils.GetStateFileFromWorkdir(d.workingDir, req.WorkflowID, req.Command)
 	if err != nil {
-		return fmt.Errorf("failed to read state file: %s", err)
+		return err
 	}
 
-	if err := database.GetDB().UpdateJobState(req.JobID, stateFile, true); err != nil {
-		return fmt.Errorf("failed to update job state: %s", err)
+	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile, true); err != nil {
+		return err
 	}
 
 	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
