@@ -32,3 +32,8 @@ type JobData struct {
 	Streams     string
 	State       string
 }
+
+type Result struct {
+	OK      bool
+	Message string
+}

@@ -15,7 +15,7 @@ type Worker struct {
 }
 
 // NewWorker creates a new Temporal worker with the provided client
-func NewWorker(t *Temporal, e executor.Executor) *Worker {
+func NewWorker(t *Temporal, e executor.AbstractExecutor) *Worker {
 	w := worker.New(t.GetClient(), TaskQueue, worker.Options{})
 
 	// regsiter workflows

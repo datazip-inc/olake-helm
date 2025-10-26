@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/robfig/cron"
@@ -96,10 +96,10 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 }
 
 func GetConfigDir() string {
-	switch executor.ExecutorEnvironment(executor.GetExecutorEnvironment()) {
-	case executor.Kubernetes:
+	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
+	case environment.Kubernetes:
 		return constants.K8sPersistentDir
-	case executor.Docker:
+	case environment.Docker:
 		return constants.DockerPersistentDir
 	default:
 		return ""
@@ -117,7 +117,7 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-func UpdateConfigWithJobDetails(details types.JobData, req *executor.ExecutionRequest) {
+func UpdateConfigWithJobDetails(details types.JobData, req *types.ExecutionRequest) {
 	jobDetails := map[string]interface{}{
 		"streams":     details.Streams,
 		"state":       details.State,
@@ -140,8 +140,8 @@ func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) st
 	}
 }
 
-func GetStateFileFromWorkdir(workdir, workflowID string, command types.Command) (string, error) {
-	stateFilePath := filepath.Join(workdir, GetWorkflowDirectory(command, workflowID), "state.json")
+func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, error) {
+	stateFilePath := filepath.Join(GetConfigDir(), GetWorkflowDirectory(command, workflowID), "state.json")
 	stateFile, err := ReadFile(stateFilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
@@ -181,4 +181,17 @@ func GetWorkerEnvVars() map[string]string {
 		vars[key] = parts[1]
 	}
 	return vars
+}
+
+// WorkflowAlreadyLaunched checked for the folder named log
+// inside the provided working directory
+//
+// workdir/logs - present -> workflow has started already
+// workdir/logs - not present -> workflow is running for the furst time
+func WorkflowAlreadyLaunched(workdir string) bool {
+	launchedMarker := filepath.Join(workdir, "logs")
+	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+		return false
+	}
+	return true
 }

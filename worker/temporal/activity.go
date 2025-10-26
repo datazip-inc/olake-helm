@@ -9,20 +9,21 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
 
 type Activity struct {
-	executor executor.Executor
+	executor executor.AbstractExecutor
 }
 
-func NewActivity(e executor.Executor) *Activity {
-	return &Activity{executor: e}
+func NewActivity(a executor.AbstractExecutor) *Activity {
+	return &Activity{executor: a}
 }
 
-func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Debug("executing", req.Command, "activity",
 		"sourceType", req.ConnectorType,
@@ -35,7 +36,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionR
 	return a.executor.Execute(ctx, req)
 }
 
-func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
@@ -78,7 +79,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	return result, nil
 }
 
-func (a *Activity) SyncCleanupActivity(ctx context.Context, req *executor.ExecutionRequest) error {
+func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 

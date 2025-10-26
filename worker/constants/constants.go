@@ -2,7 +2,8 @@ package constants
 
 const (
 	DefaultDockerImagePrefix = "olakego/source"
-	ContainerStopTimeout     = 5 // in seconds
+	ContainerStopTimeout     = 5  // in second
+	ContainerCleanupTimeout  = 30 // in second
 
 	// Directory paths
 	ContainerMountDir   = "/mnt/config"

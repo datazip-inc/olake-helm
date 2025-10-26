@@ -11,6 +11,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -19,15 +20,18 @@ import (
 )
 
 func main() {
+	// Initialize env and configs
 	err := config.Init()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	// Initialize logger
 	logger.Init()
 
 	logger.Infof("starting OLake worker")
-	logger.Infof("executor environment: %s", executor.GetExecutorEnvironment())
+	logger.Infof("executor environment: %s", environment.GetExecutorEnvironment())
 
 	// Initialize database
 	db := database.GetDB()
@@ -41,19 +45,19 @@ func main() {
 	}
 	defer exec.Close()
 
+	// Initialize log cleaner
+	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
+
 	tClient, err := temporal.NewClient()
 	if err != nil {
 		logger.Fatalf("failed to create Temporal client: %s", err)
 	}
 	defer tClient.Close()
 
-	// init log cleaner
-	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
-
-	worker := temporal.NewWorker(tClient, exec)
+	worker := temporal.NewWorker(tClient, *exec)
 
 	// start health server for kubernetes environment
-	if executor.GetExecutorEnvironment() == string(executor.Kubernetes) {
+	if environment.GetExecutorEnvironment() == string(environment.Kubernetes) {
 		healthServer := temporal.NewHealthServer(worker)
 		go func() {
 			err := healthServer.Start()
@@ -63,6 +67,8 @@ func main() {
 		}()
 	}
 
+	// Start the Temporal worker in a separate goroutine so the main goroutine
+	// continues to run and listen for termination signals.
 	go func() {
 		err := worker.Start()
 		if err != nil {

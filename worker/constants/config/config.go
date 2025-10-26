@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/spf13/viper"
 )
 
@@ -38,7 +38,7 @@ func setDefaults() {
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://host.docker.internal:8000/internal/worker/callback")
 
-	// database
+	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
 	viper.SetDefault("DB_PORT", 5432)
 	viper.SetDefault("DB_USER", "temporal")
@@ -48,6 +48,7 @@ func setDefaults() {
 	viper.SetDefault("RUN_MODE", "dev")
 }
 
+// checks for required environment variables
 func requiredEnvVars() error {
 	var missing []string
 
@@ -68,7 +69,7 @@ func requiredEnvVars() error {
 		}
 	}
 
-	execEnv := executor.GetExecutorEnvironment()
+	execEnv := environment.GetExecutorEnvironment()
 
 	if execEnv == "kubernetes" {
 		k8sRequired := []string{
