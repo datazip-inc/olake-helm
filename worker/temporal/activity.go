@@ -11,7 +11,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
@@ -49,10 +48,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	}
 
 	if req.Command == "" {
-		logger.Info("🟡 REQ COMMAND IS EMPTY", req)
 		utils.UpdateSyncRequest(jobDetails, req)
-		// logger.Info("🟡 REQ UDPATED", req)
-
 	}
 
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
