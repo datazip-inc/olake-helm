@@ -2,7 +2,7 @@ apiVersion: v2
 name: olake
 description: A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 type: application
-version: 0.0.4
+version: 0.0.5
 appVersion: "0.1.5"
 home: https://github.com/datazip-inc/olake-helm
 sources:

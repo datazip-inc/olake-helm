@@ -287,11 +287,16 @@ nfsServer:
   # GCP Filestore: Use Google Cloud Filestore CSI driver with 'filestore.csi.storage.gke.io' provisioner
   # See: https://cloud.google.com/filestore/docs/csi-driver
   external:
+    # -- Name for the external PVC
+    # If not provided, defaults to "olake-shared-storage"
+    # Use this to reference an existing PVC or customize the name
+    name: ""
+
     # -- StorageClass for dynamic RWX PVC creation
     # Required when nfsServer.enabled is false
     # Examples: "efs-sc", "azurefile", "filestore-csi", "longhorn", "rook-cephfs"
     storageClass: ""
-    
+
     # -- Size for the dynamically created external PVC
     size: "20Gi"
   
