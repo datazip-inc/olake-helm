@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	ExecuteActivity   = "ExecuteActivity"
-	SyncActivity      = "SyncActivity"
+	ExecuteActivity      = "ExecuteActivity"
+	SyncActivity         = "SyncActivity"
 	PostSyncActivity  = "PostSyncActivity"
-	PostClearActivity = "PostClearActivity"
+	PostClearActivity    = "PostClearActivity"
+	SendSlackNotificationActivity = "SendSlackNotificationActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -115,5 +116,11 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	}
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
+	if err != nil {
+		// Trigger Slack alert
+		_ = workflow.ExecuteActivity(ctx, SendSlackNotificationActivity, req.JobID, req.WorkflowID, err.Error()).Get(ctx, nil)
+		return nil, err
+
+	}
 	return result, err
 }
