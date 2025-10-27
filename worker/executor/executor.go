@@ -52,7 +52,9 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
 	if !utils.WorkflowAlreadyLaunched(workdir) {
-		utils.WriteConfigFiles(workdir, req.Configs)
+		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
+			return nil, err
+		}
 	}
 
 	out, err := a.executor.Execute(ctx, req, workdir)
