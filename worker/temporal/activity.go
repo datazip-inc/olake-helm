@@ -11,6 +11,8 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
@@ -101,5 +103,16 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	}
 
 	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
+	return nil
+}
+
+func (a *Activity) SendSlackNotificationActivity(ctx context.Context, jobID int, workflowID, errMsg string) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("Sending Slack alert", "jobID", jobID, "workflowID", workflowID)
+
+	if err := notifications.SendSlackNotification(jobID, workflowID, errMsg); err != nil {
+		logger.Error("Slack notification failed", "error", err)
+		return err
+	}
 	return nil
 }
