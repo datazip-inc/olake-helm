@@ -138,7 +138,7 @@ spec:
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "tcpSocket" (dict "port" (.Values.olakeUI.env.HTTP_PORT | default "8000" | int))
+          "exec" (dict "command" (list "/bin/sh" "-c" (printf "timeout 3 sh -c 'echo ok > /tmp/olake-config/.healthcheck-ui' && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeUI.readinessProbe | default dict) }}
         readinessProbe:
@@ -149,7 +149,7 @@ spec:
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "tcpSocket" (dict "port" (.Values.olakeUI.env.HTTP_PORT | default "8000" | int))
+          "exec" (dict "command" (list "/bin/sh" "-c" (printf "timeout 3 sh -c 'echo ok > /tmp/olake-config/.healthcheck-ui' && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeUI.livenessProbe | default dict) }}
         livenessProbe:
