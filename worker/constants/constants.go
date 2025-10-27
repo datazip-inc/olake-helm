@@ -1,9 +1,12 @@
 package constants
 
+import "time"
+
 const (
 	DefaultDockerImagePrefix = "olakego/source"
-	ContainerStopTimeout     = 5  // in second
-	ContainerCleanupTimeout  = 30 // in second
+	ContainerStopTimeout     = 5  // in seconds
+	ContainerCleanupTimeout  = 30 // in seconds
+	DefaultSyncTimeout       = time.Hour * 24 * 30
 
 	// Directory paths
 	ContainerMountDir   = "/mnt/config"

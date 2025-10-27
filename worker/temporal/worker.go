@@ -19,7 +19,7 @@ func NewWorker(t *Temporal, e executor.AbstractExecutor) *Worker {
 	w := worker.New(t.GetClient(), TaskQueue, worker.Options{})
 
 	// regsiter workflows
-	w.RegisterWorkflow(ExecuteSyncWorkflow)
+	w.RegisterWorkflow(RunSyncWorkflow)
 	w.RegisterWorkflow(ExecuteWorkflow)
 
 	// regsiter activities

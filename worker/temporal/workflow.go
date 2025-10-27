@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -38,11 +40,12 @@ func ExecuteWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (*types.
 	return result, nil
 }
 
-func ExecuteSyncWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (result *types.ExecutorResponse, err error) {
+func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.ExecutorResponse, err error) {
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: req.Timeout,
+		StartToCloseTimeout: constants.DefaultSyncTimeout,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
+
 		// Sync workflows are critical and should not stop on transient errors.
 		// Setting MaximumAttempts to 0 means infinite retries with exponential backoff.
 		RetryPolicy: &temporal.RetryPolicy{
@@ -53,10 +56,12 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (res
 		},
 	}
 
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+	req, err := utils.BuildSyncReqForLegacyOrNew(args)
+	if err != nil {
+		return nil, err
+	}
 
-	// Each scheduled workflow execution gets a unique WorkflowID.
-	// We're assigning that here to distinguish between different scheduled executions.
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	// Defer cleanup - runs on both normal completion and cancellation

@@ -31,6 +31,8 @@ type JobData struct {
 	Destination string
 	Streams     string
 	State       string
+	Version     string
+	Driver      string
 }
 
 type Result struct {

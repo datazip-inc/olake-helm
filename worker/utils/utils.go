@@ -2,17 +2,15 @@ package utils
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
 
@@ -32,89 +30,52 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 	return defaultValue
 }
 
+// Unmarshal serializes and deserializes any from into the object
+// return error if occurred
+func Unmarshal(from, object any) error {
+	b, err := json.Marshal(from)
+	if err != nil {
+		return fmt.Errorf("error marshaling object: %s", err)
+	}
+	err = json.Unmarshal(b, object)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling from object: %s", err)
+	}
+
+	return nil
+}
+
 func GetDockerImageName(sourceType, version string) string {
 	return fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
 }
 
-func CleanOldLogs(logDir string, retentionPeriod int) {
-	logger.Info("running log cleaner...")
-	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
-
-	// check if old logs are present
-	shouldDelete := func(path string, cutoff time.Time) bool {
-		entries, _ := os.ReadDir(path)
-		if len(entries) == 0 {
-			return true
-		}
-
-		var foundOldLog bool
-		_ = filepath.Walk(path, func(filePath string, info os.FileInfo, _ error) error {
-			if info == nil || info.IsDir() {
-				return nil
-			}
-			if (strings.HasSuffix(filePath, ".log") || strings.HasSuffix(filePath, ".log.gz")) &&
-				info.ModTime().Before(cutoff) {
-				foundOldLog = true
-				return filepath.SkipDir
-			}
-			return nil
-		})
-		return foundOldLog
+// GetWorkerEnvVars returns the environment variables from the worker container.
+func GetWorkerEnvVars() map[string]string {
+	// ignoredWorkerEnv is a map of environment variables that are ignored from the worker container.
+	var ignoredWorkerEnv = map[string]any{
+		"HOSTNAME":                nil,
+		"PATH":                    nil,
+		"PWD":                     nil,
+		"HOME":                    nil,
+		"SHLVL":                   nil,
+		"TERM":                    nil,
+		"PERSISTENT_DIR":          nil,
+		"CONTAINER_REGISTRY_BASE": nil,
+		"TEMPORAL_ADDRESS":        nil,
+		"OLAKE_SECRET_KEY":        nil,
+		"_":                       nil,
 	}
 
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		logger.Errorf("failed to read log dir: %s", err)
-		return
-	}
-	// delete dir if old logs are found or is empty
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == "telemetry" {
+	vars := make(map[string]string)
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		key := parts[0]
+		if _, ignore := ignoredWorkerEnv[key]; ignore {
 			continue
 		}
-		dirPath := filepath.Join(logDir, entry.Name())
-		if toDelete := shouldDelete(dirPath, cutoff); toDelete {
-			logger.Infof("deleting folder: %s", dirPath)
-			_ = os.RemoveAll(dirPath)
-		}
+		vars[key] = parts[1]
 	}
-}
-
-// starts a log cleaner that removes old logs from the specified directory based on the retention period
-func InitLogCleaner(logDir string, retentionPeriod int) {
-	logger.Info("log cleaner started...")
-	CleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
-	c := cron.New()
-	err := c.AddFunc("@midnight", func() {
-		CleanOldLogs(logDir, retentionPeriod)
-	})
-	if err != nil {
-		logger.Errorf("failed to start log cleaner: %s", err)
-		return
-	}
-	c.Start()
-}
-
-func GetConfigDir() string {
-	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
-	case environment.Kubernetes:
-		return constants.K8sPersistentDir
-	case environment.Docker:
-		return constants.DockerPersistentDir
-	default:
-		return ""
-	}
-}
-
-// getHostOutputDir returns the host output directory
-func GetHostOutputDir(outputDir string) string {
-	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
-	persistencePath := GetConfigDir()
-	if hostPersistencePath != "" {
-		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
-		return hostOutputDir
-	}
-	return outputDir
+	return vars
 }
 
 func UpdateConfigWithJobDetails(details types.JobData, req *types.ExecutionRequest) {
@@ -149,38 +110,26 @@ func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, 
 	return stateFile, nil
 }
 
-// WorkflowHash returns a deterministic hash string for a given workflowID
-func WorkflowHash(workflowID string) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+func GetConfigDir() string {
+	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
+	case environment.Kubernetes:
+		return constants.K8sPersistentDir
+	case environment.Docker:
+		return constants.DockerPersistentDir
+	default:
+		return ""
+	}
 }
 
-// GetWorkerEnvVars returns the environment variables from the worker container.
-func GetWorkerEnvVars() map[string]string {
-	// ignoredWorkerEnv is a map of environment variables that are ignored from the worker container.
-	var ignoredWorkerEnv = map[string]any{
-		"HOSTNAME":                nil,
-		"PATH":                    nil,
-		"PWD":                     nil,
-		"HOME":                    nil,
-		"SHLVL":                   nil,
-		"TERM":                    nil,
-		"PERSISTENT_DIR":          nil,
-		"CONTAINER_REGISTRY_BASE": nil,
-		"TEMPORAL_ADDRESS":        nil,
-		"OLAKE_SECRET_KEY":        nil,
-		"_":                       nil,
+// getHostOutputDir returns the host output directory
+func GetHostOutputDir(outputDir string) string {
+	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
+	persistencePath := GetConfigDir()
+	if hostPersistencePath != "" {
+		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
+		return hostOutputDir
 	}
-
-	vars := make(map[string]string)
-	for _, entry := range os.Environ() {
-		parts := strings.SplitN(entry, "=", 2)
-		key := parts[0]
-		if _, ignore := ignoredWorkerEnv[key]; ignore {
-			continue
-		}
-		vars[key] = parts[1]
-	}
-	return vars
+	return outputDir
 }
 
 // WorkflowAlreadyLaunched checked for the folder named log
@@ -194,4 +143,9 @@ func WorkflowAlreadyLaunched(workdir string) bool {
 		return false
 	}
 	return true
+}
+
+// WorkflowHash returns a deterministic hash string for a given workflowID
+func WorkflowHash(workflowID string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
