@@ -27,6 +27,7 @@ func NewWorker(t *Temporal, e executor.AbstractExecutor) *Worker {
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
 	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
+	w.RegisterActivity(activitiesInstance.SendSlackNotificationActivity)
 
 	return &Worker{
 		worker:   w,
