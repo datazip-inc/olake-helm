@@ -3,11 +3,13 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
@@ -80,33 +82,45 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	}, nil
 }
 
-func (k *KubernetesExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	subDir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	workDir, err := utils.SetupWorkDirectory(k.config.BasePath, subDir)
+func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
+	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
+	podSpec := k.CreatePodSpec(req, workdir, imageName)
+	logger.Infof("creating Pod %s with image %s", podSpec.Name, imageName)
+
+	if _, err := k.createPod(ctx, podSpec); err != nil {
+		return "", err
+	}
+
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			defer cancel()
+
+			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
+				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %s",
+					podSpec.Name, req.Command, req.WorkflowID, err)
+			}
+		}()
+	}
+
+	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
+		return "", err
+	}
+
+	logs, err := k.getPodLogs(ctx, podSpec.Name)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("failed to get pod logs: %s", err)
 	}
 
-	if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
-		return nil, err
-	}
-	// Question: Telemetry requires streams.json, so cleaning up fails telemetry. Do we need cleanup?
-	// defer utils.CleanupConfigFiles(workDir, req.Configs)
+	return logs, nil
+}
 
-	out, err := k.RunPod(ctx, req, workDir)
-	if err != nil {
-		return nil, err
+func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
+	podName := k.sanitizeName(req.WorkflowID)
+	if err := k.cleanupPod(ctx, podName); err != nil {
+		return fmt.Errorf("failed to cleanup pod: %s", err)
 	}
-
-	if req.OutputFile != "" {
-		fileContent, err := utils.ReadFile(filepath.Join(workDir, req.OutputFile))
-		if err != nil {
-			return nil, fmt.Errorf("failed to read output file: %s", err)
-		}
-		return map[string]interface{}{"response": fileContent}, nil
-	}
-
-	return map[string]interface{}{"response": out}, nil
+	return nil
 }
 
 func (k *KubernetesExecutor) Close() error {
@@ -114,27 +128,8 @@ func (k *KubernetesExecutor) Close() error {
 	return nil
 }
 
-func (k *KubernetesExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
-	podName := k.sanitizeName(req.WorkflowID)
-	if err := k.cleanupPod(ctx, podName); err != nil {
-		return fmt.Errorf("failed to cleanup pod: %s", err)
-	}
-
-	stateFile, err := utils.GetStateFileFromWorkdir(k.config.BasePath, req.WorkflowID, req.Command)
-	if err != nil {
-		return err
-	}
-
-	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile, true); err != nil {
-		return err
-	}
-
-	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
-	return nil
-}
-
 func init() {
-	executor.RegisteredExecutors[executor.Kubernetes] = func() (executor.Executor, error) {
+	executor.RegisteredExecutors[environment.Kubernetes] = func() (executor.Executor, error) {
 		return NewKubernetesExecutor()
 	}
 }

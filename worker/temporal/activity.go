@@ -9,6 +9,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -24,7 +25,7 @@ func NewActivity(e executor.Executor, c *Temporal) *Activity {
 	return &Activity{executor: e, tempClient: c.GetClient()}
 }
 
-func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Debug("executing", req.Command, "activity",
 		"sourceType", req.ConnectorType,
@@ -37,7 +38,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *executor.ExecutionR
 	return a.executor.Execute(ctx, req)
 }
 
-func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
@@ -46,6 +47,10 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
+	}
+
+	if req.Command == "" {
+		utils.UpdateSyncRequest(jobDetails, req)
 	}
 
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
@@ -74,15 +79,24 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *executor.Execut
 
 		activityLogger.Error("sync command failed", "error", err)
 		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
-		return result, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
+		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
 	return result, nil
 }
 
-func (a *Activity) SyncCleanupActivity(ctx context.Context, req *executor.ExecutionRequest) error {
+func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+
+	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
+	if err != nil {
+		return err
+	}
+
+	if req.Command == "" {
+		utils.UpdateSyncRequest(jobDetails, req)
+	}
 
 	if err := a.executor.SyncCleanup(ctx, req); err != nil {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)

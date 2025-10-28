@@ -3,12 +3,17 @@ package docker
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"slices"
+	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 )
 
@@ -26,58 +31,85 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir()}, nil
 }
 
-func (d *DockerExecutor) Execute(ctx context.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
-	subDir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	workDir, err := utils.SetupWorkDirectory(d.workingDir, subDir)
-	if err != nil {
-		return nil, err
-	}
+func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
+	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
+	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
+	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
 
-	// Q: Since we are not writing files, when sync is already launched
-	// it is moved inside the container methods.
-	// if err := utils.WriteConfigFiles(workDir, req.Configs); err != nil {
-	// 	return nil, err
-	// }
-	// Question: Telemetry requires streams.json, so cleaning up fails telemetry. Do we need cleanup?
-	// defer utils.CleanupConfigFiles(workDir, req.Configs)
-
-	out, err := d.RunContainer(ctx, req, workDir)
-	if err != nil {
-		return nil, err
-	}
-
-	if req.OutputFile != "" {
-		fileContent, err := utils.ReadFile(filepath.Join(workDir, req.OutputFile))
+	if req.Command == types.Sync {
+		startSync, err := d.shouldStartSync(ctx, req, containerName, workdir)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse JSON file: %s", err)
+			return "", err
 		}
-		return map[string]interface{}{
-			"response": fileContent,
-		}, nil
+		if !startSync.OK {
+			return startSync.Message, nil
+		}
 	}
 
-	return map[string]interface{}{
-		"response": out,
-	}, nil
+	if err := d.PullImage(ctx, imageName, req.Version); err != nil {
+		return "", err
+	}
+
+	// Environment variables propagation
+	var envs []string
+	for k, v := range utils.GetWorkerEnvVars() {
+		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	containerConfig := &container.Config{
+		Image: imageName,
+		Cmd:   req.Args,
+		Env:   envs,
+	}
+
+	hostConfig := &container.HostConfig{}
+	if workdir != "" {
+		hostOutputDir := utils.GetHostOutputDir(workdir)
+		hostConfig.Mounts = []mount.Mount{
+			{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+		}
+	}
+
+	logger.Infof("running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
+
+	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			defer cancel()
+
+			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
+				logger.Warnf("failed to remove container: %s", err)
+			}
+		}()
+	}
+
+	if err := d.startContainer(ctx, containerID); err != nil {
+		return "", err
+	}
+
+	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
+		return "", err
+	}
+
+	output, err := d.getContainerLogs(ctx, containerID)
+	if err != nil {
+		return "", err
+	}
+
+	logger.Debugf("Docker container output: %s", string(output))
+
+	return string(output), nil
 }
 
-func (d *DockerExecutor) SyncCleanup(ctx context.Context, req *executor.ExecutionRequest) error {
-	// Stop container gracefully
+func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
 	logger.Infof("stopping container for cleanup %s", req.WorkflowID)
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		return fmt.Errorf("failed to stop container: %s", err)
 	}
-
-	stateFile, err := utils.GetStateFileFromWorkdir(d.workingDir, req.WorkflowID, req.Command)
-	if err != nil {
-		return err
-	}
-
-	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile, true); err != nil {
-		return err
-	}
-
-	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 
@@ -86,7 +118,7 @@ func (d *DockerExecutor) Close() error {
 }
 
 func init() {
-	executor.RegisteredExecutors[executor.Docker] = func() (executor.Executor, error) {
+	executor.RegisteredExecutors[environment.Docker] = func() (executor.Executor, error) {
 		return NewDockerExecutor()
 	}
 }

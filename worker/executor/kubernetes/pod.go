@@ -15,49 +15,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
-	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
-
-func (k *KubernetesExecutor) RunPod(ctx context.Context, req *executor.ExecutionRequest, workDir string) (string, error) {
-	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
-
-	podSpec := k.CreatePodSpec(req, workDir, imageName)
-
-	logger.Infof("creating Pod %s with image %s", podSpec.Name, imageName)
-
-	if _, err := k.createPod(ctx, podSpec); err != nil {
-		if !apierrors.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to create pod: %s", err)
-		}
-		logger.Infof("pod already exists, resuming polling for Pod: %s", podSpec.Name)
-	}
-	logger.Debugf("successfully created Pod %s", podSpec.Name)
-
-	if !slices.Contains(constants.AsyncCommands, req.Command) {
-		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
-				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %s",
-					podSpec.Name, req.Command, req.WorkflowID, err)
-			}
-		}()
-	}
-
-	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
-		return "", err
-	}
-
-	logs, err := k.getPodLogs(ctx, podSpec.Name)
-	if err != nil {
-		return "", fmt.Errorf("failed to get pod logs: %s", err)
-	}
-
-	return logs, nil
-}
 
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
 	logger.Debugf("waiting for Pod %s to complete (timeout: %v)", podName, timeout)
@@ -161,7 +121,7 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 	return nil
 }
 
-func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workDir, imageName string) *corev1.Pod {
+func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
 	pod := &corev1.Pod{
@@ -255,14 +215,18 @@ func (k *KubernetesExecutor) CreatePodSpec(req *executor.ExecutionRequest, workD
 func (k *KubernetesExecutor) createPod(ctx context.Context, podSpec *corev1.Pod) (*corev1.Pod, error) {
 	result, err := k.client.CoreV1().Pods(k.namespace).Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {
-		// IMPORTANT: This is the resumption point for activity retries after worker death.
-		// When a worker dies mid-activity, Temporal retries the activity on a new worker.
-		// Since pod names are deterministic (derived from WorkflowID), the retry attempt
-		// will try to create the same pod that the previous worker already created.
-		// Kubernetes returns AlreadyExists error, which we handle in ExecutePodActivity
-		// by resuming polling on the existing pod instead of failing the activity.
-		// This error is expected during resumption and will be caught upstream.
-		return nil, err
+		if !apierrors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("failed to create pod: %s", err)
+		}
+
+		logger.Infof("pod already exists, resuming polling for Pod: %s", podSpec.Name)
+
+		// Fetch the existing pod
+		existing, getErr := k.client.CoreV1().Pods(k.namespace).Get(ctx, podSpec.Name, metav1.GetOptions{})
+		if getErr != nil {
+			return nil, fmt.Errorf("pod exists but failed to fetch: %s", getErr)
+		}
+		return existing, nil
 	}
 
 	logger.Debugf("successfully created pod %s", podSpec.Name)

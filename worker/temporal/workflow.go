@@ -4,9 +4,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+)
+
+const (
+	ExecuteActivity            = "ExecuteActivity"
+	ExecuteSyncActivity        = "ExecuteSyncActivity"
+	ExecuteSyncCleanupActivity = "SyncCleanupActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -17,8 +25,7 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	MaximumAttempts:    1,
 }
 
-// QUESTION: Is the single workflow approach fine or should we create separate workflows
-func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[string]interface{}, error) {
+func ExecuteWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: req.Timeout,
 		RetryPolicy:         DefaultRetryPolicy,
@@ -26,18 +33,19 @@ func ExecuteWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (map[
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, &result); err != nil {
+	var result *types.ExecutorResponse
+	if err := workflow.ExecuteActivity(ctx, ExecuteActivity, req).Get(ctx, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (result map[string]interface{}, err error) {
+func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.ExecutorResponse, err error) {
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: req.Timeout,
+		StartToCloseTimeout: constants.DefaultSyncTimeout,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
+
 		// Sync workflows are critical and should not stop on transient errors.
 		// Setting MaximumAttempts to 0 means infinite retries with exponential backoff.
 		RetryPolicy: &temporal.RetryPolicy{
@@ -48,10 +56,12 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 		},
 	}
 
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+	req, err := utils.BuildSyncReqForLegacyOrNew(args)
+	if err != nil {
+		return nil, err
+	}
 
-	// Each scheduled workflow execution gets a unique WorkflowID.
-	// We're assigning that here to distinguish between different scheduled executions.
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	// Defer cleanup - runs on both normal completion and cancellation
@@ -62,7 +72,7 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
-		cleanupErr := workflow.ExecuteActivity(newCtx, "SyncCleanupActivity", req).Get(newCtx, nil)
+		cleanupErr := workflow.ExecuteActivity(newCtx, ExecuteSyncCleanupActivity, req).Get(newCtx, nil)
 		if cleanupErr != nil {
 			if err != nil {
 				err = fmt.Errorf("sync failed: %s, cleanup also failed: %s", err, cleanupErr)
@@ -72,7 +82,7 @@ func ExecuteSyncWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (
 		}
 	}()
 
-	err = workflow.ExecuteActivity(ctx, "ExecuteSyncActivity", req).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, ExecuteSyncActivity, req).Get(ctx, &result)
 	return result, err
 }
 

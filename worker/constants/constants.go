@@ -1,10 +1,16 @@
 package constants
 
-import "github.com/datazip-inc/olake-helm/worker/types"
+import (
+	"time"
+
+	"github.com/datazip-inc/olake-helm/worker/types"
+)
 
 const (
 	DefaultDockerImagePrefix = "olakego/source"
-	ContainerStopTimeout     = 5 // in seconds
+	ContainerStopTimeout     = 5  // in seconds
+	ContainerCleanupTimeout  = 30 // in seconds
+	DefaultSyncTimeout       = time.Hour * 24 * 30
 
 	// Directory paths
 	ContainerMountDir   = "/mnt/config"

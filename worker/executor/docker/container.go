@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/docker/docker/api/types/container"
@@ -174,4 +175,36 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 			// continue
 		}
 	}
+}
+
+func (d *DockerExecutor) shouldStartSync(ctx context.Context, req *types.ExecutionRequest, containerName, workDir string) (*types.Result, error) {
+	// Inspect container state
+	state := d.getContainerState(ctx, containerName, req.WorkflowID)
+
+	// If container is running, adopt and wait for completion
+	if state.Exists && state.Running {
+		logger.Infof("workflowID %s: adopting running container %s", req.WorkflowID, containerName)
+		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
+			return nil, err
+		}
+		state = d.getContainerState(ctx, containerName, req.WorkflowID)
+	}
+
+	// If container exists and exited, treat as finished: cleanup and return status
+	if state.Exists && !state.Running && state.ExitCode != nil {
+		logger.Infof("workflowID %s: container %s exited with code %d", req.WorkflowID, containerName, *state.ExitCode)
+		if *state.ExitCode == 0 {
+			return &types.Result{OK: false, Message: "sync status: completed"}, nil
+		}
+		return nil, fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
+	}
+
+	// First launch path: only if we never launched and nothing is running
+	if !utils.WorkflowAlreadyLaunched(workDir) {
+		return &types.Result{OK: true}, nil
+	}
+
+	// Skip if container is not running, was already launched (logs exist), and no new run is needed.
+	logger.Infof("workflowID %s: container %s already handled, skipping launch", req.WorkflowID, containerName)
+	return &types.Result{OK: false, Message: "sync status: skipped"}, nil
 }

@@ -2,18 +2,16 @@ package utils
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
+	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
 
@@ -33,126 +31,23 @@ func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string
 	return defaultValue
 }
 
+// Unmarshal serializes and deserializes any from into the object
+// return error if occurred
+func Unmarshal(from, object any) error {
+	b, err := json.Marshal(from)
+	if err != nil {
+		return fmt.Errorf("error marshaling object: %s", err)
+	}
+	err = json.Unmarshal(b, object)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling from object: %s", err)
+	}
+
+	return nil
+}
+
 func GetDockerImageName(sourceType, version string) string {
 	return fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
-}
-
-func CleanOldLogs(logDir string, retentionPeriod int) {
-	logger.Info("running log cleaner...")
-	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
-
-	// check if old logs are present
-	shouldDelete := func(path string, cutoff time.Time) bool {
-		entries, _ := os.ReadDir(path)
-		if len(entries) == 0 {
-			return true
-		}
-
-		var foundOldLog bool
-		_ = filepath.Walk(path, func(filePath string, info os.FileInfo, _ error) error {
-			if info == nil || info.IsDir() {
-				return nil
-			}
-			if (strings.HasSuffix(filePath, ".log") || strings.HasSuffix(filePath, ".log.gz")) &&
-				info.ModTime().Before(cutoff) {
-				foundOldLog = true
-				return filepath.SkipDir
-			}
-			return nil
-		})
-		return foundOldLog
-	}
-
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		logger.Errorf("failed to read log dir: %s", err)
-		return
-	}
-	// delete dir if old logs are found or is empty
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == "telemetry" {
-			continue
-		}
-		dirPath := filepath.Join(logDir, entry.Name())
-		if toDelete := shouldDelete(dirPath, cutoff); toDelete {
-			logger.Infof("deleting folder: %s", dirPath)
-			_ = os.RemoveAll(dirPath)
-		}
-	}
-}
-
-// starts a log cleaner that removes old logs from the specified directory based on the retention period
-func InitLogCleaner(logDir string, retentionPeriod int) {
-	logger.Info("log cleaner started...")
-	CleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
-	c := cron.New()
-	err := c.AddFunc("@midnight", func() {
-		CleanOldLogs(logDir, retentionPeriod)
-	})
-	if err != nil {
-		logger.Errorf("failed to start log cleaner: %s", err)
-		return
-	}
-	c.Start()
-}
-
-func GetConfigDir() string {
-	switch executor.ExecutorEnvironment(executor.GetExecutorEnvironment()) {
-	case executor.Kubernetes:
-		return constants.K8sPersistentDir
-	case executor.Docker:
-		return constants.DockerPersistentDir
-	default:
-		return ""
-	}
-}
-
-// getHostOutputDir returns the host output directory
-func GetHostOutputDir(outputDir string) string {
-	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
-	persistencePath := GetConfigDir()
-	if hostPersistencePath != "" {
-		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
-		return hostOutputDir
-	}
-	return outputDir
-}
-
-func UpdateConfigWithJobDetails(details types.JobData, req *executor.ExecutionRequest) {
-	jobDetails := map[string]interface{}{
-		"streams":     details.Streams,
-		"state":       details.State,
-		"source":      details.Source,
-		"destination": details.Destination,
-	}
-
-	for idx, config := range req.Configs {
-		configName := strings.Split(config.Name, ".")[0]
-		req.Configs[idx].Data = GetValueOrDefault(jobDetails, configName, config.Data)
-	}
-}
-
-// GetWorkflowDirectory determines the directory name based on operation and workflow ID
-func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
-	if slices.Contains(constants.AsyncCommands, operation) {
-		return WorkflowHash(originalWorkflowID)
-	} else {
-		return originalWorkflowID
-	}
-}
-
-func GetStateFileFromWorkdir(workdir, workflowID string, command types.Command) (string, error) {
-	stateFilePath := filepath.Join(workdir, GetWorkflowDirectory(command, workflowID), "state.json")
-	stateFile, err := ReadFile(stateFilePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read state file: %s", err)
-	}
-	return stateFile, nil
-}
-
-// WorkflowHash returns a deterministic hash string for a given workflowID
-func WorkflowHash(workflowID string) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
 
 // GetWorkerEnvVars returns the environment variables from the worker container.
@@ -182,4 +77,76 @@ func GetWorkerEnvVars() map[string]string {
 		vars[key] = parts[1]
 	}
 	return vars
+}
+
+func UpdateConfigWithJobDetails(details types.JobData, req *types.ExecutionRequest) {
+	jobDetails := map[string]interface{}{
+		"streams":     details.Streams,
+		"state":       details.State,
+		"source":      details.Source,
+		"destination": details.Destination,
+	}
+
+	for idx, config := range req.Configs {
+		configName := strings.Split(config.Name, ".")[0]
+		req.Configs[idx].Data = GetValueOrDefault(jobDetails, configName, config.Data)
+	}
+}
+
+// GetWorkflowDirectory determines the directory name based on operation and workflow ID
+func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
+	if slices.Contains(constants.AsyncCommands, operation) {
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
+	} else {
+		return originalWorkflowID
+	}
+}
+
+func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, error) {
+	stateFilePath := filepath.Join(GetConfigDir(), GetWorkflowDirectory(command, workflowID), "state.json")
+	stateFile, err := ReadFile(stateFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read state file: %s", err)
+	}
+	return stateFile, nil
+}
+
+func GetConfigDir() string {
+	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
+	case environment.Kubernetes:
+		return constants.K8sPersistentDir
+	case environment.Docker:
+		return constants.DockerPersistentDir
+	default:
+		return ""
+	}
+}
+
+// getHostOutputDir returns the host output directory
+func GetHostOutputDir(outputDir string) string {
+	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
+	persistencePath := GetConfigDir()
+	if hostPersistencePath != "" {
+		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
+		return hostOutputDir
+	}
+	return outputDir
+}
+
+// WorkflowAlreadyLaunched checked for the folder named log
+// inside the provided working directory
+//
+// workdir/logs - present -> workflow has started already
+// workdir/logs - not present -> workflow is running for the furst time
+func WorkflowAlreadyLaunched(workdir string) bool {
+	launchedMarker := filepath.Join(workdir, "logs")
+	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
+// WorkflowHash returns a deterministic hash string for a given workflowID
+func WorkflowHash(workflowID string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
