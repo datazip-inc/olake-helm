@@ -51,7 +51,7 @@ func SendTelemetryEvents(jobId int, workflowId string, event string) {
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			logger.Warnf("sync telemetry update failed: %d %s", resp.StatusCode, string(body))
+			logger.Debugf("sync telemetry update failed: %d %s", resp.StatusCode, string(body))
 		}
 	}()
 }
