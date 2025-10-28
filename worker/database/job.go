@@ -33,17 +33,17 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	return jobData, nil
 }
 
-func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string, active bool) error {
+func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error {
 	query := fmt.Sprintf(`
 			UPDATE %q 
-			SET state = $1, active = $2, updated_at = NOW() 
+			SET state = $1, updated_at = NOW() 
 			WHERE id = $3`,
 		db.tables["job"])
 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err := db.client.ExecContext(cctx, query, state, active, jobId)
+	_, err := db.client.ExecContext(cctx, query, state, jobId)
 	if err != nil {
 		return fmt.Errorf("failed to update job state: %w", err)
 	}

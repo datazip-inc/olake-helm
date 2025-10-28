@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -125,10 +123,4 @@ func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRe
 func (k *KubernetesExecutor) Close() error {
 	k.configWatcher.cancel()
 	return nil
-}
-
-func init() {
-	executor.RegisteredExecutors[environment.Kubernetes] = func() (executor.Executor, error) {
-		return NewKubernetesExecutor()
-	}
 }

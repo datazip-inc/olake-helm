@@ -3,6 +3,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -18,6 +19,10 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
+const (
+	DockerPullTimeout = time.Minute
+)
+
 type ContainerState struct {
 	Exists   bool
 	Running  bool
@@ -27,10 +32,16 @@ type ContainerState struct {
 func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if err != nil {
+		pullCtx, cancel := context.WithTimeout(ctx, DockerPullTimeout)
+		defer cancel()
+
 		// Image doesn't exist, pull it
 		logger.Infof("image %s not found locally, pulling...", imageName)
-		reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
+		reader, err := d.client.ImagePull(pullCtx, imageName, image.PullOptions{})
 		if err != nil {
+			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("image pull for %s timed out", imageName)
+			}
 			return fmt.Errorf("image pull %s: %s", imageName, err)
 		}
 		defer reader.Close()
@@ -125,10 +136,10 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 
 	// Remove container
 	if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
-		logger.Warnf("workflowID %s: docker rm failed for %s: %s", workflowID, containerName, err)
-	} else {
-		logger.Infof("workflowID %s: container %s removed successfully", workflowID, containerName)
+		return fmt.Errorf("workflowID %s: docker rm failed for %s: %s", workflowID, containerName, err)
 	}
+
+	logger.Infof("workflowID %s: container %s removed successfully", workflowID, containerName)
 	return nil
 }
 

@@ -5,21 +5,21 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/datazip-inc/olake-helm/worker/api"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
 
 type Activity struct {
-	executor executor.AbstractExecutor
+	executor *executor.AbstractExecutor
 }
 
-func NewActivity(a executor.AbstractExecutor) *Activity {
+func NewActivity(a *executor.AbstractExecutor) *Activity {
 	return &Activity{executor: a}
 }
 
@@ -48,7 +48,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	}
 
 	if req.Command == "" {
-		utils.UpdateSyncRequest(jobDetails, req)
+		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
@@ -59,7 +59,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	req.HeartbeatFunc = activity.RecordHeartbeat
 
 	// Send telemetry event - "sync started"
-	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "started")
+	telemetry.SendEvent(req.JobID, req.WorkflowID, "started")
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
@@ -71,12 +71,12 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 
 		// execution failed
 		if errors.Is(err, constants.ErrExecutionFailed) {
-			api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
+			telemetry.SendEvent(req.JobID, req.WorkflowID, "failed")
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
 		activityLogger.Error("sync command failed", "error", err)
-		api.SendTelemetryEvents(req.JobID, req.WorkflowID, "failed")
+		telemetry.SendEvent(req.JobID, req.WorkflowID, "failed")
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
@@ -93,13 +93,13 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	}
 
 	if req.Command == "" {
-		utils.UpdateSyncRequest(jobDetails, req)
+		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
 	if err := a.executor.SyncCleanup(ctx, req); err != nil {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	api.SendTelemetryEvents(req.JobID, req.WorkflowID, "completed")
+	telemetry.SendEvent(req.JobID, req.WorkflowID, "completed")
 	return nil
 }

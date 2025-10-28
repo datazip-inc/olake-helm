@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/spf13/viper"
 )
@@ -111,10 +110,10 @@ func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, 
 }
 
 func GetConfigDir() string {
-	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
-	case environment.Kubernetes:
+	switch types.ExecutorEnvironment(GetExecutorEnvironment()) {
+	case types.Kubernetes:
 		return constants.K8sPersistentDir
-	case environment.Docker:
+	case types.Docker:
 		return constants.DockerPersistentDir
 	default:
 		return ""
@@ -148,4 +147,11 @@ func WorkflowAlreadyLaunched(workdir string) bool {
 // WorkflowHash returns a deterministic hash string for a given workflowID
 func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+func GetExecutorEnvironment() string {
+	if viper.GetString(constants.EnvKubernetesServiceHost) != "" {
+		return string(types.Kubernetes)
+	}
+	return string(types.Docker)
 }

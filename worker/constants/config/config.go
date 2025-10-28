@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
+	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/spf13/viper"
 )
 
@@ -36,7 +37,7 @@ func setDefaults() {
 	viper.SetDefault("LOG_FORMAT", "console")
 
 	// API defaults
-	viper.SetDefault("OLAKE_CALLBACK_URL", "http://host.docker.internal:8000/internal/worker/callback")
+	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 
 	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
@@ -50,10 +51,8 @@ func setDefaults() {
 
 // checks for required environment variables
 func requiredEnvVars() error {
-	var missing []string
-
 	// Common required env vars
-	required := []string{
+	requiredEnv := []string{
 		constants.EnvCallbackURL,
 		constants.EnvDatabaseDatabase,
 		constants.EnvDatabaseHost,
@@ -63,36 +62,31 @@ func requiredEnvVars() error {
 		constants.EnvDatabaseSSLMode,
 		constants.EnvDatabaseUser,
 	}
-	for _, key := range required {
+
+	// k8s required
+	k8sRequiredEnv := []string{
+		constants.EnvNamespace,
+		constants.EnvStoragePVCName,
+		constants.EnvPodName,
+		constants.EnvKubernetesServiceHost,
+	}
+
+	// Docker required
+	dockerRequiredEnv := []string{
+		constants.EnvHostPersistentDir,
+	}
+
+	execEnv := utils.GetExecutorEnvironment()
+	if execEnv == string(types.Docker) {
+		requiredEnv = append(requiredEnv, dockerRequiredEnv...)
+	} else {
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+	}
+
+	var missing []string
+	for _, key := range requiredEnv {
 		if !viper.IsSet(key) || viper.GetString(key) == "" {
 			missing = append(missing, key)
-		}
-	}
-
-	execEnv := environment.GetExecutorEnvironment()
-
-	if execEnv == "kubernetes" {
-		k8sRequired := []string{
-			constants.EnvNamespace,
-			constants.EnvStoragePVCName,
-			constants.EnvPodName,
-			constants.EnvKubernetesServiceHost,
-		}
-		for _, key := range k8sRequired {
-			if !viper.IsSet(key) || viper.GetString(key) == "" {
-				missing = append(missing, key)
-			}
-		}
-	}
-
-	if execEnv == "docker" {
-		dockerRequired := []string{
-			constants.EnvHostPersistentDir,
-		}
-		for _, key := range dockerRequired {
-			if !viper.IsSet(key) || viper.GetString(key) == "" {
-				missing = append(missing, key)
-			}
 		}
 	}
 

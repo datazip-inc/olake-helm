@@ -43,8 +43,8 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 	return req, nil
 }
 
-// UpdateSyncRequest updates the ExecutionRequest for deprecated sync workflow
-func UpdateSyncRequest(job types.JobData, req *types.ExecutionRequest) {
+// UpdateSyncRequestForLegacy updates the ExecutionRequest for deprecated sync workflow
+func UpdateSyncRequestForLegacy(job types.JobData, req *types.ExecutionRequest) {
 	configs := []types.JobConfig{
 		{Name: "source.json", Data: job.Source},
 		{Name: "destination.json", Data: job.Destination},

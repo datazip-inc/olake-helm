@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -44,7 +42,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 			return startSync.Message, nil
 		}
 	}
-	
+
 	if err := d.PullImage(ctx, imageName, req.Version); err != nil {
 		return "", err
 	}
@@ -114,10 +112,4 @@ func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionReques
 
 func (d *DockerExecutor) Close() error {
 	return d.client.Close()
-}
-
-func init() {
-	executor.RegisteredExecutors[environment.Docker] = func() (executor.Executor, error) {
-		return NewDockerExecutor()
-	}
 }

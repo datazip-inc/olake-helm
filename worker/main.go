@@ -11,9 +11,9 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
+	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
@@ -31,7 +31,7 @@ func main() {
 	logger.Init()
 
 	logger.Infof("starting OLake worker")
-	logger.Infof("executor environment: %s", environment.GetExecutorEnvironment())
+	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize database
 	db := database.GetDB()
@@ -54,10 +54,10 @@ func main() {
 	}
 	defer tClient.Close()
 
-	worker := temporal.NewWorker(tClient, *exec)
+	worker := temporal.NewWorker(tClient, exec)
 
 	// start health server for kubernetes environment
-	if environment.GetExecutorEnvironment() == string(environment.Kubernetes) {
+	if utils.GetExecutorEnvironment() == string(types.Kubernetes) {
 		healthServer := temporal.NewHealthServer(worker)
 		go func() {
 			err := healthServer.Start()
