@@ -86,12 +86,12 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	return result, err
 }
 
-func ExecuteClearWorkflow(ctx workflow.Context, req *executor.ExecutionRequest) (err error) {
+func ExecuteClearWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (err error) {
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: req.Timeout,
 		HeartbeatTimeout:    time.Minute,
 		WaitForCancellation: true,
-		RetryPolicy: DefaultRetryPolicy,
+		RetryPolicy:         DefaultRetryPolicy,
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)

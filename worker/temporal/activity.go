@@ -17,11 +17,11 @@ import (
 )
 
 type Activity struct {
-	executor   executor.Executor
+	executor   executor.AbstractExecutor
 	tempClient client.Client
 }
 
-func NewActivity(e executor.Executor, c *Temporal) *Activity {
+func NewActivity(e executor.AbstractExecutor, c *Temporal) *Activity {
 	return &Activity{executor: e, tempClient: c.GetClient()}
 }
 
@@ -106,7 +106,7 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	return nil
 }
 
-func (a *Activity) ClearCleanupActivity(ctx context.Context, req *executor.ExecutionRequest) error {
+func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
