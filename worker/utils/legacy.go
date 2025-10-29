@@ -50,7 +50,6 @@ func UpdateSyncRequestForLegacy(job types.JobData, req *types.ExecutionRequest) 
 		{Name: "destination.json", Data: job.Destination},
 		{Name: "streams.json", Data: job.Streams},
 		{Name: "state.json", Data: job.State},
-		//TODO: check this -> We do not have access to `user_id.txt`
 	}
 
 	args := []string{
