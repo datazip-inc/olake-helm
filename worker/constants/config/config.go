@@ -24,7 +24,7 @@ func Init() error {
 // setDefaults sets default values for configuration
 func setDefaults() {
 	// Temporal defaults
-	viper.SetDefault("TEMPORAL_ADDRESS", "localhost:7233")
+	viper.SetDefault("TEMPORAL_ADDRESS", "temporal:7233")
 
 	// Worker defaults
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)

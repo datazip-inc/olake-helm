@@ -178,6 +178,11 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 
 		case err := <-errCh:
 			if err != nil {
+				// CRITICAL: Check if error is because context was cancelled
+				if ctx.Err() != nil {
+					logger.Info("Goroutine failed due to context cancellation", "dockerError", err)
+					return ctx.Err() // Return cancellation error, not docker error
+				}
 				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
 			}
 			return nil

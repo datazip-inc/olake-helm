@@ -65,8 +65,8 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
-			activityLogger.Info("sync activity cancelled", "jobID", req.JobID, "workflowID", req.WorkflowID)
-			return nil, ctx.Err()
+			activityLogger.Info("sync activity cancelled", "jobID", req.JobID)
+			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
 		// execution failed
