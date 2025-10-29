@@ -23,10 +23,11 @@ type Executor interface {
 
 type AbstractExecutor struct {
 	executor Executor
+	db       *database.DB
 }
 
 // NewExecutor creates and returns the executor client based on the executor environment
-func NewExecutor() (*AbstractExecutor, error) {
+func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
 	executorEnv := utils.GetExecutorEnvironment()
 
 	var exec Executor
@@ -43,7 +44,7 @@ func NewExecutor() (*AbstractExecutor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AbstractExecutor{executor: exec}, nil
+	return &AbstractExecutor{executor: exec, db: db}, nil
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -89,7 +90,7 @@ func (a *AbstractExecutor) SyncCleanup(ctx context.Context, req *types.Execution
 		return err
 	}
 
-	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile); err != nil {
+	if err := a.db.UpdateJobState(ctx, req.JobID, stateFile); err != nil {
 		return err
 	}
 

@@ -17,10 +17,11 @@ import (
 
 type Activity struct {
 	executor *executor.AbstractExecutor
+	db       *database.DB
 }
 
-func NewActivity(a *executor.AbstractExecutor) *Activity {
-	return &Activity{executor: a}
+func NewActivity(a *executor.AbstractExecutor, db *database.DB) *Activity {
+	return &Activity{executor: a, db: db}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -41,7 +42,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
 	// Update the configs with latest details from the server
-	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
@@ -87,7 +88,7 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
-	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
 		return err
 	}

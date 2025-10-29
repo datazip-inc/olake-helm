@@ -34,12 +34,15 @@ func main() {
 	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize database
-	db := database.GetDB()
+	db, err := database.Init()
+	if err != nil {
+		logger.Fatalf("failed to initialize database: %s", err)
+	}
 	logger.Infof("database initialized")
 	defer db.Close()
 
 	// Initialize executor
-	exec, err := executor.NewExecutor()
+	exec, err := executor.NewExecutor(db)
 	if err != nil {
 		logger.Fatalf("failed to create executor: %s", err)
 	}
@@ -54,11 +57,11 @@ func main() {
 	}
 	defer tClient.Close()
 
-	worker := temporal.NewWorker(tClient, exec)
+	worker := temporal.NewWorker(tClient, exec, db)
 
 	// start health server for kubernetes environment
 	if utils.GetExecutorEnvironment() == string(types.Kubernetes) {
-		healthServer := temporal.NewHealthServer(worker)
+		healthServer := temporal.NewHealthServer(worker, db)
 		go func() {
 			err := healthServer.Start()
 			if err != nil {
