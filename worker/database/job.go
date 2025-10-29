@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/lib/pq"
 )
 
 const (
@@ -34,11 +35,12 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 }
 
 func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error {
+	tableName := pq.QuoteIdentifier(db.tables["job"])
 	query := fmt.Sprintf(`
-			UPDATE %q 
+			UPDATE %s
 			SET state = $1, updated_at = NOW() 
-			WHERE id = $3`,
-		db.tables["job"])
+			WHERE id = $2`,
+		tableName)
 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
