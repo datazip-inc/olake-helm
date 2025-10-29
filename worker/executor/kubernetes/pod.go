@@ -183,9 +183,14 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							Name:  "OLAKE_WORKFLOW_ID",
 							Value: req.WorkflowID,
 						},
+					},
+					EnvFrom: []corev1.EnvFromSource{
 						{
-							Name:  "OLAKE_SECRET_KEY",
-							Value: k.config.SecretKey,
+							ConfigMapRef: &corev1.ConfigMapEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "olake-global-env",
+								},
+							},
 						},
 					},
 				},
