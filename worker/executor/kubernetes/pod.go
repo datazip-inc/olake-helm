@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
@@ -183,6 +184,10 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							Name:  "OLAKE_WORKFLOW_ID",
 							Value: req.WorkflowID,
 						},
+						{
+							Name:  "OLAKE_SECRET_KEY",
+							Value: k.config.SecretKey,
+						},
 					},
 					EnvFrom: []corev1.EnvFromSource{
 						{
@@ -190,6 +195,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 								LocalObjectReference: corev1.LocalObjectReference{
 									Name: "olake-global-env",
 								},
+								Optional: ptr.To(true),
 							},
 						},
 					},
