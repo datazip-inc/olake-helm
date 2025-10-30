@@ -16,7 +16,7 @@ var lastValidMapping map[int]map[string]string
 type JobMappingStats struct {
 	TotalEntries    int
 	ValidEntries    int
-	InvalidMappings []string
+	InvalidMappings []string // TODO:  remove invalidMappings from struct{}
 }
 
 func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) error {

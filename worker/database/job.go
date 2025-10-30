@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/lib/pq"
 )
 
@@ -50,5 +51,6 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 		return fmt.Errorf("failed to update job state: %w", err)
 	}
 
+	logger.Infof("job %d - state updated successfully during sync cleanup", jobId)
 	return nil
 }

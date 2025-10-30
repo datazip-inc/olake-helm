@@ -75,7 +75,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 	if req.Command != types.Sync {
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
 			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {

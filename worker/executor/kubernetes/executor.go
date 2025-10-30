@@ -90,7 +90,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 
 	if req.Command != types.Sync {
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
 			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
