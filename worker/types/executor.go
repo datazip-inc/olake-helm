@@ -14,6 +14,7 @@ type ExecutionRequest struct {
 	Configs       []JobConfig   `json:"configs"`
 	WorkflowID    string        `json:"workflow_id"`
 	JobID         int           `json:"job_id"`
+	JobName       string        `json:"job_name"`
 	Timeout       time.Duration `json:"timeout"`
 	OutputFile    string        `json:"output_file"`
 
