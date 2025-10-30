@@ -47,6 +47,9 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		defer reader.Close()
 
 		if _, err = io.Copy(io.Discard, reader); err != nil {
+			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("image pull for %s timed out", imageName)
+			}
 			logger.Warnf("failed to read image pull output: %s", err)
 		}
 		return nil
