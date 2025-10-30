@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	DockerPullTimeout = time.Minute
+	DockerPullTimeout = 2 * time.Minute
 )
 
 type ContainerState struct {
