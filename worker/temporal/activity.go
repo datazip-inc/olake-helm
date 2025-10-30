@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
@@ -180,11 +181,11 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	return nil
 }
 
-func (a *Activity) SendSlackNotificationActivity(ctx context.Context, jobID int, workflowID, errMsg string) error {
+func (a *Activity) SendSlackNotificationActivity(ctx context.Context, jobID int, lastRunTime time.Time, jobName, errMsg string) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending Slack alert", "jobID", jobID, "workflowID", workflowID)
+	activityLogger.Info("Sending Slack alert", "jobID", jobID, "JobName", jobName)
 
-	if err := notifications.SendSlackNotification(jobID, workflowID, errMsg); err != nil {
+	if err := notifications.SendSlackNotification(jobID, lastRunTime, jobName, errMsg); err != nil {
 		logger.Error("Slack notification failed", "error", err)
 		return err
 	}

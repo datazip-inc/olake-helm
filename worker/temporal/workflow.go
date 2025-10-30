@@ -117,8 +117,14 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
 	if err != nil {
+		// Create a separate short-lived context for Slack alert
+		slackCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 1,
+			RetryPolicy:         DefaultRetryPolicy, // only one retry
+		})
 		// Trigger Slack alert
-		_ = workflow.ExecuteActivity(ctx, SendSlackNotificationActivity, req.JobID, req.WorkflowID, err.Error()).Get(ctx, nil)
+		lastRunTime := workflow.Now(ctx)
+		_ = workflow.ExecuteActivity(slackCtx, SendSlackNotificationActivity, req.JobID, lastRunTime, req.JobName, err.Error()).Get(ctx, nil)
 		return nil, err
 
 	}
