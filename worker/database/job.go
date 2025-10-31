@@ -51,6 +51,6 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 		return fmt.Errorf("failed to update job state: %w", err)
 	}
 
-	logger.Infof("job %d - state updated successfully during sync cleanup", jobId)
+	logger.Infof("successfully updated job %d state", jobId)
 	return nil
 }
