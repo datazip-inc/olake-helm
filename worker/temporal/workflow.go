@@ -98,7 +98,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	// set search attributes to differentiate between sync and clear operation
 	opTypeKey := temporal.NewSearchAttributeKeyKeyword("OperationType")
 	if err := workflow.UpsertTypedSearchAttributes(ctx, opTypeKey.ValueSet(string(req.Command))); err != nil {
-		workflowLogger.Info("failed to upsert search attributes", "error", err)
+		workflowLogger.Error("failed to upsert search attributes", "error", err)
 	}
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)

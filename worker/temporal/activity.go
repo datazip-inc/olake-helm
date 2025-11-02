@@ -41,7 +41,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 
 func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID)
 
 	// Update the configs with latest details from the server
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
@@ -88,7 +88,7 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 
 func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
@@ -109,18 +109,11 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 
 func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
 	if err := a.executor.SyncCleanup(ctx, req); err != nil {
 		activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
 	}
-
-	// unpause sync schedule
-	syncScheduleID := fmt.Sprintf("schedule-sync-%s-%d", req.ProjectID, req.JobID)
-	handle := a.tempClient.ScheduleClient().GetHandle(ctx, syncScheduleID)
-	_ = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
-		Note: "Clear destination cleanup completed",
-	})
 
 	return nil
 }
