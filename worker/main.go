@@ -54,7 +54,10 @@ func main() {
 	}
 	defer tClient.Close()
 
-	worker := temporal.NewWorker(tClient, *exec)
+	worker, err := temporal.NewWorker(tClient, *exec)
+	if err != nil {
+		logger.Fatalf("failed to create Temporal worker: %s", err)
+	}
 
 	// start health server for kubernetes environment
 	if environment.GetExecutorEnvironment() == string(environment.Kubernetes) {

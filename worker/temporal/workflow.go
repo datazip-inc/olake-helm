@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	ExecuteActivity            = "ExecuteActivity"
-	ExecuteSyncActivity        = "ExecuteSyncActivity"
-	ExecuteSyncCleanupActivity = "SyncCleanupActivity"
+	ExecuteActivity             = "ExecuteActivity"
+	ExecuteSyncActivity         = "ExecuteSyncActivity"
+	ExecuteSyncCleanupActivity  = "SyncCleanupActivity"
+	ExecuteClearCleanupActivity = "ClearCleanupActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -41,9 +42,10 @@ func ExecuteWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (*types.
 }
 
 func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.ExecutorResponse, err error) {
+	workflowLogger := workflow.GetLogger(ctx)
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: constants.DefaultSyncTimeout,
-		HeartbeatTimeout:    time.Minute,
+		HeartbeatTimeout:    10 * time.Second,
 		WaitForCancellation: true,
 
 		// Sync workflows are critical and should not stop on transient errors.
@@ -64,6 +66,18 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
 
+	var activity, cleanupActivity string
+	switch req.Command {
+	case types.Sync:
+		activity = ExecuteSyncActivity
+		cleanupActivity = ExecuteSyncCleanupActivity
+	case types.ClearDestination:
+		activity = ExecuteActivity
+		cleanupActivity = ExecuteClearCleanupActivity
+	default:
+		return nil, fmt.Errorf("invalid command: %s", req.Command)
+	}
+
 	// Defer cleanup - runs on both normal completion and cancellation
 	defer func() {
 		newCtx, _ := workflow.NewDisconnectedContext(ctx)
@@ -72,7 +86,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
-		cleanupErr := workflow.ExecuteActivity(newCtx, ExecuteSyncCleanupActivity, req).Get(newCtx, nil)
+		cleanupErr := workflow.ExecuteActivity(newCtx, cleanupActivity, req).Get(newCtx, nil)
 		if cleanupErr != nil {
 			if err != nil {
 				err = fmt.Errorf("sync failed: %s, cleanup also failed: %s", err, cleanupErr)
@@ -82,37 +96,12 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 		}
 	}()
 
-	err = workflow.ExecuteActivity(ctx, ExecuteSyncActivity, req).Get(ctx, &result)
-	return result, err
-}
-
-func ExecuteClearWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (err error) {
-	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: req.Timeout,
-		HeartbeatTimeout:    time.Minute,
-		WaitForCancellation: true,
-		RetryPolicy:         DefaultRetryPolicy,
+	// set search attributes to differentiate between sync and clear operation
+	opTypeKey := temporal.NewSearchAttributeKeyKeyword("OperationType")
+	if err := workflow.UpsertTypedSearchAttributes(ctx, opTypeKey.ValueSet(string(req.Command))); err != nil {
+		workflowLogger.Info("failed to upsert search attributes", "error", err)
 	}
 
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
-
-	defer func() {
-		newCtx, _ := workflow.NewDisconnectedContext(ctx)
-		cleanupOtions := workflow.ActivityOptions{
-			StartToCloseTimeout: time.Minute * 15,
-			RetryPolicy:         DefaultRetryPolicy,
-		}
-		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
-		cleanupErr := workflow.ExecuteActivity(newCtx, "ClearCleanupActivity", req).Get(newCtx, nil)
-		if cleanupErr != nil {
-			if err != nil {
-				err = fmt.Errorf("clear failed: %s, cleanup also failed: %s", err, cleanupErr)
-			} else {
-				err = fmt.Errorf("cleanup failed: %s", cleanupErr)
-			}
-		}
-	}()
-
-	err = workflow.ExecuteActivity(ctx, "ExecuteActivity", req).Get(ctx, nil)
-	return err
+	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
+	return result, err
 }
