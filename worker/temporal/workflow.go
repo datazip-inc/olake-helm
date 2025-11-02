@@ -88,10 +88,9 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
 		cleanupErr := workflow.ExecuteActivity(newCtx, cleanupActivity, req).Get(newCtx, nil)
 		if cleanupErr != nil {
+			cleanupErr = fmt.Errorf("cleanup failed: %s", cleanupErr)
 			if err != nil {
 				err = fmt.Errorf("sync failed: %s, cleanup also failed: %s", err, cleanupErr)
-			} else {
-				err = fmt.Errorf("cleanup failed: %s", cleanupErr)
 			}
 		}
 	}()

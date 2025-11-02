@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -93,7 +91,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
 			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
@@ -126,10 +124,4 @@ func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRe
 func (k *KubernetesExecutor) Close() error {
 	k.configWatcher.cancel()
 	return nil
-}
-
-func init() {
-	executor.RegisteredExecutors[environment.Kubernetes] = func() (executor.Executor, error) {
-		return NewKubernetesExecutor()
-	}
 }

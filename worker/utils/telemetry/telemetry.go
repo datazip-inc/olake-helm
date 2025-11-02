@@ -1,4 +1,4 @@
-package api
+package telemetry
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 )
 
 // event = "started" | "completed" | "failed"
-func SendTelemetryEvents(jobId int, workflowId string, event string) {
+func SendEvent(jobId int, workflowId string, event string) {
 	go func() {
 		switch event {
 		case "started", "completed", "failed":

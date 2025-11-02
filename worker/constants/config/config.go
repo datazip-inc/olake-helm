@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
+	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/spf13/viper"
 )
 
@@ -23,7 +24,7 @@ func Init() error {
 // setDefaults sets default values for configuration
 func setDefaults() {
 	// Temporal defaults
-	viper.SetDefault("TEMPORAL_ADDRESS", "localhost:7233")
+	viper.SetDefault("TEMPORAL_ADDRESS", "temporal:7233")
 
 	// Worker defaults
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)
@@ -36,7 +37,7 @@ func setDefaults() {
 	viper.SetDefault("LOG_FORMAT", "console")
 
 	// API defaults
-	viper.SetDefault("OLAKE_CALLBACK_URL", "http://host.docker.internal:8000/internal/worker/callback")
+	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 
 	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
@@ -50,49 +51,46 @@ func setDefaults() {
 
 // checks for required environment variables
 func requiredEnvVars() error {
-	var missing []string
-
 	// Common required env vars
-	required := []string{
+	requiredEnv := []string{
 		constants.EnvCallbackURL,
-		constants.EnvDatabaseDatabase,
-		constants.EnvDatabaseHost,
-		constants.EnvDatabasePassword,
-		constants.EnvDatabasePort,
-		constants.EnvDatabaseRunMode,
-		constants.EnvDatabaseSSLMode,
-		constants.EnvDatabaseUser,
 	}
-	for _, key := range required {
+
+	if viper.IsSet(constants.EnvDatabaseURL) && viper.GetString(constants.EnvDatabaseURL) != "" {
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseURL)
+	} else {
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseDatabase)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseHost)
+		requiredEnv = append(requiredEnv, constants.EnvDatabasePassword)
+		requiredEnv = append(requiredEnv, constants.EnvDatabasePort)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseSSLMode)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseUser)
+	}
+
+	// k8s required
+	k8sRequiredEnv := []string{
+		constants.EnvNamespace,
+		constants.EnvStoragePVCName,
+		constants.EnvPodName,
+		constants.EnvKubernetesServiceHost,
+	}
+
+	// Docker required
+	dockerRequiredEnv := []string{
+		constants.EnvHostPersistentDir,
+	}
+
+	execEnv := utils.GetExecutorEnvironment()
+	if execEnv == string(types.Docker) {
+		requiredEnv = append(requiredEnv, dockerRequiredEnv...)
+	} else {
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+	}
+
+	var missing []string
+	for _, key := range requiredEnv {
 		if !viper.IsSet(key) || viper.GetString(key) == "" {
 			missing = append(missing, key)
-		}
-	}
-
-	execEnv := environment.GetExecutorEnvironment()
-
-	if execEnv == "kubernetes" {
-		k8sRequired := []string{
-			constants.EnvNamespace,
-			constants.EnvStoragePVCName,
-			constants.EnvPodName,
-			constants.EnvKubernetesServiceHost,
-		}
-		for _, key := range k8sRequired {
-			if !viper.IsSet(key) || viper.GetString(key) == "" {
-				missing = append(missing, key)
-			}
-		}
-	}
-
-	if execEnv == "docker" {
-		dockerRequired := []string{
-			constants.EnvHostPersistentDir,
-		}
-		for _, key := range dockerRequired {
-			if !viper.IsSet(key) || viper.GetString(key) == "" {
-				missing = append(missing, key)
-			}
 		}
 	}
 

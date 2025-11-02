@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/lib/pq"
 )
 
 const (
@@ -33,20 +35,22 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	return jobData, nil
 }
 
-func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string, active bool) error {
+func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error {
+	tableName := pq.QuoteIdentifier(db.tables["job"])
 	query := fmt.Sprintf(`
-			UPDATE %q 
-			SET state = $1, active = $2, updated_at = NOW() 
-			WHERE id = $3`,
-		db.tables["job"])
+			UPDATE %s
+			SET state = $1, updated_at = NOW() 
+			WHERE id = $2`,
+		tableName)
 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err := db.client.ExecContext(cctx, query, state, active, jobId)
+	_, err := db.client.ExecContext(cctx, query, state, jobId)
 	if err != nil {
 		return fmt.Errorf("failed to update job state: %w", err)
 	}
 
+	logger.Infof("successfully updated job %d state", jobId)
 	return nil
 }

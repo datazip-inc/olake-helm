@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/executor"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -78,7 +76,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second*constants.ContainerCleanupTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
 			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
@@ -115,10 +113,4 @@ func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionReques
 
 func (d *DockerExecutor) Close() error {
 	return d.client.Close()
-}
-
-func init() {
-	executor.RegisteredExecutors[environment.Docker] = func() (executor.Executor, error) {
-		return NewDockerExecutor()
-	}
 }

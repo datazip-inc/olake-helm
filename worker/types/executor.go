@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+type ExecutorEnvironment string
+
+const (
+	Kubernetes ExecutorEnvironment = "kubernetes"
+	Docker     ExecutorEnvironment = "docker"
+)
+
 type ExecutionRequest struct {
 	Type          string        `json:"type"`
 	Command       Command       `json:"command"`

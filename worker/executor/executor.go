@@ -6,7 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/datazip-inc/olake-helm/worker/database"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
+	"github.com/datazip-inc/olake-helm/worker/executor/docker"
+	"github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 
@@ -22,25 +23,28 @@ type Executor interface {
 
 type AbstractExecutor struct {
 	executor Executor
+	db       *database.DB
 }
 
-type NewFunc func() (Executor, error)
-
-var RegisteredExecutors = map[environment.ExecutorEnvironment]NewFunc{}
-
 // NewExecutor creates and returns the executor client based on the executor environment
-func NewExecutor() (*AbstractExecutor, error) {
-	executorEnv := environment.GetExecutorEnvironment()
-	newFunc, ok := RegisteredExecutors[environment.ExecutorEnvironment(executorEnv)]
-	if !ok {
-		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
-	}
+func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
+	executorEnv := utils.GetExecutorEnvironment()
 
-	executor, err := newFunc()
+	var exec Executor
+	var err error
+
+	switch executorEnv {
+	case string(types.Docker):
+		exec, err = docker.NewDockerExecutor()
+	case string(types.Kubernetes):
+		exec, err = kubernetes.NewKubernetesExecutor()
+	default:
+		exec, err = nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
+	}
 	if err != nil {
 		return nil, err
 	}
-	return &AbstractExecutor{executor: executor}, nil
+	return &AbstractExecutor{executor: exec, db: db}, nil
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -86,7 +90,7 @@ func (a *AbstractExecutor) SyncCleanup(ctx context.Context, req *types.Execution
 		return err
 	}
 
-	if err := database.GetDB().UpdateJobState(ctx, req.JobID, stateFile, true); err != nil {
+	if err := a.db.UpdateJobState(ctx, req.JobID, stateFile); err != nil {
 		return err
 	}
 

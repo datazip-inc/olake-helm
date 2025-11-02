@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	environment "github.com/datazip-inc/olake-helm/worker/executor/enviroment"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/spf13/viper"
 )
@@ -23,16 +22,7 @@ func Ternary(condition bool, trueValue, falseValue interface{}) interface{} {
 	return falseValue
 }
 
-// GetValueOrDefault gets the value of a key in a map or returns a default value if the key is not found
-func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string) string {
-	if value, ok := m[key]; ok {
-		return value.(string)
-	}
-	return defaultValue
-}
-
 // Unmarshal serializes and deserializes any from into the object
-// return error if occurred
 func Unmarshal(from, object any) error {
 	b, err := json.Marshal(from)
 	if err != nil {
@@ -79,17 +69,12 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func UpdateConfigWithJobDetails(details types.JobData, req *types.ExecutionRequest) {
-	jobDetails := map[string]interface{}{
-		"streams":     details.Streams,
-		"state":       details.State,
-		"source":      details.Source,
-		"destination": details.Destination,
-	}
-
-	for idx, config := range req.Configs {
-		configName := strings.Split(config.Name, ".")[0]
-		req.Configs[idx].Data = GetValueOrDefault(jobDetails, configName, config.Data)
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
+	req.Configs = []types.JobConfig{
+		{Name: "source.json", Data: jobData.Source},
+		{Name: "destination.json", Data: jobData.Destination},
+		{Name: "streams.json", Data: jobData.Streams},
+		{Name: "state.json", Data: jobData.State},
 	}
 }
 
@@ -112,10 +97,10 @@ func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, 
 }
 
 func GetConfigDir() string {
-	switch environment.ExecutorEnvironment(environment.GetExecutorEnvironment()) {
-	case environment.Kubernetes:
+	switch types.ExecutorEnvironment(GetExecutorEnvironment()) {
+	case types.Kubernetes:
 		return constants.K8sPersistentDir
-	case environment.Docker:
+	case types.Docker:
 		return constants.DockerPersistentDir
 	default:
 		return ""
@@ -149,4 +134,11 @@ func WorkflowAlreadyLaunched(workdir string) bool {
 // WorkflowHash returns a deterministic hash string for a given workflowID
 func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+func GetExecutorEnvironment() string {
+	if viper.GetString(constants.EnvKubernetesServiceHost) != "" {
+		return string(types.Kubernetes)
+	}
+	return string(types.Docker)
 }

@@ -44,15 +44,7 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 }
 
 // UpdateSyncRequest updates the ExecutionRequest for deprecated sync workflow
-func UpdateSyncRequest(job types.JobData, req *types.ExecutionRequest) {
-	configs := []types.JobConfig{
-		{Name: "source.json", Data: job.Source},
-		{Name: "destination.json", Data: job.Destination},
-		{Name: "streams.json", Data: job.Streams},
-		{Name: "state.json", Data: job.State},
-		//TODO: check this -> We do not have access to `user_id.txt`
-	}
-
+func UpdateSyncRequestForLegacy(job types.JobData, req *types.ExecutionRequest) {
 	args := []string{
 		"sync",
 		"--config", "/mnt/config/source.json",
@@ -64,7 +56,6 @@ func UpdateSyncRequest(job types.JobData, req *types.ExecutionRequest) {
 	req.Command = types.Sync
 	req.ConnectorType = job.Driver
 	req.Version = job.Version
-	req.Configs = configs
 	req.Args = args
 	req.Timeout = constants.DefaultSyncTimeout
 }
