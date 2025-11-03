@@ -142,3 +142,17 @@ func GetExecutorEnvironment() string {
 	}
 	return string(types.Docker)
 }
+
+// Update the clear-destination request to that of sync
+func UpdateClearRequestToSync(req *types.ExecutionRequest) {
+	args := []string{
+		"sync",
+		"--config", "/mnt/config/source.json",
+		"--destination", "/mnt/config/destination.json",
+		"--catalog", "/mnt/config/streams.json",
+		"--state", "/mnt/config/state.json",
+	}
+
+	req.Command = types.Sync
+	req.Args = args
+}

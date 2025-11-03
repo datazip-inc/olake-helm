@@ -115,5 +115,34 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.Executio
 		activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
 	}
 
+	// update the request to that of sync
+	utils.UpdateClearRequestToSync(req)
+
+	// update the schedule
+	scheduleID := fmt.Sprintf("schedule-%s", req.WorkflowID)
+	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
+
+	err := handle.Update(ctx, client.ScheduleUpdateOptions{
+		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
+				Args: []any{req},
+			}
+			return &client.ScheduleUpdate{
+				Schedule: &input.Description.Schedule,
+			}, nil
+		},
+	})
+	if err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule update failed", err)
+	}
+
+	// unpause schedule
+	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
+		Note: "user paused the schedule",
+	})
+	if err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule unpause failed", err)
+	}
+
 	return nil
 }

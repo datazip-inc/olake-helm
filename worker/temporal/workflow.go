@@ -45,7 +45,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	workflowLogger := workflow.GetLogger(ctx)
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: constants.DefaultSyncTimeout,
-		HeartbeatTimeout:    10 * time.Second,
+		HeartbeatTimeout:    30 * time.Second,
 		WaitForCancellation: true,
 
 		// Sync workflows are critical and should not stop on transient errors.
