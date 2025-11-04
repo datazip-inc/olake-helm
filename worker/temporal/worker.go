@@ -26,7 +26,7 @@ func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) *Work
 	// regsiter activities
 	activitiesInstance := NewActivity(e, db)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
-	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
+	w.RegisterActivity(activitiesInstance.SyncActivity)
 	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
 
 	return &Worker{

@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	ExecuteActivity            = "ExecuteActivity"
-	ExecuteSyncActivity        = "ExecuteSyncActivity"
-	ExecuteSyncCleanupActivity = "SyncCleanupActivity"
+	ExecuteActivity     = "ExecuteActivity"
+	SyncActivity        = "SyncActivity"
+	SyncCleanupActivity = "SyncCleanupActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -72,7 +72,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
-		cleanupErr := workflow.ExecuteActivity(newCtx, ExecuteSyncCleanupActivity, req).Get(newCtx, nil)
+		cleanupErr := workflow.ExecuteActivity(newCtx, SyncCleanupActivity, req).Get(newCtx, nil)
 		if cleanupErr != nil {
 			cleanupErr = fmt.Errorf("cleanup failed: %s", cleanupErr)
 			if err != nil {
@@ -81,6 +81,6 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 		}
 	}()
 
-	err = workflow.ExecuteActivity(ctx, ExecuteSyncActivity, req).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, SyncActivity, req).Get(ctx, &result)
 	return result, err
 }
