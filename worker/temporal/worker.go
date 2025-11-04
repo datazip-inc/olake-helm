@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
@@ -13,8 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const TaskQueue = "OLAKE_DOCKER_TASK_QUEUE"
-
 // Worker handles Temporal worker functionality
 type Worker struct {
 	worker   worker.Worker
@@ -24,7 +23,7 @@ type Worker struct {
 
 // NewWorker creates a new Temporal worker with the provided client
 func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Worker, error) {
-	w := worker.New(t.GetClient(), TaskQueue, worker.Options{})
+	w := worker.New(t.GetClient(), constants.TaskQueue, worker.Options{})
 
 	// regsiter workflows
 	w.RegisterWorkflow(RunSyncWorkflow)

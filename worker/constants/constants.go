@@ -11,6 +11,7 @@ const (
 	ContainerStopTimeout     = 5  // in seconds
 	ContainerCleanupTimeout  = 30 // in seconds
 	DefaultSyncTimeout       = time.Hour * 24 * 30
+	TaskQueue                = "OLAKE_DOCKER_TASK_QUEUE"
 
 	// Directory paths
 	ContainerMountDir   = "/mnt/config"

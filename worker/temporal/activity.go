@@ -112,20 +112,24 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.Executio
 	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
 	if err := a.executor.SyncCleanup(ctx, req); err != nil {
-		activityLogger.Warn("cleanup warning (container cleanup failed)", "error", err)
+		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
 	// update the request to that of sync
 	utils.UpdateClearRequestToSync(req)
 
 	// update the schedule
-	scheduleID := fmt.Sprintf("schedule-%s", req.WorkflowID)
+	workflowID := fmt.Sprintf("sync-%s-%d", req.ProjectID, req.JobID)
+	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
 	err := handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
-				Args: []any{req},
+				ID:        workflowID,
+				Workflow:  RunSyncWorkflow,
+				Args:      []any{req},
+				TaskQueue: constants.TaskQueue,
 			}
 			return &client.ScheduleUpdate{
 				Schedule: &input.Description.Schedule,
@@ -133,16 +137,20 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.Executio
 		},
 	})
 	if err != nil {
+		activityLogger.Error("failed to update schedule action", "error", err)
 		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule update failed", err)
 	}
+	activityLogger.Debug("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	// unpause schedule
 	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
-		Note: "user paused the schedule",
+		Note: "resumed schedule after clear-destination",
 	})
 	if err != nil {
+		activityLogger.Error("failed to unpause schedule", "error", err)
 		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule unpause failed", err)
 	}
+	activityLogger.Debug("unpaused schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	return nil
 }
