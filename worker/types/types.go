@@ -28,6 +28,7 @@ type LoggingConfig struct {
 }
 
 type JobData struct {
+	ProjectID   string
 	Source      string
 	Destination string
 	Streams     string

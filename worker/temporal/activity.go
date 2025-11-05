@@ -55,7 +55,8 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	}
 
 	// mapping request type of deprecated workflow to new request type
-	if req.Command == "" {
+	// old scheduled sync workflow has no connector type set
+	if req.ConnectorType == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
