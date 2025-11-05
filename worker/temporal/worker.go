@@ -14,6 +14,10 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+const (
+	OperationTypeKey = "OperationType"
+)
+
 // Worker handles Temporal worker functionality
 type Worker struct {
 	worker   worker.Worker
@@ -39,7 +43,7 @@ func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Wor
 
 	// Register search attributes
 	_, err := t.GetClient().OperatorService().AddSearchAttributes(context.Background(), &operatorservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enums.IndexedValueType{"OperationType": enums.INDEXED_VALUE_TYPE_KEYWORD},
+		SearchAttributes: map[string]enums.IndexedValueType{OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
 	})
 	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
 		return nil, err
@@ -60,5 +64,4 @@ func (w *Worker) Start() error {
 // Stop stops the worker and closes the client
 func (w *Worker) Stop() {
 	w.worker.Stop()
-	w.temporal.Close()
 }
