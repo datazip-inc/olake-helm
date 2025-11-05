@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	ExecuteActivity             = "ExecuteActivity"
-	ExecuteSyncActivity         = "ExecuteSyncActivity"
-	ExecuteSyncCleanupActivity  = "SyncCleanupActivity"
-	ExecuteClearCleanupActivity = "ClearCleanupActivity"
+	ExecuteActivity      = "ExecuteActivity"
+	SyncActivity         = "SyncActivity"
+	SyncCleanupActivity  = "SyncCleanupActivity"
+	ClearCleanupActivity = "ClearCleanupActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -69,11 +69,9 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	var activity, cleanupActivity string
 	switch req.Command {
 	case types.Sync:
-		activity = ExecuteSyncActivity
-		cleanupActivity = ExecuteSyncCleanupActivity
+		activity, cleanupActivity = SyncActivity, SyncCleanupActivity
 	case types.ClearDestination:
-		activity = ExecuteActivity
-		cleanupActivity = ExecuteClearCleanupActivity
+		activity, cleanupActivity = ExecuteActivity, ClearCleanupActivity
 	default:
 		return nil, fmt.Errorf("invalid command: %s", req.Command)
 	}
