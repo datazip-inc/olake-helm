@@ -28,14 +28,17 @@ data:
   # Worker Configuration
   MAX_CONCURRENT_ACTIVITIES: {{ .Values.olakeWorker.config.worker.maxConcurrentActivities | quote }}
   MAX_CONCURRENT_WORKFLOWS: {{ .Values.olakeWorker.config.worker.maxConcurrentWorkflows | quote }}
-  
+
+
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}
   LOG_FORMAT: {{ .Values.olakeWorker.config.logging.format | quote }}
   
   # Runtime Configuration
   RUN_MODE: {{ .Values.olakeWorker.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "staging" }}
-  
+
+  # API Callback
+  OLAKE_CALLBACK_URL: "http://olake-ui.{{ include "olake.namespace" . }}.svc.cluster.local:8000/internal/worker/callback"
   # =================================================================
   # JOB MAPPING CONFIGURATION
   # =================================================================
