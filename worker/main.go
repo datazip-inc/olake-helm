@@ -60,6 +60,7 @@ func main() {
 	worker := temporal.NewWorker(tClient, exec, db)
 
 	// start health server for kubernetes environment
+	// TODO: add health check for docker environment as well
 	if utils.GetExecutorEnvironment() == string(types.Kubernetes) {
 		healthServer := temporal.NewHealthServer(worker, db)
 		go func() {

@@ -30,7 +30,7 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 
 	var jobData types.JobData
 	if err := rows.Scan(&jobData.Streams, &jobData.State, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver); err != nil {
-		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
+		return types.JobData{}, fmt.Errorf("failed to scan job data: %s", err)
 	}
 	return jobData, nil
 }
@@ -48,7 +48,7 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 
 	_, err := db.client.ExecContext(cctx, query, state, jobId)
 	if err != nil {
-		return fmt.Errorf("failed to update job state: %w", err)
+		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
 	logger.Infof("successfully updated job %d state", jobId)

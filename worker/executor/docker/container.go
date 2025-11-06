@@ -149,7 +149,7 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 func (d *DockerExecutor) startContainer(ctx context.Context, containerID string) error {
 	err := d.client.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil && !errdefs.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to start container %s: %w", containerID, err)
+		return fmt.Errorf("failed to start container %s: %s", containerID, err)
 	}
 	logger.Debugf("container %s started", containerID)
 	return nil
@@ -186,7 +186,7 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 					logger.Info("Goroutine failed due to context cancellation", "dockerError", err)
 					return ctx.Err() // Return cancellation error, not docker error
 				}
-				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+				return fmt.Errorf("error waiting for container %s: %s", containerID, err)
 			}
 			return nil
 

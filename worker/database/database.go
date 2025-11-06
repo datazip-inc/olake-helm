@@ -23,11 +23,11 @@ func Init() (*DB, error) {
 
 	conn, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %s", err)
 	}
 
 	if err := conn.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, fmt.Errorf("failed to ping database: %s", err)
 	}
 
 	if maxOpen := viper.GetInt(constants.EnvMaxOpenConnections); maxOpen > 0 {
