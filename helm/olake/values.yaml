@@ -258,8 +258,7 @@ olakeWorker:
         discover: 2h
         test: 2h
         sync: 700h
-        spec: 5m
-    
+
     # -- Logging configuration
     logging:
       level: info
@@ -278,10 +277,6 @@ nfsServer:
   #
   # CLOUD PROVIDER GUIDES FOR RWX STORAGE:
   #
-  # When disabled, you must provide an existing ReadWriteMany (RWX) supported StorageClass
-  # 
-  # CLOUD PROVIDER GUIDES FOR RWX STORAGECLASS:
-  # 
   # AWS EFS: Use the Amazon EFS CSI driver with 'efs.csi.aws.com' provisioner
   # See: https://github.com/kubernetes-sigs/aws-efs-csi-driver
   #
@@ -291,20 +286,11 @@ nfsServer:
   # GCP Filestore: Use Google Cloud Filestore CSI driver with 'filestore.csi.storage.gke.io' provisioner
   # See: https://cloud.google.com/filestore/docs/csi-driver
   external:
-    # -- Name for the external PVC
-    # If not provided, defaults to "olake-shared-storage"
-    # Use this to reference an existing PVC or customize the name
+    # -- The name of the PersistentVolumeClaim for the external RWX storage
+    # Example: "efs-pvc" or "azure-files-pvc" or "gcp-filestore-pvc"
     name: ""
 
 
-    # -- StorageClass for dynamic RWX PVC creation
-    # Required when nfsServer.enabled is false
-    # Examples: "efs-sc", "azurefile", "filestore-csi", "longhorn", "rook-cephfs"
-    storageClass: ""
-
-    # -- Size for the dynamically created external PVC
-    size: "20Gi"
-  
   # -- Pod scheduling constraints
   nodeSelector: {}
 
@@ -383,36 +369,6 @@ temporal:
 
 # PostgreSQL is used as the backend database for Temporal and OLake
 postgresql:
-  # -- Enable internal PostgreSQL deployment
-  # Set to false to use an external PostgreSQL database
-  enabled: true
-
-  # -- External PostgreSQL configuration (used when enabled: false)
-  # Provide Kubernetes secret containing database credentials
-  external:
-    # -- Name of the Kubernetes secret containing external database credentials
-    # The secret must contain keys: host, port, database, username, password
-    # Example secret creation:
-    #   kubectl create secret generic my-postgres-secret \
-    #     --from-literal=host=my-postgres.example.com \
-    #     --from-literal=port=5432 \
-    #     --from-literal=olake_database=olake \
-    #     --from-literal=temporal_database=temporal \
-    #     --from-literal=username=olake_user \
-    #     --from-literal=password=my_secure_password \
-    #     --from-literal=ssl_mode=disable
-    existingSecret: ""
-
-    # -- Map the keys from existing secret to the required fields
-    secretKeys:
-      host:               "host"
-      port:               "port"
-      olake_database:     "olake_database"
-      temporal_database:  "temporal_database"
-      username:           "username"
-      password:           "password"
-      ssl_mode:           "ssl_mode"
-
   # -- PostgreSQL image configuration
   image:
     repository: postgres
