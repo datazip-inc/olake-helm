@@ -1,6 +1,7 @@
 ### Helm ###
 # Chart dependencies
 **/charts/*.tgz
+**/olake/Chart.lock
 
 # CMake
 cmake-build-*/
@@ -30,3 +31,6 @@ Icon
 temp/
 .vscode
 .idea
+
+# Ignore DevSpace cache and log folder
+.devspace/

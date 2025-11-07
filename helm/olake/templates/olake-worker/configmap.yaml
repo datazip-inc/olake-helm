@@ -10,18 +10,13 @@ metadata:
 data:
   # Temporal Configuration
   TEMPORAL_ADDRESS: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
-  TEMPORAL_TASK_QUEUE: {{ .Values.olakeWorker.env.TEMPORAL_TASK_QUEUE | default "OLAKE_K8S_TASK_QUEUE" | quote }}
-  
-  # Database Configuration
-  DB_HOST: "postgresql.{{ include "olake.namespace" . }}.svc.cluster.local"
-  DB_PORT: "5432"
-  DB_NAME: "postgres"
-  DB_SSLMODE: "disable"
+  TEMPORAL_TASK_QUEUE: {{ .Values.olakeWorker.env.TEMPORAL_TASK_QUEUE | default "OLAKE_DOCKER_TASK_QUEUE" }}
   
   # Timeout Configuration
   TIMEOUT_ACTIVITY_DISCOVER: {{ .Values.olakeWorker.config.timeouts.activity.discover | quote }}
   TIMEOUT_ACTIVITY_TEST: {{ .Values.olakeWorker.config.timeouts.activity.test | quote }}
   TIMEOUT_ACTIVITY_SYNC: {{ .Values.olakeWorker.config.timeouts.activity.sync | quote }}
+  TIMEOUT_ACTIVITY_SPEC: {{ .Values.olakeWorker.config.timeouts.activity.spec | quote }}
   
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
@@ -39,7 +34,7 @@ data:
   LOG_FORMAT: {{ .Values.olakeWorker.config.logging.format | quote }}
   
   # Runtime Configuration
-  RUN_MODE: {{ .Values.olakeWorker.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "staging" | quote }}
+  RUN_MODE: {{ .Values.olakeWorker.env.RUN_MODE | default .Values.global.env.RUN_MODE | default "staging" }}
   
   # =================================================================
   # JOB MAPPING CONFIGURATION

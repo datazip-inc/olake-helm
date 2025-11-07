@@ -2,30 +2,38 @@ package pods
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/logger"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/shared"
-	"github.com/datazip-inc/olake-ui/olake-workers/k8s/utils/k8s"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/logger"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/shared"
+	"github.com/datazip-inc/olake-helm/olake-workers/k8s/utils/k8s"
 )
+
+// ErrPodFailed is returned when a pod fails due to non-retryable application errors.
+// Infrastructure failures (evictions, image pull errors, etc.) are NOT wrapped with this error.
+var ErrPodFailed = errors.New("pod execution failed")
 
 // PodActivityRequest defines a request for executing a pod activity
 // This struct encapsulates all the information needed to execute a Temporal activity
 // as a Kubernetes pod, bridging the gap between Temporal's activity model and K8s execution.
 type PodActivityRequest struct {
-	WorkflowID    string             // Unique identifier for the Temporal workflow instance
-	JobID         int                // Database job ID for labeling and resource mapping
-	Operation     shared.Command     // Type of operation (sync, discover, check) - affects result retrieval
-	ConnectorType string             // Source connector type (mysql, postgres, etc.) for labeling
-	Image         string             // Full Docker image name for the connector container
-	Args          []string           // Command-line arguments passed to the connector
-	Configs       []shared.JobConfig // Configuration files to mount into the pod
-	Timeout       time.Duration      // Maximum execution time before pod is considered failed
+	WorkflowID    string                                            // Unique identifier for the Temporal workflow instance
+	JobID         int                                               // Database job ID for labeling and resource mapping
+	Operation     shared.Command                                    // Type of operation (sync, discover, check) - affects result retrieval
+	ConnectorType string                                            // Source connector type (mysql, postgres, etc.) for labeling
+	Image         string                                            // Full Docker image name for the connector container
+	Args          []string                                          // Command-line arguments passed to the connector
+	Configs       []shared.JobConfig                                // Configuration files to mount into the pod
+	Timeout       time.Duration                                     // Maximum execution time before pod is considered failed
+	HeartbeatFunc func(ctx context.Context, details ...interface{}) // Function to record heartbeats for cancellation detection
 }
 
 // PodSpec defines the specification for creating a Kubernetes Pod
@@ -86,19 +94,19 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 
 			// Annotations store metadata that doesn't affect pod selection/scheduling
 			Annotations: map[string]string{
-				"olake.io/created-by-pod": fmt.Sprintf("olake.io/olake-workers/%s", k.config.Worker.WorkerIdentity), // Which worker pod created this
-				"olake.io/created-at":     time.Now().Format(time.RFC3339),                                          // Creation timestamp
-				"olake.io/workflow-id":    spec.OriginalWorkflowID,                                                  // Original unsanitized workflow ID
-				"olake.io/operation-type": string(spec.Operation),                                                   // Operation type for reference
-				"olake.io/connector-type": spec.ConnectorType,                                                       // Connector type for reference
-				"olake.io/job-id":         strconv.Itoa(spec.JobID),                                                 // Job ID for reference
+				"olake.io/created-by-pod": k.config.Worker.WorkerIdentity,  // Which worker pod created this
+				"olake.io/created-at":     time.Now().Format(time.RFC3339), // Creation timestamp
+				"olake.io/workflow-id":    spec.OriginalWorkflowID,         // Original unsanitized workflow ID
+				"olake.io/operation-type": string(spec.Operation),          // Operation type for reference
+				"olake.io/connector-type": spec.ConnectorType,              // Connector type for reference
+				"olake.io/job-id":         strconv.Itoa(spec.JobID),        // Job ID for reference
 			},
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			NodeSelector:  k.getNodeSelectorForJob(spec.JobID, spec.Operation),
 			Tolerations:   []corev1.Toleration{}, // No tolerations supported yet
-			Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
+			// Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
 			Containers: []corev1.Container{
 				{
 					Name:    "connector",
@@ -128,6 +136,10 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 							Name:  "OLAKE_SECRET_KEY",
 							Value: k.config.Kubernetes.OLakeSecretKey,
 						},
+						{
+							Name:  "TELEMETRY_DISABLED",
+							Value: k.config.TelemetryConfig.Disabled,
+						},
 					},
 				},
 			},
@@ -153,7 +165,14 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 	logger.Infof("Creating Pod %s with image %s", spec.Name, spec.Image)
 	result, err := k.clientset.CoreV1().Pods(k.namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("Failed to create Pod %s: %v", spec.Name, err)
+		// IMPORTANT: This is the resumption point for activity retries after worker death.
+		// When a worker dies mid-activity, Temporal retries the activity on a new worker.
+		// Since pod names are deterministic (derived from WorkflowID), the retry attempt
+		// will try to create the same pod that the previous worker already created.
+		// Kubernetes returns AlreadyExists error, which we handle in ExecutePodActivity
+		// by resuming polling on the existing pod instead of failing the activity.
+		// This error is expected during resumption and will be caught upstream.
+		logger.Errorf("Failed to create Pod: %v", err)
 		return nil, err
 	}
 
@@ -162,13 +181,21 @@ func (k *K8sPodManager) CreatePod(ctx context.Context, spec *PodSpec, configs []
 }
 
 // WaitForPodCompletion waits for a Pod to complete and returns the result
-func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, operation shared.Command, workflowID string) (map[string]interface{}, error) {
+func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, operation shared.Command, workflowID string, heartbeatFunc func(context.Context, ...interface{})) (map[string]interface{}, error) {
 	logger.Debugf("Waiting for Pod %s to complete (timeout: %v)", podName, timeout)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
+		// Record heartbeat to enable cancellation detection if heartbeat function is provided
+		if heartbeatFunc != nil {
+			heartbeatFunc(ctx, fmt.Sprintf("Waiting for pod %s (status check)", podName))
+		}
+
 		pod, err := k.clientset.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, fmt.Errorf("%w: pod %s was not found", ErrPodFailed, podName)
+			}
 			return nil, fmt.Errorf("failed to get pod status: %v", err)
 		}
 
@@ -180,12 +207,38 @@ func (k *K8sPodManager) WaitForPodCompletion(ctx context.Context, podName string
 
 		// Check if pod failed
 		if pod.Status.Phase == corev1.PodFailed {
-			logger.Errorf("Pod %s failed", podName)
-			return nil, fmt.Errorf("pod %s failed with status: %s", podName, pod.Status.Phase)
+			// Check if this is a retryable infrastructure failure
+			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
+			if slices.Contains(retryableReasons, pod.Status.Reason) {
+				logger.Warnf("Pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
+				continue
+			}
+
+			// Common exit codes:
+			// - Exit 0: Success
+			// - Exit 1: General application error
+			// - Exit 2: Misuse of shell command or manual termination
+			// - Exit 137: SIGKILL (OOMKilled or manual kill)
+			// - Exit 143: SIGTERM (graceful termination)
+			var containerInfo string
+			if len(pod.Status.ContainerStatuses) > 0 {
+				status := pod.Status.ContainerStatuses[0]
+				if status.State.Terminated != nil {
+					term := status.State.Terminated
+					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
+				}
+			}
+			return nil, fmt.Errorf("%w: pod %s failed (%s)", ErrPodFailed, podName, containerInfo)
 		}
 
-		// Wait before checking again
-		time.Sleep(5 * time.Second)
+		// Wait before checking again, with responsive cancellation
+		select {
+		case <-time.After(5 * time.Second):
+			// Continue to next iteration
+		case <-ctx.Done():
+			logger.Warnf("Cancellation requested for pod %s", podName)
+			return nil, ctx.Err()
+		}
 	}
 
 	logger.Errorf("Pod %s timed out after %v", podName, timeout)
@@ -199,7 +252,12 @@ func (k *K8sPodManager) CleanupPod(ctx context.Context, podName string) error {
 	// Delete the pod only
 	err := k.clientset.CoreV1().Pods(k.namespace).Delete(ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to delete pod %s in namespace %s: %v", podName, k.namespace, err)
+		// Treat "not found" as success - cleanup is idempotent
+		if apierrors.IsNotFound(err) {
+			logger.Infof("Pod %s already deleted in namespace %s - cleanup complete", podName, k.namespace)
+			return nil
+		}
+		return fmt.Errorf("failed to delete pod %s in namespace %s: %w", podName, k.namespace, err)
 	}
 
 	logger.Debugf("Successfully cleaned up Pod %s in namespace %s",
@@ -216,7 +274,8 @@ func (k *K8sPodManager) getNodeSelectorForJob(jobID int, operation shared.Comman
 		return make(map[string]string)
 	}
 
-	if mapping, exists := k.config.Kubernetes.JobMapping[jobID]; exists {
+	// Use live mapping from ConfigMapWatcher
+	if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		logger.Infof("Found node mapping for JobID %d: %v", jobID, mapping)
 		return mapping
 	}
@@ -224,131 +283,40 @@ func (k *K8sPodManager) getNodeSelectorForJob(jobID int, operation shared.Comman
 	return make(map[string]string)
 }
 
-// buildNodeAffinity creates node affinity from JobID mapping configuration
-// Converts map[string]string to preferredDuringScheduling node affinity with proper edge case handling
-func (k *K8sPodManager) buildNodeAffinity(nodeSelectorMap map[string]string) (*corev1.NodeAffinity, error) {
-	if len(nodeSelectorMap) == 0 {
-		return nil, nil // No mapping, no node affinity
-	}
-
-	var matchExpressions []corev1.NodeSelectorRequirement
-	for key, value := range nodeSelectorMap {
-		// Edge case: Ensure the key and value from config are not empty
-		if key == "" || value == "" {
-			logger.Warnf("Skipping invalid node mapping entry with empty key or value: key=%s, value=%s", key, value)
-			continue
-		}
-
-		// The 'Values' field for the 'In' operator must be a slice of strings
-		matchExpressions = append(matchExpressions, corev1.NodeSelectorRequirement{
-			Key:      key,
-			Operator: corev1.NodeSelectorOpIn,
-			Values:   []string{value},
-		})
-	}
-
-	// If all entries were invalid, there's nothing to do
-	if len(matchExpressions) == 0 {
-		return nil, fmt.Errorf("all node mapping entries were invalid")
-	}
-
-	return &corev1.NodeAffinity{
-		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
-			{
-				Weight: 100, // High preference for JobID-mapped nodes
-				Preference: corev1.NodeSelectorTerm{
-					MatchExpressions: matchExpressions,
-				},
-			},
-		},
-	}, nil
-}
-
-// buildAffinityForJob builds affinity rules for the given jobID and operation type
-// Implements operation-based anti-affinity and JobID-based node affinity
-func (k *K8sPodManager) buildAffinityForJob(jobID int, operation shared.Command) *corev1.Affinity {
-	// Skip affinity rules for jobID 0 (test/discover operations)
-	if jobID == 0 {
-		return nil
-	}
-
-	var affinity *corev1.Affinity
-
-	// Apply anti-affinity rules for sync operations to spread pods across nodes
-	if operation == shared.Sync {
-		logger.Debugf("Applying sync operation anti-affinity rules for jobID %d", jobID)
-		affinity = &corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-					{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"olake.io/operation-type": "sync",
-							},
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		}
-	} else {
-		logger.Debugf("No anti-affinity rules applied for %s operation (jobID %d)", operation, jobID)
-	}
-
-	// Add JobID-based node affinity using jobMapping configuration
-	nodeMapping := k.getNodeSelectorForJob(jobID, operation)
-	if len(nodeMapping) > 0 {
-		nodeAffinity, err := k.buildNodeAffinity(nodeMapping)
-		if err != nil {
-			logger.Errorf("Failed to build node affinity for JobID %d: %v", jobID, err)
-		} else if nodeAffinity != nil {
-			if affinity == nil {
-				affinity = &corev1.Affinity{}
-			}
-			affinity.NodeAffinity = nodeAffinity
-			logger.Infof("Applied node affinity for JobID %d: preferring nodes with %v", jobID, nodeMapping)
-		}
-	} else {
-		logger.Debugf("No JobID-based node affinity applied for JobID %d (no mapping found)", jobID)
-	}
-
-	return affinity
-}
-
 // ExecutePodActivity executes a pod activity with common workflow
 // This is the main entry point for executing Temporal activities as Kubernetes pods.
 // It orchestrates the complete lifecycle: pod creation, execution monitoring, result retrieval, and cleanup.
+// Supports activity resumption after worker death - pod name is deterministic from WorkflowID.
 func (k *K8sPodManager) ExecutePodActivity(ctx context.Context, req PodActivityRequest) (map[string]interface{}, error) {
-	// Transform the high-level activity request into a concrete Kubernetes pod specification
-	// This bridges the gap between Temporal's activity model and Kubernetes execution
+	podName := k8s.SanitizeName(req.WorkflowID)
+
+	// Create pod - idempotent operation that handles AlreadyExists gracefully
 	podSpec := &PodSpec{
-		Name:               k8s.SanitizeName(req.WorkflowID), // Safe Kubernetes pod name
-		OriginalWorkflowID: req.WorkflowID,                   // Original ID for directory naming
-		JobID:              req.JobID,                        // Database job reference
-		Image:              req.Image,                        // Connector container image
-		Command:            []string{},                       // Use image default entrypoint
-		Args:               req.Args,                         // Connector-specific arguments
-		Operation:          req.Operation,                    // Operation type (affects result retrieval)
-		ConnectorType:      req.ConnectorType,                // Connector type for labeling
+		Name:               podName,
+		OriginalWorkflowID: req.WorkflowID,
+		JobID:              req.JobID,
+		Image:              req.Image,
+		Command:            []string{},
+		Args:               req.Args,
+		Operation:          req.Operation,
+		ConnectorType:      req.ConnectorType,
 	}
 
-	// Create the Kubernetes pod with all necessary configuration and volume mounts
-	pod, err := k.CreatePod(ctx, podSpec, req.Configs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create pod: %v", err)
-	}
-
-	// Ensure pod cleanup happens regardless of success or failure
-	// This prevents resource leaks and maintains cluster hygiene
-	defer func() {
-		if err := k.CleanupPod(ctx, pod.Name); err != nil {
-			logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
-				pod.Name, req.Operation, req.WorkflowID, err)
-			// Note: We continue execution despite cleanup failure as the core operation may have succeeded
-			// and cleanup failures shouldn't invalidate successful work results
+	if _, err := k.CreatePod(ctx, podSpec, req.Configs); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("failed to create pod: %v", err)
 		}
-	}()
+		logger.Infof("Pod already exists, resuming polling for Pod: %s", podName)
+	}
 
-	// Wait for pod completion
-	return k.WaitForPodCompletion(ctx, pod.Name, req.Timeout, req.Operation, req.WorkflowID)
+	if req.Operation != shared.Sync {
+		defer func() {
+			if err := k.CleanupPod(ctx, podName); err != nil {
+				logger.Errorf("Failed to cleanup pod %s for %s operation (workflow: %s): %v",
+					podName, req.Operation, req.WorkflowID, err)
+			}
+		}()
+	}
+
+	return k.WaitForPodCompletion(ctx, podName, req.Timeout, req.Operation, req.WorkflowID, req.HeartbeatFunc)
 }
