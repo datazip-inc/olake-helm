@@ -46,7 +46,6 @@ func (t *Temporal) Close() {
 		t.client.Close()
 	}
 }
-
 func (t *Temporal) GetClient() client.Client {
 	return t.client
 }

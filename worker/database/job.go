@@ -48,7 +48,7 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 
 	_, err := db.client.ExecContext(cctx, query, state, jobId)
 	if err != nil {
-		return fmt.Errorf("failed to update job state: %w", err)
+		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
 	logger.Infof("successfully updated job %d state", jobId)

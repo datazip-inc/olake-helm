@@ -32,7 +32,7 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 	case map[string]interface{}:
 		var tmp types.ExecutionRequest
 		if err := Unmarshal(v, &tmp); err != nil {
-			return nil, fmt.Errorf("invalid request format: %w", err)
+			return nil, fmt.Errorf("invalid request format: %s", err)
 		}
 		req = &tmp
 

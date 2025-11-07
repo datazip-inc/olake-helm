@@ -63,6 +63,7 @@ func main() {
 	}
 
 	// start health server for kubernetes environment
+	// TODO: add health check for docker environment as well
 	if utils.GetExecutorEnvironment() == string(types.Kubernetes) {
 		healthServer := temporal.NewHealthServer(worker, db)
 		go func() {

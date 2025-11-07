@@ -145,7 +145,7 @@ func GetHostOutputDir(outputDir string) string {
 // inside the provided working directory
 //
 // workdir/logs - present -> workflow has started already
-// workdir/logs - not present -> workflow is running for the furst time
+// workdir/logs - not present -> workflow is running for the first time
 func WorkflowAlreadyLaunched(workdir string) bool {
 	launchedMarker := filepath.Join(workdir, "logs")
 	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
