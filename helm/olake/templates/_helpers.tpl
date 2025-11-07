@@ -122,9 +122,9 @@ Shared storage PVC name
 */}}
 {{- define "olake.sharedStoragePVC" -}}
 {{- if .Values.nfsServer.enabled -}}
-{{ include "olake.fullname" . }}-shared-storage
+olake-shared-storage
 {{- else -}}
-{{ .Values.nfsServer.external.name }}
+{{- .Values.nfsServer.external.name | default "olake-shared-storage" -}}
 {{- end -}}
 {{- end -}}
 
@@ -146,3 +146,14 @@ Reserves 2Gi for filesystem overhead
 {{- $adjustedSize := sub $sizeValue 2 -}}
 {{- printf "%d%s" $adjustedSize $sizeUnit -}}
 {{- end -}}
+
+{{/*
+Return the PostgreSQL secret name
+*/}}
+{{- define "olake.postgresql.secretName" -}}
+{{- if .Values.postgresql.enabled }}
+{{- printf "%s-postgresql-secret" (include "olake.fullname" .) }}
+{{- else }}
+{{- .Values.postgresql.external.existingSecret }}
+{{- end }}
+{{- end }}

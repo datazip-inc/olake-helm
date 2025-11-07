@@ -63,13 +63,23 @@ Perform the login with the default credentials: `admin` / `password`.
 
 ```bash
 # Upgrade to latest version
-helm upgrade olake ./helm/olake
+helm upgrade olake olake/olake
 
 # Upgrade with new values
-helm upgrade olake ./helm/olake -f new-values.yaml
+helm upgrade olake olake/olake -f new-values.yaml
 ```
 
 ## Configuring the Helm Chart
+
+### Updating OLake UI Version
+
+Pull the latest images and restart the deployments without downtime:
+
+```bash
+# Restart OLake components
+kubectl rollout restart deployment/olake-ui
+kubectl rollout restart deployment/olake-workers
+```
 
 ### Initial User Setup
 
@@ -140,7 +150,6 @@ global:
 ```
 
 **Note on Default Behavior:** 
-- A **rollout restart** of the olake-workers deployment is necessary after updating this map and running helm upgrade.
 - For any JobID that is not specified in the jobMapping configuration, the corresponding job's pod will be scheduled by the standard Kubernetes scheduler, which places it on any available node in the cluster. 
 
 ### Cloud IAM Integration
@@ -189,19 +198,56 @@ global:
 
 The OLake application components (UI, Worker, and Activity Pods) require a shared ReadWriteMany (RWX) volume for **coordinating pipeline state and metadata**.
 
-For production, a robust, highly-available RWX-capable storage solution such as [AWS EFS](https://github.com/kubernetes-sigs/aws-efs-csi-driver), [GKE Filestore](https://cloud.google.com/filestore/docs/csi-driver), or [Azure Files](https://docs.microsoft.com/en-us/azure/aks/azure-files-csi) must be used. This is achieved by disabling the built-in NFS server and providing an existing PersistentVolumeClaim (PVC) that is backed by a managed storage service. An example for using external PVC is given below:
+For production, a robust, highly-available RWX-capable storage solution such as [AWS EFS](https://github.com/kubernetes-sigs/aws-efs-csi-driver), [GKE Filestore](https://cloud.google.com/filestore/docs/csi-driver), or [Azure Files](https://docs.microsoft.com/en-us/azure/aks/azure-files-csi) must be used. This is achieved by disabling the built-in NFS server and providing an existing Kubernetes StorageClass that is backed by a managed storage service. An example for using StorageClass given below:
 
 ```yaml
 nfsServer:
   # 1. The development NFS server is disabled
   enabled: false
   
-  # 2. An existing ReadWriteMany PersistentVolumeClaim is specified
+  # 2. An existing ReadWriteMany supported StorageClass is specified
   external:
-    name: "my-rwx-pvc"
+    storageClass: "efs-csi"
 ```
 
 **Note:** For development and quick starts, a simple NFS server is included and enabled by default. This provides an out-of-the-box shared storage solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
+
+### External PostgreSQL Configuration
+
+External PostgreSQL databases can be used instead of the built-in postgresql deployment. It is the primary database for storing job data, configurations, and sync state.
+
+**Requirements:**
+- PostgreSQL 12+ with `btree_gin` extension enabled
+- Both OLake and Temporal databases created on the PostgreSQL instance
+- Network connectivity from Kubernetes cluster to PostgreSQL instance
+
+**1. Create database secret:**
+```bash
+kubectl create secret generic external-postgres-secret \
+  --from-literal=host="postgres-host" \
+  --from-literal=port="5432" \
+  --from-literal=olake_database="olakeDB" \
+  --from-literal=temporal_database="temporalDB" \
+  --from-literal=username="username" \
+  --from-literal=password="password" \
+  --from-literal=ssl_mode="require"
+```
+
+**2. Configure values.yaml:**
+```yaml
+postgresql:
+  enabled: false
+  external:
+    existingSecret: "external-postgres-secret"
+    secretKeys:
+      host:              "host"
+      port:              "port"
+      olake_database:    "olake_database"
+      temporal_database: "temporal_database"
+      username:          "username"
+      password:          "password"
+      ssl_mode:          "ssl_mode"
+```
 
 ## Monitoring and Troubleshooting
 
@@ -259,6 +305,8 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
 
 ## Uninstallation
 
+### Quick Uninstall (Manual)
+
 ```bash
 # Uninstall the release
 helm uninstall olake --namespace olake
@@ -277,6 +325,53 @@ kubectl delete namespace olake
   - `ClusterRoleBinding/olake-nfs-server`
   - `StorageClass/nfs-server`
   - `ServiceAccount/olake-nfs-server`
+
+### Complete Uninstall (Using Script)
+
+For a complete cleanup that removes all resources including those protected by resource policies, use the provided uninstallation script:
+
+```bash
+# Navigate to the chart directory
+cd helm/olake
+
+# Basic uninstall (removes everything)
+./uninstall.sh
+
+# Uninstall with options
+./uninstall.sh --help
+
+# Uninstall but keep PVCs for data preservation
+./uninstall.sh --keep-pvcs
+
+# Uninstall with custom namespace and release name
+./uninstall.sh -n my-namespace -r my-release
+
+# Force delete stuck resources
+./uninstall.sh --force
+
+# Keep namespace after cleanup
+./uninstall.sh --keep-namespace
+```
+
+**Script Options:**
+- `-n, --namespace NAMESPACE`: Namespace where OLake is installed (default: olake)
+- `-r, --release RELEASE`: Helm release name (default: olake)
+- `--force`: Force delete stuck resources without waiting
+- `--keep-pvcs`: Keep PersistentVolumeClaims (useful for data preservation)
+- `--keep-namespace`: Keep the namespace after cleanup
+- `-h, --help`: Show help message
+
+The uninstallation script performs the following cleanup steps:
+1. Uninstalls the Helm release
+2. Removes DevSpace resources (if any)
+3. Deletes remaining pods
+4. Removes NFS Server components (StatefulSet, Service, ServiceAccount)
+5. Deletes PersistentVolumeClaims (unless --keep-pvcs is specified)
+6. Cleans up orphaned PersistentVolumes
+7. Removes NFS StorageClass
+8. Deletes ClusterRole and ClusterRoleBinding
+9. Cleans up any remaining ConfigMaps, Secrets, Services
+10. Deletes the namespace (unless --keep-namespace is specified)
 
 ## Contributing
 
