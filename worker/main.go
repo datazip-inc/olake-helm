@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -20,6 +21,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Initialize env and configs
 	err := config.Init()
 	if err != nil {
@@ -57,7 +61,7 @@ func main() {
 	}
 	defer tClient.Close()
 
-	worker, err := temporal.NewWorker(tClient, exec, db)
+	worker, err := temporal.NewWorker(ctx, tClient, exec, db)
 	if err != nil {
 		logger.Fatalf("failed to create Temporal worker: %s", err)
 	}

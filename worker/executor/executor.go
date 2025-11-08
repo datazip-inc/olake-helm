@@ -78,8 +78,8 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	return &types.ExecutorResponse{Response: out}, nil
 }
 
-// SyncCleanup stops the container/pod and saves the state file in the database
-func (a *AbstractExecutor) SyncCleanup(ctx context.Context, req *types.ExecutionRequest) error {
+// CleanupAndPersistState stops the container/pod and saves the state file in the database
+func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *types.ExecutionRequest) error {
 	if err := a.executor.Cleanup(ctx, req); err != nil {
 		return err
 	}

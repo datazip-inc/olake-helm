@@ -12,19 +12,28 @@ import (
 )
 
 const (
-	ExecuteActivity      = "ExecuteActivity"
-	SyncActivity         = "SyncActivity"
-	SyncCleanupActivity  = "SyncCleanupActivity"
-	ClearCleanupActivity = "ClearCleanupActivity"
+	ExecuteActivity   = "ExecuteActivity"
+	SyncActivity      = "SyncActivity"
+	PostSyncActivity  = "PostSyncActivity"
+	PostClearActivity = "PostClearActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
-var DefaultRetryPolicy = &temporal.RetryPolicy{
-	InitialInterval:    time.Second * 5,
-	BackoffCoefficient: 2.0,
-	MaximumInterval:    time.Minute * 5,
-	MaximumAttempts:    1,
-}
+var (
+	DefaultRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    time.Second * 5,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute * 5,
+		MaximumAttempts:    1,
+	}
+
+	SyncRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    time.Second * 5,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute * 5,
+		MaximumAttempts:    0,
+	}
+)
 
 func ExecuteWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityOptions := workflow.ActivityOptions{
@@ -41,21 +50,27 @@ func ExecuteWorkflow(ctx workflow.Context, req *types.ExecutionRequest) (*types.
 	return result, nil
 }
 
+// RunSyncWorkflow is a Temporal workflow that orchestrates long-running data operations:
+//
+// Supported Commands:
+//   - Sync: Performs data replication from source to destination
+//   - ClearDestination: Clears data from the destination
+//
+// Features:
+//   - Infinite retries (MaximumAttempts: 0) with exponential backoff for transient errors
+//   - Heartbeat monitoring (30s) to detect worker failures
+//   - Graceful cleanup via deferred activity (runs even on cancellation)
+//
+// HeartbeatTimeout: 30 seconds
+// Heartbeats are throttled at timeout * 0.8 = 24s intervals.
+// Faster heartbeats enable quicker cancellation detection and worker failure recovery.
 func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.ExecutorResponse, err error) {
 	workflowLogger := workflow.GetLogger(ctx)
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: constants.DefaultSyncTimeout,
 		HeartbeatTimeout:    30 * time.Second,
 		WaitForCancellation: true,
-
-		// Sync workflows are critical and should not stop on transient errors.
-		// Setting MaximumAttempts to 0 means infinite retries with exponential backoff.
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second * 5,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute * 5,
-			MaximumAttempts:    0,
-		},
+		RetryPolicy:         SyncRetryPolicy,
 	}
 
 	req, err := utils.BuildSyncReqForLegacyOrNew(args)
@@ -69,9 +84,9 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	var activity, cleanupActivity string
 	switch req.Command {
 	case types.Sync:
-		activity, cleanupActivity = SyncActivity, SyncCleanupActivity
+		activity, cleanupActivity = SyncActivity, PostSyncActivity
 	case types.ClearDestination:
-		activity, cleanupActivity = ExecuteActivity, ClearCleanupActivity
+		activity, cleanupActivity = ExecuteActivity, PostClearActivity
 	default:
 		return nil, fmt.Errorf("invalid command: %s", req.Command)
 	}
@@ -81,7 +96,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 		newCtx, _ := workflow.NewDisconnectedContext(ctx)
 		cleanupOtions := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Minute * 15,
-			RetryPolicy:         DefaultRetryPolicy,
+			RetryPolicy:         SyncRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
 		cleanupErr := workflow.ExecuteActivity(newCtx, cleanupActivity, req).Get(newCtx, nil)
@@ -94,7 +109,7 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	}()
 
 	// set search attributes to differentiate between sync and clear operation
-	opTypeKey := temporal.NewSearchAttributeKeyKeyword("OperationType")
+	opTypeKey := temporal.NewSearchAttributeKeyKeyword(constants.OperationTypeKey)
 	if err := workflow.UpsertTypedSearchAttributes(ctx, opTypeKey.ValueSet(string(req.Command))); err != nil {
 		workflowLogger.Error("failed to upsert search attributes", "error", err)
 	}

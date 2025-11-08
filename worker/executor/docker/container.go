@@ -63,13 +63,14 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, error) {
 	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
-		if !errdefs.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to create container: %s", err)
+		if errdefs.IsAlreadyExists(err) || errdefs.IsConflict(err) {
+			logger.Infof("container %s already exists, resuming", containerName)
+			return containerName, nil
 		}
-		// Container already exists, use the name as ID
-		logger.Infof("container %s already exists, resuming", containerName)
-		return containerName, nil
+
+		return "", fmt.Errorf("failed to create container: %s", err)
 	}
+
 	logger.Debugf("created container %s (ID: %s)", containerName, resp.ID)
 	return resp.ID, nil
 }

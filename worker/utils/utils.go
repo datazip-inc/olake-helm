@@ -166,8 +166,8 @@ func GetExecutorEnvironment() string {
 	return string(types.Docker)
 }
 
-// Update the clear-destination request to that of sync
-func UpdateClearRequestToSync(req *types.ExecutionRequest) {
+// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
+func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 	args := []string{
 		"sync",
 		"--config", "/mnt/config/source.json",

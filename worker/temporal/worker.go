@@ -14,10 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const (
-	OperationTypeKey = "OperationType"
-)
-
 // Worker handles Temporal worker functionality
 type Worker struct {
 	worker   worker.Worker
@@ -26,7 +22,7 @@ type Worker struct {
 }
 
 // NewWorker creates a new Temporal worker with the provided client
-func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Worker, error) {
+func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Worker, error) {
 	w := worker.New(t.GetClient(), constants.TaskQueue, worker.Options{})
 
 	// regsiter workflows
@@ -38,12 +34,12 @@ func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Wor
 	activitiesInstance := NewActivity(e, db, t)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.SyncActivity)
-	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
-	w.RegisterActivity(activitiesInstance.ClearCleanupActivity)
+	w.RegisterActivity(activitiesInstance.PostSyncActivity)
+	w.RegisterActivity(activitiesInstance.PostClearActivity)
 
 	// Register search attributes
-	_, err := t.GetClient().OperatorService().AddSearchAttributes(context.Background(), &operatorservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enums.IndexedValueType{OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
+	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
 	})
 	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
 		return nil, err

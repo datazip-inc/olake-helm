@@ -38,9 +38,6 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
-		if req.Command == types.ClearDestination {
-			err = temporal.NewNonRetryableApplicationError(fmt.Sprintf("clear-destination failed: %s", err.Error()), "ExecutionFailed", err)
-		}
 		return nil, err
 	}
 
@@ -95,7 +92,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	return result, nil
 }
 
-func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
+func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID)
 
@@ -104,11 +101,11 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 		return err
 	}
 
-	if req.Command == "" {
+	if req.ConnectorType == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
-	if err := a.executor.SyncCleanup(ctx, req); err != nil {
+	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
@@ -116,16 +113,27 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	return nil
 }
 
-func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
+// CRITICAL: Restore the schedule to its normal sync operation state
+//
+// When clear-destination is triggered, the backend (olake-ui) temporarily:
+// 1. Updates the sync schedule's metadata to run clear-destination instead
+// 2. Pauses the schedule to prevent the next scheduled run during the operation
+//
+// After clear-destination completes (success or failure), we must restore the schedule:
+// 1. Revert metadata back to sync operation
+// 2. Unpause the schedule to resume normal operations
+//
+// Without these steps, the schedule would remain paused and stuck in clear-destination mode,
+// preventing all future sync runs.
+func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
-	if err := a.executor.SyncCleanup(ctx, req); err != nil {
-		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
+	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
+		return err
 	}
 
-	// update the request to that of sync
-	utils.UpdateClearRequestToSync(req)
+	utils.RevertUpdatesInSchedule(req)
 
 	// update the schedule
 	workflowID := fmt.Sprintf("sync-%s-%d", req.ProjectID, req.JobID)
@@ -147,7 +155,7 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.Executio
 	})
 	if err != nil {
 		activityLogger.Error("failed to update schedule action", "error", err)
-		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule update failed", err)
+		return err
 	}
 	activityLogger.Debug("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
@@ -157,9 +165,9 @@ func (a *Activity) ClearCleanupActivity(ctx context.Context, req *types.Executio
 	})
 	if err != nil {
 		activityLogger.Error("failed to unpause schedule", "error", err)
-		return temporal.NewNonRetryableApplicationError(err.Error(), "schedule unpause failed", err)
+		return err
 	}
-	activityLogger.Debug("unpaused schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
+	activityLogger.Debug("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	return nil
 }
