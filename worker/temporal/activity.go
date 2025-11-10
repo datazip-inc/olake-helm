@@ -36,12 +36,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
 	req.HeartbeatFunc = activity.RecordHeartbeat
 
-	result, err := a.executor.Execute(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return a.executor.Execute(ctx, req)
 }
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
