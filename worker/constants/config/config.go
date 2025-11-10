@@ -24,7 +24,7 @@ func Init() error {
 // setDefaults sets default values for configuration
 func setDefaults() {
 	// Temporal defaults
-	viper.SetDefault("TEMPORAL_ADDRESS", "localhost:7233")
+	viper.SetDefault("TEMPORAL_ADDRESS", "temporal:7233")
 
 	// Worker defaults
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)
@@ -54,13 +54,17 @@ func requiredEnvVars() error {
 	// Common required env vars
 	requiredEnv := []string{
 		constants.EnvCallbackURL,
-		constants.EnvDatabaseDatabase,
-		constants.EnvDatabaseHost,
-		constants.EnvDatabasePassword,
-		constants.EnvDatabasePort,
-		constants.EnvDatabaseRunMode,
-		constants.EnvDatabaseSSLMode,
-		constants.EnvDatabaseUser,
+	}
+
+	if viper.IsSet(constants.EnvDatabaseURL) && viper.GetString(constants.EnvDatabaseURL) != "" {
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseURL)
+	} else {
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseDatabase)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseHost)
+		requiredEnv = append(requiredEnv, constants.EnvDatabasePassword)
+		requiredEnv = append(requiredEnv, constants.EnvDatabasePort)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseSSLMode)
+		requiredEnv = append(requiredEnv, constants.EnvDatabaseUser)
 	}
 
 	// k8s required

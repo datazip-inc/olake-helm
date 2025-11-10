@@ -17,6 +17,7 @@ type Server struct {
 	server    *http.Server
 	worker    *Worker
 	startTime time.Time
+	db        *database.DB
 }
 
 type HealthResponse struct {
@@ -25,12 +26,13 @@ type HealthResponse struct {
 	Checks    map[string]string `json:"checks,omitempty"`
 }
 
-func NewHealthServer(worker *Worker) *Server {
+func NewHealthServer(worker *Worker, db *database.DB) *Server {
 	mux := http.NewServeMux()
 
 	hs := &Server{
 		worker:    worker,
 		startTime: time.Now(),
+		db:        db,
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", healthPort),
 			Handler: mux,
@@ -105,7 +107,7 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	// - Updating job progress and results
 	// - Temporal workflow coordination
 	// Without database access, workflows will fail during execution.
-	if database.GetDB().Ping() == nil {
+	if hs.db.Ping() == nil {
 		response.Checks["database"] = "connected"
 	} else {
 		response.Status = "not_ready"

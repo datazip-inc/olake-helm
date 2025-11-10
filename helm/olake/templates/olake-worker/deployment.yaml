@@ -131,24 +131,24 @@ spec:
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeWorker.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
-        {{- $defaultReadinessProbe := dict 
+        {{- $defaultReadinessProbe := dict
           "initialDelaySeconds" 30
           "periodSeconds" 10
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "httpGet" (dict "path" "/ready" "port" 8090)
+          "exec" (dict "command" (list "/bin/sh" "-c" "timeout 3 sh -c 'echo ok > /data/olake-jobs/.healthcheck' && wget -q --spider --timeout=2 http://localhost:8090/ready"))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeWorker.readinessProbe | default dict) }}
         readinessProbe:
           {{- toYaml $readinessProbe | nindent 10 }}
-        {{- $defaultLivenessProbe := dict 
+        {{- $defaultLivenessProbe := dict
           "initialDelaySeconds" 60
           "periodSeconds" 30
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "httpGet" (dict "path" "/health" "port" 8090)
+          "exec" (dict "command" (list "/bin/sh" "-c" "timeout 3 sh -c 'echo ok > /data/olake-jobs/.healthcheck' && wget -q --spider --timeout=2 http://localhost:8090/health"))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeWorker.livenessProbe | default dict) }}
         livenessProbe:

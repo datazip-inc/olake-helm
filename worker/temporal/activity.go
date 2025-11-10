@@ -17,10 +17,11 @@ import (
 
 type Activity struct {
 	executor *executor.AbstractExecutor
+	db       *database.DB
 }
 
-func NewActivity(a *executor.AbstractExecutor) *Activity {
-	return &Activity{executor: a}
+func NewActivity(a *executor.AbstractExecutor, db *database.DB) *Activity {
+	return &Activity{executor: a, db: db}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -36,27 +37,28 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	return a.executor.Execute(ctx, req)
 }
 
-func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
+func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
-	// Update the configs with latest details from the server
-	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
+	// Record heartbeat before execution
+	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
+	req.HeartbeatFunc = activity.RecordHeartbeat
+
+	// Update the configs with latest
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
 
+	// mapping request type of deprecated workflow to new request type
 	if req.Command == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
+	// update the configs with latest job details
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
-
-	// Record heartbeat before execution
-	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
-
-	req.HeartbeatFunc = activity.RecordHeartbeat
 
 	// Send telemetry event - "sync started"
 	telemetry.SendEvent(req.JobID, req.WorkflowID, "started")
@@ -65,11 +67,10 @@ func (a *Activity) ExecuteSyncActivity(ctx context.Context, req *types.Execution
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
-			activityLogger.Info("sync activity cancelled", "jobID", req.JobID, "workflowID", req.WorkflowID)
-			return nil, ctx.Err()
+			activityLogger.Info("sync activity cancelled", "jobID", req.JobID)
+			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
-		// execution failed
 		if errors.Is(err, constants.ErrExecutionFailed) {
 			telemetry.SendEvent(req.JobID, req.WorkflowID, "failed")
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
@@ -87,7 +88,7 @@ func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.Execution
 	activityLogger := activity.GetLogger(ctx)
 	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
 
-	jobDetails, err := database.GetDB().GetJobData(ctx, req.JobID)
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
 		return err
 	}

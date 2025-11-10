@@ -25,7 +25,7 @@ type ConfigMapWatcher struct {
 
 	// Thread-safe job mapping storage
 	mu         sync.RWMutex
-	jobMapping map[int]map[string]string
+	jobMapping map[int]map[string]string // TODO: use sync.Map
 
 	ctx    context.Context
 	cancel context.CancelFunc

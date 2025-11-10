@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
 )
 
@@ -21,16 +23,7 @@ func Ternary(condition bool, trueValue, falseValue interface{}) interface{} {
 	return falseValue
 }
 
-// GetValueOrDefault gets the value of a key in a map or returns a default value if the key is not found
-func GetValueOrDefault(m map[string]interface{}, key string, defaultValue string) string {
-	if value, ok := m[key]; ok {
-		return value.(string)
-	}
-	return defaultValue
-}
-
 // Unmarshal serializes and deserializes any from into the object
-// return error if occurred
 func Unmarshal(from, object any) error {
 	b, err := json.Marshal(from)
 	if err != nil {
@@ -42,6 +35,27 @@ func Unmarshal(from, object any) error {
 	}
 
 	return nil
+}
+
+// RetryWithBackoff retries a function with exponential backoff
+func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duration) error {
+	delay := initialDelay
+	var errMsg error
+
+	for retry := 0; retry < maxRetries; retry++ {
+		if err := fn(); err != nil {
+			errMsg = err
+			if retry < maxRetries-1 {
+				logger.Warnf("Retry attempt %d/%d failed: %s. Retrying in %v...", retry+1, maxRetries, err, delay)
+				time.Sleep(delay)
+				delay *= 2
+				continue
+			}
+		} else {
+			return nil
+		}
+	}
+	return fmt.Errorf("failed after %d retries: %s", maxRetries, errMsg)
 }
 
 func GetDockerImageName(sourceType, version string) string {
@@ -77,17 +91,12 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func UpdateConfigWithJobDetails(details types.JobData, req *types.ExecutionRequest) {
-	jobDetails := map[string]interface{}{
-		"streams":     details.Streams,
-		"state":       details.State,
-		"source":      details.Source,
-		"destination": details.Destination,
-	}
-
-	for idx, config := range req.Configs {
-		configName := strings.Split(config.Name, ".")[0]
-		req.Configs[idx].Data = GetValueOrDefault(jobDetails, configName, config.Data)
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
+	req.Configs = []types.JobConfig{
+		{Name: "source.json", Data: jobData.Source},
+		{Name: "destination.json", Data: jobData.Destination},
+		{Name: "streams.json", Data: jobData.Streams},
+		{Name: "state.json", Data: jobData.State},
 	}
 }
 
@@ -135,7 +144,7 @@ func GetHostOutputDir(outputDir string) string {
 // inside the provided working directory
 //
 // workdir/logs - present -> workflow has started already
-// workdir/logs - not present -> workflow is running for the furst time
+// workdir/logs - not present -> workflow is running for the first time
 func WorkflowAlreadyLaunched(workdir string) bool {
 	launchedMarker := filepath.Join(workdir, "logs")
 	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {

@@ -4,14 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 type DB struct {
@@ -19,33 +17,17 @@ type DB struct {
 	tables map[string]string
 }
 
-var (
-	db   *DB
-	once sync.Once
-)
-
-// GetDB returns a singleton database connection instance.
-func GetDB() *DB {
-	once.Do(func() {
-		var err error
-		db, err = newDatabase()
-		if err != nil {
-			logger.Fatalf("failed to create database: %s", err)
-		}
-	})
-	return db
-}
-
-func newDatabase() (*DB, error) {
+// creates a database connection instance.
+func Init() (*DB, error) {
 	connStr := buildConnectionString()
 
 	conn, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %s", err)
 	}
 
 	if err := conn.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, fmt.Errorf("failed to ping database: %s", err)
 	}
 
 	if maxOpen := viper.GetInt(constants.EnvMaxOpenConnections); maxOpen > 0 {
@@ -65,10 +47,7 @@ func newDatabase() (*DB, error) {
 		"dest":   fmt.Sprintf("olake-%s-destination", runMode),
 	}
 
-	return &DB{
-		client: conn,
-		tables: tables,
-	}, nil
+	return &DB{client: conn, tables: tables}, nil
 }
 
 // buildConnectionString safely constructs the Postgres connection string.

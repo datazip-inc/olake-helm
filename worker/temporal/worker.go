@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"go.temporal.io/sdk/worker"
 )
@@ -15,7 +16,7 @@ type Worker struct {
 }
 
 // NewWorker creates a new Temporal worker with the provided client
-func NewWorker(t *Temporal, e *executor.AbstractExecutor) *Worker {
+func NewWorker(t *Temporal, e *executor.AbstractExecutor, db *database.DB) *Worker {
 	w := worker.New(t.GetClient(), TaskQueue, worker.Options{})
 
 	// regsiter workflows
@@ -23,9 +24,9 @@ func NewWorker(t *Temporal, e *executor.AbstractExecutor) *Worker {
 	w.RegisterWorkflow(ExecuteWorkflow)
 
 	// regsiter activities
-	activitiesInstance := NewActivity(e)
+	activitiesInstance := NewActivity(e, db)
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
-	w.RegisterActivity(activitiesInstance.ExecuteSyncActivity)
+	w.RegisterActivity(activitiesInstance.SyncActivity)
 	w.RegisterActivity(activitiesInstance.SyncCleanupActivity)
 
 	return &Worker{

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	DockerPullTimeout = time.Minute
+	DockerPullTimeout = 2 * time.Minute
 )
 
 type ContainerState struct {
@@ -47,6 +47,9 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		defer reader.Close()
 
 		if _, err = io.Copy(io.Discard, reader); err != nil {
+			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("image pull for %s timed out", imageName)
+			}
 			logger.Warnf("failed to read image pull output: %s", err)
 		}
 		return nil
@@ -146,7 +149,7 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 func (d *DockerExecutor) startContainer(ctx context.Context, containerID string) error {
 	err := d.client.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil && !errdefs.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to start container %s: %w", containerID, err)
+		return fmt.Errorf("failed to start container %s: %s", containerID, err)
 	}
 	logger.Debugf("container %s started", containerID)
 	return nil
@@ -178,7 +181,12 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 
 		case err := <-errCh:
 			if err != nil {
-				return fmt.Errorf("error waiting for container %s: %w", containerID, err)
+				// CRITICAL: Check if error is because context was cancelled
+				if ctx.Err() != nil {
+					logger.Info("Goroutine failed due to context cancellation", "dockerError", err)
+					return ctx.Err() // Return cancellation error, not docker error
+				}
+				return fmt.Errorf("error waiting for container %s: %s", containerID, err)
 			}
 			return nil
 

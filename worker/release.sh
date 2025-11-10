@@ -42,7 +42,7 @@ function release_k8s_worker() {
     local version=$1
     local platform=$2
     local environment=$3
-    local image_name="$K8S_REPO_WORKER"
+    local image_name="olakego/ui-worker"
     
     # Set tag based on environment
     local tag_version=""
@@ -76,6 +76,8 @@ function release_k8s_worker() {
     docker buildx build --platform "$platform" --push \
         -t "${image_name}:${tag_version}" \
         -t "${image_name}:${latest_tag}" \
+        -t "olakego/k8s-worker:${tag_version}" \
+        -t "olakego/k8s-worker:${latest_tag}" \
         --build-arg ENVIRONMENT="$environment" \
         --build-arg APP_VERSION="$version" \
         -f ./Dockerfile . || { popd >/dev/null; fail "K8s Worker build failed. Exiting..."; }

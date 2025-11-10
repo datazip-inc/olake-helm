@@ -63,7 +63,11 @@ Create the name of the service account to use for job pods
 Shared storage PVC name
 */}}
 {{- define "olake.sharedStoragePVC" -}}
-{{ include "olake.fullname" . }}-shared-storage
+{{- if .Values.nfsServer.enabled -}}
+olake-shared-storage
+{{- else -}}
+{{- .Values.nfsServer.external.name | default "olake-shared-storage" -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

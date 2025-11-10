@@ -13,7 +13,7 @@ import (
 func SetupWorkDirectory(workingDir string, subDir string) (string, error) {
 	dir := filepath.Join(workingDir, subDir)
 	if err := os.MkdirAll(dir, constants.DefaultDirPermissions); err != nil {
-		return "", fmt.Errorf("failed to create work directory: %w", err)
+		return "", fmt.Errorf("failed to create work directory: %s", err)
 	}
 	return dir, nil
 }
