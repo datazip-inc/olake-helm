@@ -213,9 +213,19 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	// If container exists and exited, treat as finished: cleanup and return status
 	if state.Exists && !state.Running && state.ExitCode != nil {
 		logger.Infof("workflowID %s: container %s exited with code %d", req.WorkflowID, containerName, *state.ExitCode)
+
 		if *state.ExitCode == 0 {
 			return &types.Result{OK: false, Message: "sync status: completed"}, nil
 		}
+
+		if req.Command == types.ClearDestination {
+			logger.Infof("workflowID %s: removing old container %s", req.WorkflowID, containerName)
+			if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+				return nil, fmt.Errorf("failed to remove old container: %w", err)
+			}
+			return &types.Result{OK: true}, nil
+		}
+
 		return nil, fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
 	}
 
