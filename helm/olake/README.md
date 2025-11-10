@@ -186,10 +186,10 @@ global:
   env:
     # 1. For AWS KMS (starts with 'arn:aws:kms:'):
     OLAKE_SECRET_KEY: "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
-    
+
     # 2. For local AES-256 (any other non-empty string):
     OLAKE_SECRET_KEY: "your-secret-encryption-key"  # Auto-hashed to 256-bit key
-    
+
     # 3. For no encryption (not recommended for production):
     # OLAKE_SECRET_KEY: ""  # Empty = no encryption
 ```
@@ -247,6 +247,18 @@ postgresql:
       username:          "username"
       password:          "password"
       ssl_mode:          "ssl_mode"
+```
+
+### Global Environment Variables
+
+Environment variables defined in `global.env` are automatically propagated to OLake UI, OLake Workers, and Activity Pods:
+
+```yaml
+global:
+  env:
+    OLAKE_SECRET_KEY: "your-secret-encryption-key"
+    RUN_MODE: "production"
+    # Add any custom environment variables here
 ```
 
 ## Monitoring and Troubleshooting
