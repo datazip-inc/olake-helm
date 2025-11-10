@@ -209,6 +209,26 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
 
+	// Add liveness probe for long-running sync operations
+	if req.Command == types.Sync {
+		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						"echo ok > /mnt/config/.healthcheck",
+					},
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       30,
+			TimeoutSeconds:      5,
+			FailureThreshold:    3,
+			SuccessThreshold:    1,
+		}
+	}
+
 	return pod
 }
 
