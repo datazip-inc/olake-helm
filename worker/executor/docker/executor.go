@@ -34,13 +34,13 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
 
-	if req.Command == types.Sync {
-		startSync, err := d.shouldStartSync(ctx, req, containerName, workdir)
+	if slices.Contains(constants.AsyncCommands, req.Command) {
+		startOperation, err := d.shouldStartOperation(ctx, req, containerName, workdir)
 		if err != nil {
 			return "", err
 		}
-		if !startSync.OK {
-			return startSync.Message, nil
+		if !startOperation.OK {
+			return startOperation.Message, nil
 		}
 	}
 

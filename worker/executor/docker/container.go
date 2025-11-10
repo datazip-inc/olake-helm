@@ -197,7 +197,7 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 	}
 }
 
-func (d *DockerExecutor) shouldStartSync(ctx context.Context, req *types.ExecutionRequest, containerName, workDir string) (*types.Result, error) {
+func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.ExecutionRequest, containerName, workDir string) (*types.Result, error) {
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
 
