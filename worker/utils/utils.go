@@ -94,14 +94,30 @@ func GetWorkerEnvVars() map[string]string {
 }
 
 func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
-	telemetryUserID := GetTelemetryUserID()
+	updates := map[string]string{
+		"source.json":      jobData.Source,
+		"destination.json": jobData.Destination,
+		"streams.json":     jobData.Streams,
+		"state.json":       jobData.State,
+	}
 
-	req.Configs = []types.JobConfig{
-		{Name: "source.json", Data: jobData.Source},
-		{Name: "destination.json", Data: jobData.Destination},
-		{Name: "streams.json", Data: jobData.Streams},
-		{Name: "state.json", Data: jobData.State},
-		{Name: "user_id.txt", Data: telemetryUserID},
+	existing := make(map[string]int)
+	for i, config := range req.Configs {
+		existing[config.Name] = i
+	}
+
+	// update the configs with the latest data
+	for name, data := range updates {
+		if idx, found := existing[name]; found {
+			req.Configs[idx].Data = data
+		} else {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
+	}
+
+	// if user_id not present in the configs, get it from telemetry directory
+	if _, exists := existing["user_id.txt"]; !exists {
+		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
 	}
 }
 
