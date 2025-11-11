@@ -10,7 +10,6 @@ metadata:
     app.kubernetes.io/component: olake-ui
     {{- include "olake.labels" . | nindent 4 }}
 data:
-  # Beego App Configuration File
   app.conf: |
     appname = olake-server
     httpport = {{ .Values.olakeUI.env.HTTP_PORT | default "8000" }}

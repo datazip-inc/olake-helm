@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: olake-global-env
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.global.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
