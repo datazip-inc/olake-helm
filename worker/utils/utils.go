@@ -2,10 +2,12 @@ package utils
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -92,17 +94,36 @@ func GetWorkerEnvVars() map[string]string {
 }
 
 func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
-	req.Configs = []types.JobConfig{
-		{Name: "source.json", Data: jobData.Source},
-		{Name: "destination.json", Data: jobData.Destination},
-		{Name: "streams.json", Data: jobData.Streams},
-		{Name: "state.json", Data: jobData.State},
+	updates := map[string]string{
+		"source.json":      jobData.Source,
+		"destination.json": jobData.Destination,
+		"streams.json":     jobData.Streams,
+		"state.json":       jobData.State,
+	}
+
+	existing := make(map[string]int)
+	for i, config := range req.Configs {
+		existing[config.Name] = i
+	}
+
+	// update the configs with the latest data
+	for name, data := range updates {
+		if idx, found := existing[name]; found {
+			req.Configs[idx].Data = data
+		} else {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
+	}
+
+	// if user_id not present in the configs, get it from telemetry directory
+	if _, exists := existing["user_id.txt"]; !exists {
+		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
 	}
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
 func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
-	if operation == types.Sync {
+	if slices.Contains(constants.AsyncCommands, operation) {
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
 	} else {
 		return originalWorkflowID
@@ -127,6 +148,26 @@ func GetConfigDir() string {
 	default:
 		return ""
 	}
+}
+
+func GetTelemetryUserID() string {
+	root := GetConfigDir()
+	telemetryPath := filepath.Join(root, "telemetry", "user_id")
+
+	userID, err := os.ReadFile(telemetryPath)
+	if err != nil {
+		logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
+		newUserID := generateUniqueID()
+		logger.Infof("generated new telemetry user ID: %s", newUserID)
+		return newUserID
+	}
+	return string(userID)
+}
+
+func generateUniqueID() string {
+	hash := sha256.New()
+	hash.Write([]byte(time.Now().String()))
+	return hex.EncodeToString(hash.Sum(nil))[:32]
 }
 
 // getHostOutputDir returns the host output directory
@@ -163,4 +204,18 @@ func GetExecutorEnvironment() string {
 		return string(types.Kubernetes)
 	}
 	return string(types.Docker)
+}
+
+// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
+func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
+	args := []string{
+		"sync",
+		"--config", "/mnt/config/source.json",
+		"--destination", "/mnt/config/destination.json",
+		"--catalog", "/mnt/config/streams.json",
+		"--state", "/mnt/config/state.json",
+	}
+
+	req.Command = types.Sync
+	req.Args = args
 }

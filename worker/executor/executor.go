@@ -9,9 +9,8 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 // Executor interface for k8s and docker executor
@@ -70,7 +69,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	if req.OutputFile != "" {
 		fileContent, err := utils.ReadFile(filepath.Join(workdir, req.OutputFile))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse JSON file: %s", err)
+			return nil, err
 		}
 		return &types.ExecutorResponse{Response: fileContent}, nil
 	}
@@ -79,8 +78,8 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	return &types.ExecutorResponse{Response: out}, nil
 }
 
-// SyncCleanup stops the container/pod and saves the state file in the database
-func (a *AbstractExecutor) SyncCleanup(ctx context.Context, req *types.ExecutionRequest) error {
+// CleanupAndPersistState stops the container/pod and saves the state file in the database
+func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *types.ExecutionRequest) error {
 	if err := a.executor.Cleanup(ctx, req); err != nil {
 		return err
 	}

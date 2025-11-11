@@ -25,7 +25,8 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 	case float64:
 		logger.Warn("running old sync workflow [DEPRECATED]")
 		req = &types.ExecutionRequest{
-			JobID: int(v),
+			Command: types.Sync,
+			JobID:   int(v),
 		}
 
 	case map[string]interface{}:
@@ -53,6 +54,7 @@ func UpdateSyncRequestForLegacy(job types.JobData, req *types.ExecutionRequest) 
 		"--state", "/mnt/config/state.json",
 	}
 
+	req.ProjectID = job.ProjectID
 	req.Command = types.Sync
 	req.ConnectorType = job.Driver
 	req.Version = job.Version

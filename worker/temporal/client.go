@@ -18,7 +18,7 @@ type Temporal struct {
 
 // NewClient creates a new Temporal client
 func NewClient() (*Temporal, error) {
-	var temporalClient client.Client
+	var temporalClient *Temporal
 
 	err := utils.RetryWithBackoff(func() error {
 		client, err := client.Dial(client.Options{
@@ -28,16 +28,16 @@ func NewClient() (*Temporal, error) {
 		if err != nil {
 			return err
 		}
-		temporalClient = client
+		temporalClient = &Temporal{
+			client: client,
+		}
 		return nil
 	}, 3, time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Temporal client: %s", err)
 	}
 
-	return &Temporal{
-		client: temporalClient,
-	}, nil
+	return temporalClient, nil
 }
 
 // Close closes the Temporal client

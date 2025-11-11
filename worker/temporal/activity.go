@@ -12,16 +12,18 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 )
 
 type Activity struct {
-	executor *executor.AbstractExecutor
-	db       *database.DB
+	executor   *executor.AbstractExecutor
+	db         *database.DB
+	tempClient client.Client
 }
 
-func NewActivity(a *executor.AbstractExecutor, db *database.DB) *Activity {
-	return &Activity{executor: a, db: db}
+func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Activity {
+	return &Activity{executor: e, db: db, tempClient: c.GetClient()}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -39,7 +41,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -53,7 +55,8 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	}
 
 	// mapping request type of deprecated workflow to new request type
-	if req.Command == "" {
+	// old scheduled sync workflow has no connector type set
+	if req.ConnectorType == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
@@ -84,23 +87,82 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	return result, nil
 }
 
-func (a *Activity) SyncCleanupActivity(ctx context.Context, req *types.ExecutionRequest) error {
+func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID, "workflowID", req.WorkflowID)
+	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
 		return err
 	}
 
-	if req.Command == "" {
+	if req.ConnectorType == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
-	if err := a.executor.SyncCleanup(ctx, req); err != nil {
+	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
 	telemetry.SendEvent(req.JobID, req.WorkflowID, "completed")
+	return nil
+}
+
+// CRITICAL: Restore the schedule to its normal sync operation state
+//
+// When clear-destination is triggered, the backend (olake-ui) temporarily:
+// 1. Updates the sync schedule's metadata to run clear-destination instead
+// 2. Pauses the schedule to prevent the next scheduled run during the operation
+//
+// After clear-destination completes (success or failure), we must restore the schedule:
+// 1. Revert metadata back to sync operation
+// 2. Unpause the schedule to resume normal operations
+//
+// Without these steps, the schedule would remain paused and stuck in clear-destination mode,
+// preventing all future sync runs.
+func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
+
+	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
+		return err
+	}
+
+	utils.RevertUpdatesInSchedule(req)
+
+	// update the schedule
+	workflowID := fmt.Sprintf("sync-%s-%d", req.ProjectID, req.JobID)
+	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
+	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
+
+	err := handle.Update(ctx, client.ScheduleUpdateOptions{
+		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
+				ID:        workflowID,
+				Workflow:  RunSyncWorkflow,
+				Args:      []any{req},
+				TaskQueue: constants.TaskQueue,
+			}
+			return &client.ScheduleUpdate{
+				Schedule: &input.Description.Schedule,
+			}, nil
+		},
+	})
+	if err != nil {
+		activityLogger.Error("failed to update schedule action", "error", err)
+		return err
+	}
+	activityLogger.Debug("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
+
+	// unpause schedule
+	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
+		Note: "resumed schedule after clear-destination",
+	})
+	if err != nil {
+		activityLogger.Error("failed to unpause schedule", "error", err)
+		return err
+	}
+	activityLogger.Debug("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
+
 	return nil
 }
