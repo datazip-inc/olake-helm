@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -88,7 +89,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 		return "", err
 	}
 
-	if req.Command != types.Sync {
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()

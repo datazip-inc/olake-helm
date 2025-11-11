@@ -3,10 +3,11 @@ package types
 type Command string
 
 const (
-	Discover Command = "discover"
-	Spec     Command = "spec"
-	Check    Command = "check"
-	Sync     Command = "sync"
+	Discover         Command = "discover"
+	Spec             Command = "spec"
+	Check            Command = "check"
+	Sync             Command = "sync"
+	ClearDestination Command = "clear-destination"
 )
 
 type JobConfig struct {
@@ -27,6 +28,7 @@ type LoggingConfig struct {
 }
 
 type JobData struct {
+	ProjectID   string
 	Source      string
 	Destination string
 	Streams     string

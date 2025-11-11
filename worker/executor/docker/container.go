@@ -63,13 +63,14 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, error) {
 	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
-		if !errdefs.IsAlreadyExists(err) {
-			return "", fmt.Errorf("failed to create container: %s", err)
+		if errdefs.IsAlreadyExists(err) || errdefs.IsConflict(err) {
+			logger.Infof("container %s already exists, resuming", containerName)
+			return containerName, nil
 		}
-		// Container already exists, use the name as ID
-		logger.Infof("container %s already exists, resuming", containerName)
-		return containerName, nil
+
+		return "", fmt.Errorf("failed to create container: %s", err)
 	}
+
 	logger.Debugf("created container %s (ID: %s)", containerName, resp.ID)
 	return resp.ID, nil
 }
@@ -196,7 +197,7 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 	}
 }
 
-func (d *DockerExecutor) shouldStartSync(ctx context.Context, req *types.ExecutionRequest, containerName, workDir string) (*types.Result, error) {
+func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.ExecutionRequest, containerName, workDir string) (*types.Result, error) {
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
 
@@ -212,9 +213,19 @@ func (d *DockerExecutor) shouldStartSync(ctx context.Context, req *types.Executi
 	// If container exists and exited, treat as finished: cleanup and return status
 	if state.Exists && !state.Running && state.ExitCode != nil {
 		logger.Infof("workflowID %s: container %s exited with code %d", req.WorkflowID, containerName, *state.ExitCode)
+
 		if *state.ExitCode == 0 {
 			return &types.Result{OK: false, Message: "sync status: completed"}, nil
 		}
+
+		if req.Command == types.ClearDestination {
+			logger.Infof("workflowID %s: removing old container %s", req.WorkflowID, containerName)
+			if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+				return nil, fmt.Errorf("failed to remove old container: %w", err)
+			}
+			return &types.Result{OK: true}, nil
+		}
+
 		return nil, fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
 	}
 
