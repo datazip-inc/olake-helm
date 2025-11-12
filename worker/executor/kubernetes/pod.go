@@ -122,7 +122,9 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 	return nil
 }
 
-// buildAffinityForJob returns anti-affinity rules for unmapped jobs
+// buildAffinityForJob returns NodeAffinity rules to prevent unmapped jobs from scheduling on nodes reserved for mapped jobs.
+// Uses NotIn operator to exclude nodes with label key-value pairs used by any mapped job.
+// Reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
 func (k *KubernetesExecutor) buildAffinityForJob(jobID int, operation types.Command) *corev1.Affinity {
 	if operation != types.Sync {
 		return nil
