@@ -122,6 +122,43 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 	return nil
 }
 
+// buildAffinityForJob returns anti-affinity rules for unmapped jobs
+func (k *KubernetesExecutor) buildAffinityForJob(jobID int, operation types.Command) *corev1.Affinity {
+	if operation != types.Sync {
+		return nil
+	}
+
+	if _, exists := k.configWatcher.GetJobMapping(jobID); exists {
+		return nil
+	}
+
+	mappedLabels := k.configWatcher.GetAllMappedNodeLabels()
+	if len(mappedLabels) == 0 {
+		return nil
+	}
+
+	expressions := make([]corev1.NodeSelectorRequirement, 0, len(mappedLabels))
+	for labelKey, labelValues := range mappedLabels {
+		expressions = append(expressions, corev1.NodeSelectorRequirement{
+			Key:      labelKey,
+			Operator: corev1.NodeSelectorOpNotIn,
+			Values:   labelValues,
+		})
+	}
+
+	return &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{
+						MatchExpressions: expressions,
+					},
+				},
+			},
+		},
+	}
+}
+
 func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
@@ -157,8 +194,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			NodeSelector:  k.GetNodeSelectorForJob(req.JobID, req.Command),
-			Tolerations:   []corev1.Toleration{}, // No tolerations supported yet
-			// Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
+			Tolerations:   []corev1.Toleration{},
+			Affinity:      k.buildAffinityForJob(req.JobID, req.Command),
 			Containers: []corev1.Container{
 				{
 					Name:    "connector",

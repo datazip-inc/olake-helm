@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -146,4 +147,27 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	w.mu.Unlock()
 
 	logger.Infof("updated job mapping with %d entries", len(newMapping))
+}
+
+// GetAllMappedNodeLabels returns all unique node label key-value pairs from job mappings
+func (w *ConfigMapWatcher) GetAllMappedNodeLabels() map[string][]string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	uniq := map[string]sets.Set[string]{}
+
+	for _, labels := range w.jobMapping {
+		for k, v := range labels {
+			if _, ok := uniq[k]; !ok {
+				uniq[k] = sets.New[string]()
+			}
+			uniq[k].Insert(v)
+		}
+	}
+
+	result := make(map[string][]string, len(uniq))
+	for k, s := range uniq {
+		result[k] = s.UnsortedList()
+	}
+	return result
 }
