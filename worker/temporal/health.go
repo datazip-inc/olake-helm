@@ -97,6 +97,7 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	if hs.worker == nil || hs.worker.temporal.client == nil {
 		response.Status = "not_ready"
 		response.Checks["temporal"] = "disconnected"
+		logger.Debugf("Readiness check failed - Temporal not connected (worker: %v, client: %v)", hs.worker != nil, hs.worker != nil && hs.worker.temporal.client != nil)
 		writeJSON(w, http.StatusServiceUnavailable, response)
 		return
 	}
@@ -112,6 +113,7 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	} else {
 		response.Status = "not_ready"
 		response.Checks["database"] = "disconnected"
+		logger.Debugf("Readiness check failed - Database ping failed")
 	}
 
 	// Set HTTP status code based on overall health
