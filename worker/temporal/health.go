@@ -79,7 +79,7 @@ func (hs *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Readiness: require Temporal client + worker + database initialised
-func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
+func (hs *Server) readinessHandler(w http.ResponseWriter, req *http.Request) {
 	response := HealthResponse{
 		Status:    "ready",
 		Timestamp: time.Now(),
@@ -108,7 +108,7 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, _ *http.Request) {
 	// - Updating job progress and results
 	// - Temporal workflow coordination
 	// Without database access, workflows will fail during execution.
-	if hs.db.Ping() == nil {
+	if hs.db.PingContext(req.Context()) == nil {
 		response.Checks["database"] = "connected"
 	} else {
 		response.Status = "not_ready"

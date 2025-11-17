@@ -38,7 +38,7 @@ func main() {
 	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize database
-	db, err := database.Init()
+	db, err := database.Init(ctx)
 	if err != nil {
 		logger.Fatalf("failed to initialize database: %s", err)
 	}

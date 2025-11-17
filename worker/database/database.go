@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -12,42 +13,42 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 )
 
+const (
+	pingTimeout = 5 * time.Minute
+)
+
 type DB struct {
 	client *sql.DB
 	tables map[string]string
 }
 
 // creates a database connection instance.
-func Init() (*DB, error) {
+func Init(ctx context.Context) (*DB, error) {
 	connStr := buildConnectionString()
+	tables := buildTablesMap()
 
 	conn, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %s", err)
 	}
 
-	if err := conn.Ping(); err != nil {
+	db := &DB{client: conn, tables: tables}
+
+	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %s", err)
 	}
 
 	if maxOpen := viper.GetInt(constants.EnvMaxOpenConnections); maxOpen > 0 {
-		conn.SetMaxOpenConns(maxOpen)
+		db.client.SetMaxOpenConns(maxOpen)
 	}
 	if maxIdle := viper.GetInt(constants.EnvMaxIdleConnections); maxIdle > 0 {
-		conn.SetMaxIdleConns(maxIdle)
+		db.client.SetMaxIdleConns(maxIdle)
 	}
 	if lifetime := viper.GetInt(constants.EnvConnectionMaxLifetime); lifetime > 0 {
-		conn.SetConnMaxLifetime(time.Duration(lifetime) * time.Second)
+		db.client.SetConnMaxLifetime(time.Duration(lifetime) * time.Second)
 	}
 
-	runMode := viper.GetString(constants.EnvDatabaseRunMode)
-	tables := map[string]string{
-		"job":    fmt.Sprintf("olake-%s-job", runMode),
-		"source": fmt.Sprintf("olake-%s-source", runMode),
-		"dest":   fmt.Sprintf("olake-%s-destination", runMode),
-	}
-
-	return &DB{client: conn, tables: tables}, nil
+	return db, nil
 }
 
 // buildConnectionString safely constructs the Postgres connection string.
@@ -73,11 +74,23 @@ func buildConnectionString() string {
 	return u.String()
 }
 
+func buildTablesMap() map[string]string {
+	runMode := viper.GetString(constants.EnvDatabaseRunMode)
+	return map[string]string{
+		"job":    fmt.Sprintf("olake-%s-job", runMode),
+		"source": fmt.Sprintf("olake-%s-source", runMode),
+		"dest":   fmt.Sprintf("olake-%s-destination", runMode),
+	}
+}
+
 // Close closes the underlying database connection.
 func (d *DB) Close() error {
 	return d.client.Close()
 }
 
-func (d *DB) Ping() error {
-	return d.client.Ping()
+func (d *DB) PingContext(ctx context.Context) error {
+	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
+	defer cancel()
+
+	return d.client.PingContext(pingCtx)
 }
