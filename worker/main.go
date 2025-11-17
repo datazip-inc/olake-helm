@@ -86,7 +86,7 @@ func main() {
 	}()
 
 	// Initialize log cleaner
-	utils.InitLogCleaner(ctx, utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
+	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
