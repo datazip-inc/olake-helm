@@ -13,10 +13,10 @@ import (
 // starts a log cleaner that removes old logs from the specified directory based on the retention period
 func InitLogCleaner(logDir string, retentionPeriod int) {
 	logger.Info("log cleaner started...")
-	CleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
+	go cleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
 	c := cron.New()
 	err := c.AddFunc("@midnight", func() {
-		CleanOldLogs(logDir, retentionPeriod)
+		cleanOldLogs(logDir, retentionPeriod)
 	})
 	if err != nil {
 		logger.Errorf("failed to start log cleaner: %s", err)
@@ -25,7 +25,7 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 	c.Start()
 }
 
-func CleanOldLogs(logDir string, retentionPeriod int) {
+func cleanOldLogs(logDir string, retentionPeriod int) {
 	logger.Info("running log cleaner...")
 	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
 
