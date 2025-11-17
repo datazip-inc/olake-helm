@@ -52,9 +52,6 @@ func main() {
 	}
 	defer exec.Close()
 
-	// Initialize log cleaner
-	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
-
 	tClient, err := temporal.NewClient()
 	if err != nil {
 		logger.Fatalf("failed to create Temporal client: %s", err)
@@ -87,6 +84,9 @@ func main() {
 			return
 		}
 	}()
+
+	// Initialize log cleaner
+	utils.InitLogCleaner(ctx, utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,10 +12,9 @@ import (
 )
 
 // starts a log cleaner that removes old logs from the specified directory based on the retention period
-func InitLogCleaner(logDir string, retentionPeriod int) {
-	logger.Info("log cleaner started...")
-	go cleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
+func InitLogCleaner(ctx context.Context, logDir string, retentionPeriod int) {
 	c := cron.New()
+
 	err := c.AddFunc("@midnight", func() {
 		cleanOldLogs(logDir, retentionPeriod)
 	})
@@ -22,6 +22,13 @@ func InitLogCleaner(logDir string, retentionPeriod int) {
 		logger.Errorf("failed to start log cleaner: %s", err)
 		return
 	}
+
+	go func() {
+		<-ctx.Done()
+		c.Stop()
+		logger.Info("log cleaner stopped...")
+	}()
+
 	c.Start()
 }
 
