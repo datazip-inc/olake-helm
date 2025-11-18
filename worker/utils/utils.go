@@ -93,27 +93,60 @@ func GetWorkerEnvVars() map[string]string {
 }
 
 func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
-	finalConfigs := map[string]string{
+	req.Version = jobData.Version
+
+	updates := map[string]string{
 		"source.json":      jobData.Source,
 		"destination.json": jobData.Destination,
 		"streams.json":     jobData.Streams,
 		"state.json":       jobData.State,
 	}
 
-	for _, config := range req.Configs {
-		finalConfigs[config.Name] = config.Data
+	existing := make(map[string]int)
+	for i, config := range req.Configs {
+		existing[config.Name] = i
 	}
 
-	if _, exists := finalConfigs["user_id.txt"]; !exists {
-		finalConfigs["user_id.txt"] = GetTelemetryUserID()
+	// update the configs with the latest data
+	for name, data := range updates {
+		if idx, found := existing[name]; found {
+			req.Configs[idx].Data = data
+		} else {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
 	}
 
-	req.Configs = make([]types.JobConfig, 0, len(finalConfigs))
-	for name, data := range finalConfigs {
-		req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+	// if user_id not present in the configs, get it from telemetry directory
+	if _, exists := existing["user_id.txt"]; !exists {
+		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
+	}
+}
+
+func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) {
+	req.Version = jobDetails.Version
+
+	dbConfigs := map[string]string{
+		"destination.json": jobDetails.Destination,
+		"state.json":       jobDetails.State,
 	}
 
-	req.Version = jobData.Version
+	existing := make(map[string]int)
+	for i, config := range req.Configs {
+		existing[config.Name] = i
+	}
+
+	for name, data := range dbConfigs {
+		if idx, found := existing[name]; found {
+			req.Configs[idx].Data = data
+		}
+	}
+
+	if _, found := existing["streams.json"]; !found {
+		req.Configs = append(req.Configs, types.JobConfig{
+			Name: "streams.json",
+			Data: jobDetails.Streams,
+		})
+	}
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID

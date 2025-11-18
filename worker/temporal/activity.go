@@ -42,7 +42,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 		if err != nil {
 			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "DatabaseError", err)
 		}
-		utils.UpdateConfigWithJobDetails(jobDetails, req)
+		utils.UpdateConfigForClearDestination(jobDetails, req)
 	}
 
 	return a.executor.Execute(ctx, req)
