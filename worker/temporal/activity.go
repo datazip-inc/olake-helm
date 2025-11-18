@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
@@ -35,6 +36,14 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
 	req.HeartbeatFunc = activity.RecordHeartbeat
+
+	if slices.Contains(constants.AsyncCommands, req.Command) {
+		jobDetails, err := a.db.GetJobData(ctx, req.JobID)
+		if err != nil {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "DatabaseError", err)
+		}
+		utils.UpdateConfigWithJobDetails(jobDetails, req)
+	}
 
 	return a.executor.Execute(ctx, req)
 }

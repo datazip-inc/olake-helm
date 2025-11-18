@@ -2,7 +2,6 @@ package utils
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -94,31 +93,27 @@ func GetWorkerEnvVars() map[string]string {
 }
 
 func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
-	updates := map[string]string{
+	finalConfigs := map[string]string{
 		"source.json":      jobData.Source,
 		"destination.json": jobData.Destination,
 		"streams.json":     jobData.Streams,
 		"state.json":       jobData.State,
 	}
 
-	existing := make(map[string]int)
-	for i, config := range req.Configs {
-		existing[config.Name] = i
+	for _, config := range req.Configs {
+		finalConfigs[config.Name] = config.Data
 	}
 
-	// update the configs with the latest data
-	for name, data := range updates {
-		if idx, found := existing[name]; found {
-			req.Configs[idx].Data = data
-		} else {
-			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
-		}
+	if _, exists := finalConfigs["user_id.txt"]; !exists {
+		finalConfigs["user_id.txt"] = GetTelemetryUserID()
 	}
 
-	// if user_id not present in the configs, get it from telemetry directory
-	if _, exists := existing["user_id.txt"]; !exists {
-		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
+	req.Configs = make([]types.JobConfig, 0, len(finalConfigs))
+	for name, data := range finalConfigs {
+		req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
 	}
+
+	req.Version = jobData.Version
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
@@ -157,17 +152,9 @@ func GetTelemetryUserID() string {
 	userID, err := os.ReadFile(telemetryPath)
 	if err != nil {
 		logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
-		newUserID := generateUniqueID()
-		logger.Infof("generated new telemetry user ID: %s", newUserID)
-		return newUserID
+		return ""
 	}
 	return string(userID)
-}
-
-func generateUniqueID() string {
-	hash := sha256.New()
-	hash.Write([]byte(time.Now().String()))
-	return hex.EncodeToString(hash.Sum(nil))[:32]
 }
 
 // getHostOutputDir returns the host output directory
