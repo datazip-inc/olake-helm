@@ -34,9 +34,9 @@ func ReadFile(filePath string) (string, error) {
 }
 
 // CreateDirectory creates a directory with the specified permissions if it doesn't exist
-func CreateDirectory(dirPath string, perm os.FileMode) error {
+func CreateDirectory(dirPath string) error {
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(dirPath, perm); err != nil {
+		if err := os.MkdirAll(dirPath, constants.DefaultDirPermissions); err != nil {
 			return fmt.Errorf("failed to create directory %s: %s", dirPath, err)
 		}
 	}
@@ -44,14 +44,21 @@ func CreateDirectory(dirPath string, perm os.FileMode) error {
 }
 
 // WriteFile writes data to a file, creating the directory if necessary
-func WriteFile(filePath string, data []byte, perm os.FileMode) error {
+func WriteFile(filePath string, data []byte) error {
 	dirPath := filepath.Dir(filePath)
-	if err := CreateDirectory(dirPath, 0755); err != nil {
+	if err := CreateDirectory(dirPath); err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(filePath, data, perm); err != nil {
+	if err := os.WriteFile(filePath, data, constants.DefaultFilePermissions); err != nil {
 		return fmt.Errorf("failed to write to file %s: %s", filePath, err)
+	}
+	return nil
+}
+
+func DeleteDirectory(dirPath string) error {
+	if err := os.RemoveAll(dirPath); err != nil {
+		return fmt.Errorf("failed to delete directory %s: %s", dirPath, err)
 	}
 	return nil
 }

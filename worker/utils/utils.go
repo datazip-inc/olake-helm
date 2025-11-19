@@ -130,19 +130,29 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 	applyConfigUpdates(req, updates, addIfMissing)
 }
 
-func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) {
+func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
+
+	tmpConfigPath := filepath.Join(
+		GetConfigDir(),
+		fmt.Sprintf("clear-destination-%s-%d", req.ProjectID, req.JobID),
+		"streams.json",
+	)
+
+	data, err := os.ReadFile(tmpConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read streams file: %s", err)
+	}
 
 	updates := map[string]string{
 		"destination.json": jobDetails.Destination,
 		"state.json":       jobDetails.State,
+		"streams.json":     string(data),
 	}
 
-	addIfMissing := map[string]string{
-		"streams.json": jobDetails.Streams,
-	}
+	applyConfigUpdates(req, updates, nil)
 
-	applyConfigUpdates(req, updates, addIfMissing)
+	return nil
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
@@ -234,4 +244,35 @@ func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 
 	req.Command = types.Sync
 	req.Args = args
+}
+
+// ExtractJSONAndMarshal extracts and returns the last valid JSON block from output
+func ExtractJSONAndMarshal(output string) ([]byte, error) {
+	outputStr := strings.TrimSpace(output)
+	if outputStr == "" {
+		return nil, fmt.Errorf("empty output")
+	}
+
+	lines := strings.Split(outputStr, "\n")
+
+	// Find the last non-empty line with valid JSON
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		start := strings.Index(line, "{")
+		end := strings.LastIndex(line, "}")
+		if start != -1 && end != -1 && end > start {
+			jsonPart := line[start : end+1]
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
+				continue // Skip invalid JSON
+			}
+			return json.Marshal(result)
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON block found in output")
 }

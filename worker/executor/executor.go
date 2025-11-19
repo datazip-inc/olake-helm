@@ -67,15 +67,22 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 	// generated file as response
 	if req.OutputFile != "" {
-		fileContent, err := utils.ReadFile(filepath.Join(workdir, req.OutputFile))
-		if err != nil {
-			return nil, err
-		}
-		return &types.ExecutorResponse{Response: fileContent}, nil
+		filePath := filepath.Join(subdir, req.OutputFile)
+		return &types.ExecutorResponse{Response: filePath}, nil
+	}
+
+	outJSON, err := utils.ExtractJSONAndMarshal(out)
+	if err != nil {
+		return nil, err
+	}
+
+	outputPath := filepath.Join(workdir, "output.json")
+	if err := utils.WriteFile(outputPath, outJSON); err != nil {
+		return nil, err
 	}
 
 	// logs as response
-	return &types.ExecutorResponse{Response: out}, nil
+	return &types.ExecutorResponse{Response: filepath.Join(subdir, "output.json")}, nil
 }
 
 // CleanupAndPersistState stops the container/pod and saves the state file in the database
