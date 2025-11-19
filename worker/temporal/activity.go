@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
@@ -175,15 +174,6 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		return err
 	}
 	activityLogger.Debug("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
-
-	tmpConfigDir := filepath.Join(
-		utils.GetConfigDir(),
-		fmt.Sprintf("clear-destination-%s-%d", req.ProjectID, req.JobID),
-	)
-	if err := utils.DeleteDirectory(tmpConfigDir); err != nil {
-		activityLogger.Error("failed to delete clear-destination tmp config directory", "error", err)
-		return err
-	}
 
 	return nil
 }
