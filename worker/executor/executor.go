@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
@@ -54,7 +55,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	}
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
-	if !utils.WorkflowAlreadyLaunched(workdir) {
+	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
 		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
 			return nil, err
 		}
@@ -67,15 +68,22 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 	// generated file as response
 	if req.OutputFile != "" {
-		fileContent, err := utils.ReadFile(filepath.Join(workdir, req.OutputFile))
-		if err != nil {
-			return nil, err
-		}
-		return &types.ExecutorResponse{Response: fileContent}, nil
+		filePath := filepath.Join(subdir, req.OutputFile)
+		return &types.ExecutorResponse{Response: filePath}, nil
+	}
+
+	outJSON, err := utils.ExtractJSONAndMarshal(out)
+	if err != nil {
+		return nil, err
+	}
+
+	outputPath := filepath.Join(workdir, constants.OutputFileName)
+	if err := utils.WriteFile(outputPath, outJSON); err != nil {
+		return nil, err
 	}
 
 	// logs as response
-	return &types.ExecutorResponse{Response: out}, nil
+	return &types.ExecutorResponse{Response: filepath.Join(subdir, constants.OutputFileName)}, nil
 }
 
 // CleanupAndPersistState stops the container/pod and saves the state file in the database
