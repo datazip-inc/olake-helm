@@ -5,6 +5,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	enums "go.temporal.io/api/enums/v1"
@@ -45,6 +46,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 		return nil, err
 	}
 
+	logger.Infof("worker client created successfully")
 	return &Worker{
 		worker:   w,
 		temporal: t,
@@ -54,6 +56,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 
 // Start starts the worker
 func (w *Worker) Start() error {
+	logger.Debugf("Starting Temporal worker")
 	return w.worker.Start()
 }
 

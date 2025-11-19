@@ -38,7 +38,7 @@ func main() {
 	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize database
-	db, err := database.Init()
+	db, err := database.Init(ctx)
 	if err != nil {
 		logger.Fatalf("failed to initialize database: %s", err)
 	}
@@ -51,9 +51,6 @@ func main() {
 		logger.Fatalf("failed to create executor: %s", err)
 	}
 	defer exec.Close()
-
-	// Initialize log cleaner
-	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	tClient, err := temporal.NewClient()
 	if err != nil {
@@ -87,6 +84,9 @@ func main() {
 			return
 		}
 	}()
+
+	// Initialize log cleaner
+	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
