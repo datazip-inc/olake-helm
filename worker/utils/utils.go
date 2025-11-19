@@ -133,18 +133,20 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
 
-	data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.TempPath))
-	if err != nil {
-		return fmt.Errorf("failed to read streams file: %s", err)
-	}
+	if req.TempPath != "" {
+		data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.TempPath))
+		if err != nil {
+			return fmt.Errorf("failed to read streams file: %s", err)
+		}
 
-	updates := map[string]string{
-		"destination.json": jobDetails.Destination,
-		"state.json":       jobDetails.State,
-		"streams.json":     string(data),
-	}
+		updates := map[string]string{
+			"destination.json": jobDetails.Destination,
+			"state.json":       jobDetails.State,
+			"streams.json":     string(data),
+		}
 
-	applyConfigUpdates(req, updates, nil)
+		applyConfigUpdates(req, updates, nil)
+	}
 
 	return nil
 }

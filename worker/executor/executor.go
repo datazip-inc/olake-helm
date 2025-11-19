@@ -66,12 +66,9 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return nil, err
 	}
 
-	// output path has the dockerPersistent dir as base path because this response
-	// is read in the bff (olake-ui) which reads the file from the dockerPersistent dir.
-
 	// generated file as response
 	if req.OutputFile != "" {
-		filePath := filepath.Join(constants.DockerPersistentDir, subdir, req.OutputFile)
+		filePath := filepath.Join(subdir, req.OutputFile)
 		return &types.ExecutorResponse{Response: filePath}, nil
 	}
 
@@ -86,7 +83,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	}
 
 	// logs as response
-	return &types.ExecutorResponse{Response: filepath.Join(constants.DockerPersistentDir, subdir, constants.OutputFileName)}, nil
+	return &types.ExecutorResponse{Response: filepath.Join(subdir, constants.OutputFileName)}, nil
 }
 
 // CleanupAndPersistState stops the container/pod and saves the state file in the database

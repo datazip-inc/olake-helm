@@ -39,11 +39,11 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	if req.Command == types.ClearDestination {
 		jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 		if err != nil {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "DatabaseError", err)
+			return nil, err
 		}
 
 		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UpdateConfigError", err)
+			return nil, err
 		}
 	}
 
