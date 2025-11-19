@@ -92,6 +92,27 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
+func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
+	existing := make(map[string]int)
+	for i, config := range req.Configs {
+		existing[config.Name] = i
+	}
+
+	for name, data := range updates {
+		if idx, found := existing[name]; found {
+			req.Configs[idx].Data = data
+		} else {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
+	}
+
+	for name, data := range addIfMissing {
+		if _, found := existing[name]; !found {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
+	}
+}
+
 func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
 	req.Version = jobData.Version
 
@@ -102,51 +123,26 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	existing := make(map[string]int)
-	for i, config := range req.Configs {
-		existing[config.Name] = i
+	addIfMissing := map[string]string{
+		"user_id.txt": GetTelemetryUserID(),
 	}
 
-	// update the configs with the latest data
-	for name, data := range updates {
-		if idx, found := existing[name]; found {
-			req.Configs[idx].Data = data
-		} else {
-			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
-		}
-	}
-
-	// if user_id not present in the configs, get it from telemetry directory
-	if _, exists := existing["user_id.txt"]; !exists {
-		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
-	}
+	applyConfigUpdates(req, updates, addIfMissing)
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) {
 	req.Version = jobDetails.Version
 
-	dbConfigs := map[string]string{
+	updates := map[string]string{
 		"destination.json": jobDetails.Destination,
 		"state.json":       jobDetails.State,
 	}
 
-	existing := make(map[string]int)
-	for i, config := range req.Configs {
-		existing[config.Name] = i
+	addIfMissing := map[string]string{
+		"streams.json": jobDetails.Streams,
 	}
 
-	for name, data := range dbConfigs {
-		if idx, found := existing[name]; found {
-			req.Configs[idx].Data = data
-		}
-	}
-
-	if _, found := existing["streams.json"]; !found {
-		req.Configs = append(req.Configs, types.JobConfig{
-			Name: "streams.json",
-			Data: jobDetails.Streams,
-		})
-	}
+	applyConfigUpdates(req, updates, addIfMissing)
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
