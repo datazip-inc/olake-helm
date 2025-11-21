@@ -21,7 +21,7 @@ const (
 )
 
 // event = "started" | "completed" | "failed"
-func SendEvent(jobId int, environment, workflowId string, event TelemetryEvent) {
+func SendEvent(jobId int, executionEnvironment, workflowId string, event TelemetryEvent) {
 	go func() {
 		switch event {
 		case TelemetryEventStarted, TelemetryEventCompleted, TelemetryEventFailed:
@@ -37,7 +37,7 @@ func SendEvent(jobId int, environment, workflowId string, event TelemetryEvent) 
 		payload := map[string]interface{}{
 			"job_id":      jobId,
 			"workflow_id": workflowId,
-			"environment": environment,
+			"environment": executionEnvironment,
 			"event":       event,
 		}
 
