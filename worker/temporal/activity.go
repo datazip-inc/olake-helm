@@ -36,6 +36,17 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
 	req.HeartbeatFunc = activity.RecordHeartbeat
 
+	if req.Command == types.ClearDestination {
+		jobDetails, err := a.db.GetJobData(ctx, req.JobID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
+			return nil, err
+		}
+	}
+
 	return a.executor.Execute(ctx, req)
 }
 

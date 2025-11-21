@@ -2,7 +2,6 @@ package utils
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -93,20 +92,12 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
-	updates := map[string]string{
-		"source.json":      jobData.Source,
-		"destination.json": jobData.Destination,
-		"streams.json":     jobData.Streams,
-		"state.json":       jobData.State,
-	}
-
+func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
 	existing := make(map[string]int)
 	for i, config := range req.Configs {
 		existing[config.Name] = i
 	}
 
-	// update the configs with the latest data
 	for name, data := range updates {
 		if idx, found := existing[name]; found {
 			req.Configs[idx].Data = data
@@ -115,10 +106,49 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		}
 	}
 
-	// if user_id not present in the configs, get it from telemetry directory
-	if _, exists := existing["user_id.txt"]; !exists {
-		req.Configs = append(req.Configs, types.JobConfig{Name: "user_id.txt", Data: GetTelemetryUserID()})
+	for name, data := range addIfMissing {
+		if _, found := existing[name]; !found {
+			req.Configs = append(req.Configs, types.JobConfig{Name: name, Data: data})
+		}
 	}
+}
+
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
+	req.Version = jobData.Version
+
+	updates := map[string]string{
+		"source.json":      jobData.Source,
+		"destination.json": jobData.Destination,
+		"streams.json":     jobData.Streams,
+		"state.json":       jobData.State,
+	}
+
+	addIfMissing := map[string]string{
+		"user_id.txt": GetTelemetryUserID(),
+	}
+
+	applyConfigUpdates(req, updates, addIfMissing)
+}
+
+func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
+	req.Version = jobDetails.Version
+
+	if req.TempPath != "" {
+		data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.TempPath))
+		if err != nil {
+			return fmt.Errorf("failed to read streams file: %s", err)
+		}
+
+		updates := map[string]string{
+			"destination.json": jobDetails.Destination,
+			"state.json":       jobDetails.State,
+			"streams.json":     string(data),
+		}
+
+		applyConfigUpdates(req, updates, nil)
+	}
+
+	return nil
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
@@ -157,17 +187,9 @@ func GetTelemetryUserID() string {
 	userID, err := os.ReadFile(telemetryPath)
 	if err != nil {
 		logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
-		newUserID := generateUniqueID()
-		logger.Infof("generated new telemetry user ID: %s", newUserID)
-		return newUserID
+		return ""
 	}
 	return string(userID)
-}
-
-func generateUniqueID() string {
-	hash := sha256.New()
-	hash.Write([]byte(time.Now().String()))
-	return hex.EncodeToString(hash.Sum(nil))[:32]
 }
 
 // getHostOutputDir returns the host output directory
@@ -218,4 +240,35 @@ func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 
 	req.Command = types.Sync
 	req.Args = args
+}
+
+// ExtractJSONAndMarshal extracts and returns the last valid JSON block from output
+func ExtractJSONAndMarshal(output string) ([]byte, error) {
+	outputStr := strings.TrimSpace(output)
+	if outputStr == "" {
+		return nil, fmt.Errorf("empty output")
+	}
+
+	lines := strings.Split(outputStr, "\n")
+
+	// Find the last non-empty line with valid JSON
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		start := strings.Index(line, "{")
+		end := strings.LastIndex(line, "}")
+		if start != -1 && end != -1 && end > start {
+			jsonPart := line[start : end+1]
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
+				continue // Skip invalid JSON
+			}
+			return json.Marshal(result)
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON block found in output")
 }

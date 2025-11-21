@@ -15,9 +15,11 @@ const (
 	OperationTypeKey         = "OperationType"
 
 	// Directory paths
+	// TODO: make persistent path alias same for both docker and k8s.
 	ContainerMountDir   = "/mnt/config"
 	K8sPersistentDir    = "/data/olake-jobs"
 	DockerPersistentDir = "/tmp/olake-config"
+	OutputFileName      = "output.json"
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755

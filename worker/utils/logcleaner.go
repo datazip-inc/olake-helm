@@ -12,20 +12,20 @@ import (
 
 // starts a log cleaner that removes old logs from the specified directory based on the retention period
 func InitLogCleaner(logDir string, retentionPeriod int) {
-	logger.Info("log cleaner started...")
-	CleanOldLogs(logDir, retentionPeriod) // catchup missed cycles if any
 	c := cron.New()
+
 	err := c.AddFunc("@midnight", func() {
-		CleanOldLogs(logDir, retentionPeriod)
+		cleanOldLogs(logDir, retentionPeriod)
 	})
 	if err != nil {
 		logger.Errorf("failed to start log cleaner: %s", err)
 		return
 	}
+
 	c.Start()
 }
 
-func CleanOldLogs(logDir string, retentionPeriod int) {
+func cleanOldLogs(logDir string, retentionPeriod int) {
 	logger.Info("running log cleaner...")
 	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
 
@@ -41,10 +41,15 @@ func CleanOldLogs(logDir string, retentionPeriod int) {
 			if info == nil || info.IsDir() {
 				return nil
 			}
-			if (strings.HasSuffix(filePath, ".log") || strings.HasSuffix(filePath, ".log.gz")) &&
-				info.ModTime().Before(cutoff) {
-				foundOldLog = true
-				return filepath.SkipDir
+
+			fileName := filepath.Base(filePath)
+			if strings.HasSuffix(fileName, ".log") ||
+				strings.HasSuffix(fileName, ".log.gz") ||
+				strings.HasSuffix(fileName, "streams.json") {
+				if info.ModTime().Before(cutoff) {
+					foundOldLog = true
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		})

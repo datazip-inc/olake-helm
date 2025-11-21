@@ -24,6 +24,7 @@ type ExecutionRequest struct {
 	ProjectID     string        `json:"project_id"`
 	Timeout       time.Duration `json:"timeout"`
 	OutputFile    string        `json:"output_file"`
+	TempPath      string        `json:"temp_path"`
 
 	// k8s specific fields
 	HeartbeatFunc func(context.Context, ...interface{}) `json:"-"`
