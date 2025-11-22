@@ -75,7 +75,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
 	// Send telemetry event - "sync started"
-	telemetry.SendEvent(req.JobID, req.WorkflowID, "started")
+	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventStarted)
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
@@ -86,12 +86,12 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		}
 
 		if errors.Is(err, constants.ErrExecutionFailed) {
-			telemetry.SendEvent(req.JobID, req.WorkflowID, "failed")
+			telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
 		activityLogger.Error("sync command failed", "error", err)
-		telemetry.SendEvent(req.JobID, req.WorkflowID, "failed")
+		telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
@@ -115,7 +115,7 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	telemetry.SendEvent(req.JobID, req.WorkflowID, "completed")
+	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventCompleted)
 	return nil
 }
 

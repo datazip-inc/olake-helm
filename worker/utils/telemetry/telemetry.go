@@ -12,11 +12,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+type TelemetryEvent string
+
+const (
+	TelemetryEventStarted   TelemetryEvent = "started"
+	TelemetryEventCompleted TelemetryEvent = "completed"
+	TelemetryEventFailed    TelemetryEvent = "failed"
+)
+
 // event = "started" | "completed" | "failed"
-func SendEvent(jobId int, workflowId string, event string) {
+func SendEvent(jobId int, executionEnvironment, workflowId string, event TelemetryEvent) {
 	go func() {
 		switch event {
-		case "started", "completed", "failed":
+		case TelemetryEventStarted, TelemetryEventCompleted, TelemetryEventFailed:
 		default:
 			logger.Warnf("invalid telemetry event: %s", event)
 			return
@@ -29,6 +37,7 @@ func SendEvent(jobId int, workflowId string, event string) {
 		payload := map[string]interface{}{
 			"job_id":      jobId,
 			"workflow_id": workflowId,
+			"environment": executionEnvironment,
 			"event":       event,
 		}
 
