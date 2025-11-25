@@ -48,7 +48,7 @@ func NewHealthServer(worker *Worker, db *database.DB) *Server {
 }
 
 func (hs *Server) Start() error {
-	logger.Infof("Starting health check server on port %d", healthPort)
+	logger.Infof("starting health check server on port %d", healthPort)
 	return hs.server.ListenAndServe()
 }
 

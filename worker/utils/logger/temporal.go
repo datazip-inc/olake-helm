@@ -9,33 +9,33 @@ type temporalLogger struct{}
 
 func (l temporalLogger) Debug(msg string, keyvals ...interface{}) {
 	if len(keyvals) > 0 {
-		logger.Debug().Fields(keyvals).Msg(msg)
+		rootLogger.Debug().Fields(keyvals).Msg(msg)
 	} else {
-		logger.Debug().Msg(msg)
+		rootLogger.Debug().Msg(msg)
 	}
 }
 
 func (l temporalLogger) Info(msg string, keyvals ...interface{}) {
 	if len(keyvals) > 0 {
-		logger.Info().Fields(keyvals).Msg(msg)
+		rootLogger.Info().Fields(keyvals).Msg(msg)
 	} else {
-		logger.Info().Msg(msg)
+		rootLogger.Info().Msg(msg)
 	}
 }
 
 func (l temporalLogger) Warn(msg string, keyvals ...interface{}) {
 	if len(keyvals) > 0 {
-		logger.Warn().Fields(keyvals).Msg(msg)
+		rootLogger.Warn().Fields(keyvals).Msg(msg)
 	} else {
-		logger.Warn().Msg(msg)
+		rootLogger.Warn().Msg(msg)
 	}
 }
 
 func (l temporalLogger) Error(msg string, keyvals ...interface{}) {
 	if len(keyvals) > 0 {
-		logger.Error().Fields(keyvals).Msg(msg)
+		rootLogger.Error().Fields(keyvals).Msg(msg)
 	} else {
-		logger.Error().Msg(msg)
+		rootLogger.Error().Msg(msg)
 	}
 }
 

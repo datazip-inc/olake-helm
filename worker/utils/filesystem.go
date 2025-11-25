@@ -10,12 +10,11 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 )
 
-func SetupWorkDirectory(workingDir string, subDir string) (string, error) {
-	dir := filepath.Join(workingDir, subDir)
-	if err := os.MkdirAll(dir, constants.DefaultDirPermissions); err != nil {
-		return "", fmt.Errorf("failed to create work directory: %s", err)
+func SetupWorkDirectory(workDirPath string) error {
+	if err := os.MkdirAll(workDirPath, constants.DefaultDirPermissions); err != nil {
+		return fmt.Errorf("failed to create work directory: %s", err)
 	}
-	return dir, nil
+	return nil
 }
 
 // ReadFile parses a JSON file into a map

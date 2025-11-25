@@ -32,7 +32,7 @@ type KubernetesConfig struct {
 	WorkerIdentity    string
 }
 
-func NewKubernetesExecutor() (*KubernetesExecutor, error) {
+func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	// Use in-cluster configuration - this reads the service account token and CA cert
 	// that Kubernetes automatically mounts into every pod at /var/run/secrets/kubernetes.io/serviceaccount/
 	clusterConfig, err := rest.InClusterConfig()
@@ -59,7 +59,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
 
-	watcher := NewConfigMapWatcher(clientset, namespace)
+	watcher := NewConfigMapWatcher(ctx, clientset, namespace)
 	if err := watcher.Start(); err != nil {
 		logger.Errorf("failed to start config map watcher: %s", err)
 	}
@@ -83,7 +83,7 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	podSpec := k.CreatePodSpec(req, workdir, imageName)
-	logger.Infof("creating Pod %s with image %s", podSpec.Name, imageName)
+	logger.Ctx(ctx).Infof("creating Pod %s with image %s", podSpec.Name, imageName)
 
 	if _, err := k.createPod(ctx, podSpec); err != nil {
 		return "", err
@@ -95,7 +95,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 			defer cancel()
 
 			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
-				logger.Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %s",
+				logger.Ctx(ctx).Errorf("failed to cleanup pod %s for %s operation (workflow: %s): %s",
 					podSpec.Name, req.Command, req.WorkflowID, err)
 			}
 		}()

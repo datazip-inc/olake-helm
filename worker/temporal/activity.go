@@ -10,6 +10,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -27,11 +28,20 @@ func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Ac
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing", req.Command, "activity",
-		"sourceType", req.ConnectorType,
-		"version", req.Version,
-		"workflowID", req.WorkflowID)
+	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
+	if err == nil {
+		defer logFile.Close()
+	} else {
+		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+	}
+
+	logger.Ctx(ctx).Infof(
+		"executing activity: command=%s sourceType=%s version=%s workflowID=%s",
+		req.Command,
+		req.ConnectorType,
+		req.Version,
+		req.WorkflowID,
+	)
 
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
 	req.HeartbeatFunc = activity.RecordHeartbeat
@@ -51,8 +61,14 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 }
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID)
+	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
+	if err == nil {
+		defer logFile.Close()
+	} else {
+		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+	}
+
+	logger.Ctx(ctx).Infof("executing sync activity for job: jobID=%d", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -81,7 +97,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
-			activityLogger.Info("sync activity cancelled", "jobID", req.JobID)
+			logger.Ctx(ctx).Infof("sync activity cancelled: jobID=%d", req.JobID)
 			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
@@ -90,7 +106,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
-		activityLogger.Error("sync command failed", "error", err)
+		logger.Ctx(ctx).Errorf("sync command failed: error=%s", err)
 		telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
@@ -99,8 +115,14 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 }
 
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID)
+	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
+	if err == nil {
+		defer logFile.Close()
+	} else {
+		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+	}
+
+	logger.Ctx(ctx).Infof("cleaning up sync for job: jobID=%d", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
@@ -132,8 +154,14 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
+	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
+	if err == nil {
+		defer logFile.Close()
+	} else {
+		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+	}
+
+	logger.Ctx(ctx).Infof("cleaning up clear-destination for job: jobID=%d", req.JobID)
 
 	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
 		return err
@@ -146,7 +174,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
-	err := handle.Update(ctx, client.ScheduleUpdateOptions{
+	err = handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
 				ID:        workflowID,
@@ -160,20 +188,20 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		},
 	})
 	if err != nil {
-		activityLogger.Error("failed to update schedule action", "error", err)
+		logger.Ctx(ctx).Errorf("failed to update schedule action: error=%s", err)
 		return err
 	}
-	activityLogger.Debug("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
+	logger.Ctx(ctx).Infof("updated schedule action to sync for job: jobID=%d scheduleID=%s", req.JobID, scheduleID)
 
 	// unpause schedule
 	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
 		Note: "resumed schedule after clear-destination",
 	})
 	if err != nil {
-		activityLogger.Error("failed to unpause schedule", "error", err)
+		logger.Ctx(ctx).Errorf("failed to unpause schedule: error=%s", err)
 		return err
 	}
-	activityLogger.Debug("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
+	logger.Ctx(ctx).Infof("resumed schedule for job: jobID=%d scheduleID=%s", req.JobID, scheduleID)
 
 	return nil
 }

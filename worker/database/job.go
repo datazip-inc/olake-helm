@@ -51,6 +51,6 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
-	logger.Infof("successfully updated job %d state", jobId)
+	logger.Ctx(ctx).Infof("successfully updated job %d state", jobId)
 	return nil
 }
