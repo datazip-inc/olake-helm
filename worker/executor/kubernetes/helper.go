@@ -1,8 +1,10 @@
 package kubernetes
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -10,10 +12,10 @@ import (
 
 // getNodeSelectorForJob returns node selector configuration for the given jobID
 // Returns empty map if no mapping is found (graceful fallback)
-// Only applies node mapping for sync operations
+// Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
-	// Only apply node mapping for sync operations
-	if operation != types.Sync {
+	// Only apply node mapping for async operations
+	if !slices.Contains(constants.AsyncCommands, operation) {
 		return make(map[string]string)
 	}
 
