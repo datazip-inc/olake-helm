@@ -7,7 +7,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -125,6 +124,23 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 	return result, true
 }
 
+// GetAllJobMapping returns all job mappings (thread-safe)
+// Returns a deep copy to prevent external modification of internal state
+func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	result := make(map[int]map[string]string, len(w.jobMapping))
+	for jobID, labels := range w.jobMapping {
+		labelsCopy := make(map[string]string, len(labels))
+		for k, v := range labels {
+			labelsCopy[k] = v
+		}
+		result[jobID] = labelsCopy
+	}
+	return result
+}
+
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
 	if !exists || rawMapping == "" {
@@ -147,27 +163,4 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	w.mu.Unlock()
 
 	logger.Infof("updated job mapping with %d entries", len(newMapping))
-}
-
-// GetAllMappedNodeLabels returns all unique node label key-value pairs from job mappings
-func (w *ConfigMapWatcher) GetAllMappedNodeLabels() map[string][]string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	uniq := map[string]sets.Set[string]{}
-
-	for _, labels := range w.jobMapping {
-		for k, v := range labels {
-			if _, ok := uniq[k]; !ok {
-				uniq[k] = sets.New[string]()
-			}
-			uniq[k].Insert(v)
-		}
-	}
-
-	result := make(map[string][]string, len(uniq))
-	for k, s := range uniq {
-		result[k] = s.UnsortedList()
-	}
-	return result
 }
