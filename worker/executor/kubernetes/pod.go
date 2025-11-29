@@ -157,8 +157,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			NodeSelector:  k.GetNodeSelectorForJob(req.JobID, req.Command),
-			Tolerations:   []corev1.Toleration{}, // No tolerations supported yet
-			// Affinity:      k.buildAffinityForJob(spec.JobID, spec.Operation),
+			Tolerations:   []corev1.Toleration{},
+			Affinity:      k.BuildAffinityForJob(req.JobID, req.Command),
 			Containers: []corev1.Container{
 				{
 					Name:    "connector",

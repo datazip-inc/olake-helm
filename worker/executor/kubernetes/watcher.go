@@ -124,6 +124,23 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 	return result, true
 }
 
+// GetAllJobMapping returns all job mappings (thread-safe)
+// Returns a deep copy to prevent external modification of internal state
+func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	result := make(map[int]map[string]string, len(w.jobMapping))
+	for jobID, labels := range w.jobMapping {
+		labelsCopy := make(map[string]string, len(labels))
+		for k, v := range labels {
+			labelsCopy[k] = v
+		}
+		result[jobID] = labelsCopy
+	}
+	return result
+}
+
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
 	if !exists || rawMapping == "" {
