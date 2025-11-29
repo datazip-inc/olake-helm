@@ -27,7 +27,7 @@ type AbstractExecutor struct {
 }
 
 // NewExecutor creates and returns the executor client based on the executor environment
-func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
+func NewExecutor(ctx context.Context, db *database.DB) (*AbstractExecutor, error) {
 	executorEnv := utils.GetExecutorEnvironment()
 
 	var exec Executor
@@ -37,7 +37,7 @@ func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
 	case string(types.Docker):
 		exec, err = docker.NewDockerExecutor()
 	case string(types.Kubernetes):
-		exec, err = kubernetes.NewKubernetesExecutor()
+		exec, err = kubernetes.NewKubernetesExecutor(ctx)
 	default:
 		exec, err = nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
 	}
@@ -48,11 +48,7 @@ func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	subdir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	workdir, err := utils.SetupWorkDirectory(utils.GetConfigDir(), subdir)
-	if err != nil {
-		return nil, err
-	}
+	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
 	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
@@ -61,9 +57,12 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		}
 	}
 
-	out, err := a.executor.Execute(ctx, req, workdir)
+	output, err := a.executor.Execute(ctx, req, workdir)
 	if err != nil {
 		return nil, err
+	}
+	if req.Command != types.Sync {
+		logger.Ctx(ctx).Infof("executor output [%s]: %s", utils.GetExecutorEnvironment(), output)
 	}
 
 	// generated file as response
@@ -72,13 +71,13 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return &types.ExecutorResponse{Response: filePath}, nil
 	}
 
-	outJSON, err := utils.ExtractJSONAndMarshal(out)
+	outputJSON, err := utils.ExtractJSONAndMarshal(output)
 	if err != nil {
 		return nil, err
 	}
 
 	outputPath := filepath.Join(workdir, constants.OutputFileName)
-	if err := utils.WriteFile(outputPath, outJSON); err != nil {
+	if err := utils.WriteFile(outputPath, outputJSON); err != nil {
 		return nil, err
 	}
 
@@ -101,7 +100,7 @@ func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *type
 		return err
 	}
 
-	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
+	logger.Ctx(ctx).Infof("successfully cleaned up sync for job %d", req.JobID)
 	return nil
 }
 

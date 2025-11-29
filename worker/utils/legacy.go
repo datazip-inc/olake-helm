@@ -23,7 +23,7 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 
 	switch v := args.(type) {
 	case float64:
-		logger.Warn("running old sync workflow [DEPRECATED]")
+		logger.Warnf("running old sync workflow [DEPRECATED]")
 		req = &types.ExecutionRequest{
 			Command: types.Sync,
 			JobID:   int(v),

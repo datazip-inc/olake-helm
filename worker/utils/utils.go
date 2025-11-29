@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -47,7 +48,7 @@ func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duratio
 		if err := fn(); err != nil {
 			errMsg = err
 			if retry < maxRetries-1 {
-				logger.Warnf("Retry attempt %d/%d failed: %s. Retrying in %v...", retry+1, maxRetries, err, delay)
+				logger.Warnf("retry attempt %d/%d failed: %s. retrying in %v...", retry+1, maxRetries, err, delay)
 				time.Sleep(delay)
 				delay *= 2
 				continue
@@ -228,6 +229,12 @@ func GetExecutorEnvironment() string {
 	return string(types.Docker)
 }
 
+func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, string) {
+	subdir := GetWorkflowDirectory(command, workflowID)
+	workdir := filepath.Join(GetConfigDir(), subdir)
+	return subdir, workdir
+}
+
 // RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
 func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 	args := []string{
@@ -271,4 +278,16 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("no valid JSON block found in output")
+}
+
+// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
+// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
+func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
+	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
+	if err := SetupWorkDirectory(workdirPath); err != nil {
+		return ctx, nil, err
+	}
+
+	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workdirPath)
+	return ctxWithLogger, logFile, err
 }
