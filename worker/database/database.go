@@ -77,9 +77,10 @@ func buildConnectionString() string {
 func buildTablesMap() map[string]string {
 	runMode := viper.GetString(constants.EnvDatabaseRunMode)
 	return map[string]string{
-		"job":    fmt.Sprintf("olake-%s-job", runMode),
-		"source": fmt.Sprintf("olake-%s-source", runMode),
-		"dest":   fmt.Sprintf("olake-%s-destination", runMode),
+		"job":              fmt.Sprintf("olake-%s-job", runMode),
+		"source":           fmt.Sprintf("olake-%s-source", runMode),
+		"dest":             fmt.Sprintf("olake-%s-destination", runMode),
+		"project-settings": fmt.Sprintf("olake-%s-project-settings", runMode),
 	}
 }
 

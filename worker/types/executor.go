@@ -23,7 +23,6 @@ type ExecutionRequest struct {
 	JobID         int           `json:"job_id"`
 	ProjectID     string        `json:"project_id"`
 	JobName       string        `json:"job_name"`
-	ProjectID     string        `json:"project_id"`
 	Timeout       time.Duration `json:"timeout"`
 	OutputFile    string        `json:"output_file"`
 	TempPath      string        `json:"temp_path"`

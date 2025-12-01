@@ -8,34 +8,26 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/datazip-inc/olake-helm/worker/database"
 )
 
 type WebhookMessage struct {
 	Text string `json:"text"`
 }
 
-func SendWebhookNotification(ctx context.Context, jobID int, projectID string, lastRunTime time.Time, jobName, errMsg string) error {
-	// Get project settings to retrieve webhook URL
-	settings, err := database.GetDB().GetProjectSettingsByProjectID(ctx, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to get project settings for project_id %s: %w", projectID, err)
-	}
-
-	webhookURL := settings.WebhookAlertURL
-	if webhookURL == "" {
-		return fmt.Errorf("webhook_alert_url not configured for project_id %s", projectID)
+// SendWebhookNotification sends a formatted sync failure message to the given webhook URL.
+func SendWebhookNotification(ctx context.Context, jobID int, lastRunTime time.Time, jobName, errMsg, webhookURL string) error {
+	if strings.TrimSpace(webhookURL) == "" {
+		return fmt.Errorf("webhook_alert_url not configured")
 	}
 
 	message := fmt.Sprintf(
-		"🚨 *Sync Failure Detected!*\n"+
-			"-----------------------------------\n"+
-			"• *Job ID:* `%d`\n"+
-			"• *Job Name:* `%s`\n"+
-			"• *Error:* ```%s```\n"+
-			"• *Last Run Time:* %s\n"+
-			"-----------------------------------",
+		"🚨 *Sync Failure Detected!* \n\n"+
+			"------------------------------------------- \n\n"+
+			"• *Job ID:* `%d` \n\n"+
+			"• *Job Name:* `%s` \n\n"+
+			"• *Error:* ```%s``` \n\n"+
+			"• *Last Run Time:* %s \n\n"+
+			"------------------------------------------- \n\n",
 		jobID,
 		jobName,
 		trimErrorLogs(errMsg),
