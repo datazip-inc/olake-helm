@@ -37,7 +37,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	w.RegisterActivity(activitiesInstance.SyncActivity)
 	w.RegisterActivity(activitiesInstance.PostSyncActivity)
 	w.RegisterActivity(activitiesInstance.PostClearActivity)
-	w.RegisterActivity(activitiesInstance.SendSlackNotificationActivity)
+	w.RegisterActivity(activitiesInstance.SendWebhookNotificationActivity)
 
 	// Register search attributes
 	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{

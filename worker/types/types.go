@@ -41,3 +41,9 @@ type Result struct {
 	OK      bool
 	Message string
 }
+
+type ProjectSettings struct {
+	ID              int
+	ProjectID       string
+	WebhookAlertURL string
+}

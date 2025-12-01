@@ -181,12 +181,12 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	return nil
 }
 
-func (a *Activity) SendSlackNotificationActivity(ctx context.Context, jobID int, lastRunTime time.Time, jobName, errMsg string) error {
+func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, jobID int, projectID string, lastRunTime time.Time, jobName, errMsg string) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending Slack alert", "jobID", jobID, "JobName", jobName)
+	activityLogger.Info("Sending webhook alert", "jobID", jobID, "projectID", projectID, "JobName", jobName)
 
-	if err := notifications.SendSlackNotification(jobID, lastRunTime, jobName, errMsg); err != nil {
-		logger.Error("Slack notification failed", "error", err)
+	if err := notifications.SendWebhookNotification(ctx, jobID, projectID, lastRunTime, jobName, errMsg); err != nil {
+		logger.Error("Webhook notification failed", "error", err)
 		return err
 	}
 	return nil

@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	ExecuteActivity      = "ExecuteActivity"
-	SyncActivity         = "SyncActivity"
-	PostSyncActivity  = "PostSyncActivity"
-	PostClearActivity    = "PostClearActivity"
-	SendSlackNotificationActivity = "SendSlackNotificationActivity"
+	ExecuteActivity                 = "ExecuteActivity"
+	SyncActivity                    = "SyncActivity"
+	PostSyncActivity                = "PostSyncActivity"
+	PostClearActivity               = "PostClearActivity"
+	SendWebhookNotificationActivity = "SendWebhookNotificationActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -117,14 +117,14 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
 	if err != nil {
-		// Create a separate short-lived context for Slack alert
+		// Create a separate short-lived context for webhook alert
 		slackCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: time.Minute * 1,
 			RetryPolicy:         DefaultRetryPolicy, // only one retry
 		})
-		// Trigger Slack alert
+		// Trigger webhook alert
 		lastRunTime := workflow.Now(ctx)
-		_ = workflow.ExecuteActivity(slackCtx, SendSlackNotificationActivity, req.JobID, lastRunTime, req.JobName, err.Error()).Get(ctx, nil)
+		_ = workflow.ExecuteActivity(slackCtx, SendWebhookNotificationActivity, req.JobID, req.ProjectID, lastRunTime, req.JobName, err.Error()).Get(ctx, nil)
 		return nil, err
 
 	}
