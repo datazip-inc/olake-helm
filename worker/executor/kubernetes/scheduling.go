@@ -88,6 +88,8 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 		if valid, ok := validateJobMapping(jobID, nodeLabels, &stats); ok {
 			result[jobID] = valid
 			stats.ValidEntries++
+		} else {
+			delete(result, jobID)
 		}
 	}
 

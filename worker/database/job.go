@@ -19,7 +19,7 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	defer cancel()
 
 	query := fmt.Sprintf(`
-			SELECT j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type
+			SELECT j.name, j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type
 			FROM %q j
 			JOIN %q s ON j.source_id = s.id
 			JOIN %q d ON j.dest_id = d.id
@@ -29,7 +29,7 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	rows := db.client.QueryRowContext(cctx, query, jobId)
 
 	var jobData types.JobData
-	if err := rows.Scan(&jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver); err != nil {
+	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver); err != nil {
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
 	return jobData, nil

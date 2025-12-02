@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	ExecuteActivity   = "ExecuteActivity"
-	SyncActivity      = "SyncActivity"
-	PostSyncActivity  = "PostSyncActivity"
-	PostClearActivity = "PostClearActivity"
+	ExecuteActivity                 = "ExecuteActivity"
+	SyncActivity                    = "SyncActivity"
+	PostSyncActivity                = "PostSyncActivity"
+	PostClearActivity               = "PostClearActivity"
+	SendWebhookNotificationActivity = "SendWebhookNotificationActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
@@ -115,5 +116,31 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	}
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
+	if err != nil {
+		// Skip webhook for cancellations
+		if temporal.IsCanceledError(err) {
+			workflowLogger.Info("sync workflow cancelled, skipping webhook notification", "jobID", req.JobID)
+			return nil, err
+		}
+
+		// Create a separate short-lived context for webhook alert
+		// use disconnected context to avoid blocking the main workflow
+		disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
+		webhookCtx := workflow.WithActivityOptions(disconnectedCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 1,
+			RetryPolicy:         DefaultRetryPolicy, // only one retry
+		})
+		// Trigger webhook alert asynchronously
+		lastRunTime := workflow.Now(ctx)
+		webhookArgs := types.WebhookNotificationArgs{
+			JobID:        req.JobID,
+			ProjectID:    req.ProjectID,
+			LastRunTime:  lastRunTime,
+			ErrorMessage: err.Error(),
+		}
+		workflow.ExecuteActivity(webhookCtx, SendWebhookNotificationActivity, webhookArgs)
+		return nil, err
+
+	}
 	return result, err
 }

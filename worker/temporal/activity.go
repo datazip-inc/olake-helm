@@ -10,6 +10,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -175,5 +176,33 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	}
 	activityLogger.Debug("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
+	return nil
+}
+
+func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req types.WebhookNotificationArgs) error {
+	activityLogger := activity.GetLogger(ctx)
+	activityLogger.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
+
+	projectID := req.ProjectID
+	if projectID == "" {
+		// TODO: introduce a dedicated migration to backfill project_id into schedules for older jobs and remove this hardcoded fallback.
+		projectID = "123"
+		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
+	}
+
+	settings, err := a.db.GetProjectSettingsByProjectID(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project settings: %w", err)
+	}
+
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
+	if err != nil {
+		activityLogger.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
+	}
+	jobName := jobDetails.JobName
+
+	if err := notifications.SendWebhookNotification(ctx, req, jobName, settings.WebhookAlertURL); err != nil {
+		return fmt.Errorf("failed to send webhook notification: %w", err)
+	}
 	return nil
 }
