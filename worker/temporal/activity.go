@@ -179,15 +179,15 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	return nil
 }
 
-func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, args types.WebhookNotificationArgs) error {
+func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req types.WebhookNotificationArgs) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending webhook alert", "jobID", args.JobID, "projectID", args.ProjectID)
+	activityLogger.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
 
-	projectID := args.ProjectID
+	projectID := req.ProjectID
 	if projectID == "" {
 		// TODO: introduce a dedicated migration to backfill project_id into schedules for older jobs and remove this hardcoded fallback.
 		projectID = "123"
-		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", args.JobID, "fallbackProjectID", projectID)
+		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
 	}
 
 	settings, err := a.db.GetProjectSettingsByProjectID(ctx, projectID)
@@ -195,15 +195,13 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, args typ
 		return fmt.Errorf("failed to get project settings: %w", err)
 	}
 
-	jobName := ""
-	jobDetails, err := a.db.GetJobData(ctx, args.JobID)
+	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		activityLogger.Warn("failed to get job data for webhook notification", "jobID", args.JobID, "error", err)
-	} else {
-		jobName = jobDetails.JobName
+		activityLogger.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
 	}
+	jobName := jobDetails.JobName
 
-	if err := notifications.SendWebhookNotification(ctx, args, jobName, settings.WebhookAlertURL); err != nil {
+	if err := notifications.SendWebhookNotification(ctx, req, jobName, settings.WebhookAlertURL); err != nil {
 		return fmt.Errorf("failed to send webhook notification: %w", err)
 	}
 	return nil

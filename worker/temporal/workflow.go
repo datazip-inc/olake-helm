@@ -117,6 +117,12 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
 	if err != nil {
+		// Skip webhook for cancellations
+		if temporal.IsCanceledError(err) {
+			workflowLogger.Info("sync workflow cancelled, skipping webhook notification", "jobID", req.JobID)
+			return nil, err
+		}
+
 		// Create a separate short-lived context for webhook alert
 		// use disconnected context to avoid blocking the main workflow
 		disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
