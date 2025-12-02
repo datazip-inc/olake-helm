@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/datazip-inc/olake-helm/worker/types"
 )
 
 type WebhookMessage struct {
@@ -15,7 +16,7 @@ type WebhookMessage struct {
 }
 
 // SendWebhookNotification sends a formatted sync failure message to the given webhook URL.
-func SendWebhookNotification(ctx context.Context, jobID int, lastRunTime time.Time, jobName, errMsg, webhookURL string) error {
+func SendWebhookNotification(ctx context.Context, args types.WebhookNotificationArgs, jobName, webhookURL string) error {
 	if strings.TrimSpace(webhookURL) == "" {
 		return fmt.Errorf("webhook_alert_url not configured")
 	}
@@ -28,10 +29,10 @@ func SendWebhookNotification(ctx context.Context, jobID int, lastRunTime time.Ti
 			"• *Error:* ```%s``` \n\n"+
 			"• *Last Run Time:* %s \n\n"+
 			"------------------------------------------- \n\n",
-		jobID,
+		args.JobID,
 		jobName,
-		trimErrorLogs(errMsg),
-		lastRunTime.Format("2006-01-02 15:04:05 MST"),
+		trimErrorLogs(args.ErrorMessage),
+		args.LastRunTime.Format("2006-01-02 15:04:05 MST"),
 	)
 
 	payload, _ := json.Marshal(WebhookMessage{Text: message})

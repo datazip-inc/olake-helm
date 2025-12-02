@@ -3,13 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
-)
-
-const (
-	projectQueryTimeout = 5 * time.Second
 )
 
 // GetProjectSettingsByProjectID fetches the project settings for a given project_id
@@ -18,7 +13,7 @@ func (db *DB) GetProjectSettingsByProjectID(ctx context.Context, projectID strin
 		return nil, fmt.Errorf("project_id is required")
 	}
 
-	cctx, cancel := context.WithTimeout(ctx, projectQueryTimeout)
+	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	query := fmt.Sprintf(`
@@ -36,4 +31,3 @@ func (db *DB) GetProjectSettingsByProjectID(ctx context.Context, projectID strin
 
 	return settings, nil
 }
-

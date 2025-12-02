@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
@@ -180,14 +179,15 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	return nil
 }
 
-func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, jobID int, projectID string, lastRunTime time.Time, jobName, errMsg string) error {
+func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, args types.WebhookNotificationArgs) error {
 	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending webhook alert", "jobID", jobID, "projectID", projectID, "JobName", jobName)
+	activityLogger.Info("Sending webhook alert", "jobID", args.JobID, "projectID", args.ProjectID)
 
+	projectID := args.ProjectID
 	if projectID == "" {
-		// TODO: introduce a dedicated migration to backfill project_id and job_name into schedules for older jobs and remove this hardcoded fallback.
+		// TODO: introduce a dedicated migration to backfill project_id into schedules for older jobs and remove this hardcoded fallback.
 		projectID = "123"
-		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", jobID, "fallbackProjectID", projectID)
+		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", args.JobID, "fallbackProjectID", projectID)
 	}
 
 	settings, err := a.db.GetProjectSettingsByProjectID(ctx, projectID)
@@ -195,7 +195,15 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, jobID in
 		return fmt.Errorf("failed to get project settings: %w", err)
 	}
 
-	if err := notifications.SendWebhookNotification(ctx, jobID, lastRunTime, jobName, errMsg, settings.WebhookAlertURL); err != nil {
+	jobName := ""
+	jobDetails, err := a.db.GetJobData(ctx, args.JobID)
+	if err != nil {
+		activityLogger.Warn("failed to get job data for webhook notification", "jobID", args.JobID, "error", err)
+	} else {
+		jobName = jobDetails.JobName
+	}
+
+	if err := notifications.SendWebhookNotification(ctx, args, jobName, settings.WebhookAlertURL); err != nil {
 		return fmt.Errorf("failed to send webhook notification: %w", err)
 	}
 	return nil

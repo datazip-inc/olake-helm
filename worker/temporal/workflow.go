@@ -118,13 +118,21 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 	err = workflow.ExecuteActivity(ctx, activity, req).Get(ctx, &result)
 	if err != nil {
 		// Create a separate short-lived context for webhook alert
-		webhookCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		// use disconnected context to avoid blocking the main workflow
+		disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
+		webhookCtx := workflow.WithActivityOptions(disconnectedCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: time.Minute * 1,
 			RetryPolicy:         DefaultRetryPolicy, // only one retry
 		})
-		// Trigger webhook alert
+		// Trigger webhook alert asynchronously
 		lastRunTime := workflow.Now(ctx)
-		_ = workflow.ExecuteActivity(webhookCtx, SendWebhookNotificationActivity, req.JobID, req.ProjectID, lastRunTime, req.JobName, err.Error()).Get(ctx, nil)
+		webhookArgs := types.WebhookNotificationArgs{
+			JobID:        req.JobID,
+			ProjectID:    req.ProjectID,
+			LastRunTime:  lastRunTime,
+			ErrorMessage: err.Error(),
+		}
+		workflow.ExecuteActivity(webhookCtx, SendWebhookNotificationActivity, webhookArgs)
 		return nil, err
 
 	}
