@@ -31,8 +31,8 @@ type ConfigMapWatcher struct {
 	cancel context.CancelFunc
 }
 
-func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *ConfigMapWatcher {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewConfigMapWatcher(ctx context.Context, clientset kubernetes.Interface, namespace string) *ConfigMapWatcher {
+	ctx, cancel := context.WithCancel(ctx)
 	return &ConfigMapWatcher{
 		clientset:     clientset,
 		namespace:     namespace,
