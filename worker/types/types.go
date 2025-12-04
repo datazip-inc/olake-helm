@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type Command string
 
 const (
@@ -28,6 +30,7 @@ type LoggingConfig struct {
 }
 
 type JobData struct {
+	JobName     string
 	ProjectID   string
 	Source      string
 	Destination string
@@ -37,7 +40,20 @@ type JobData struct {
 	Driver      string
 }
 
+type WebhookNotificationArgs struct {
+	JobID        int
+	ProjectID    string
+	LastRunTime  time.Time
+	ErrorMessage string
+}
+
 type Result struct {
 	OK      bool
 	Message string
+}
+
+type ProjectSettings struct {
+	ID              int
+	ProjectID       string
+	WebhookAlertURL string
 }
