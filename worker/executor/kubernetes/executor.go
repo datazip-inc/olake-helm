@@ -15,6 +15,11 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+const (
+	DefaultQPS   = 50  // DefaultQPS defines the maximum queries per second allowed to the Kubernetes API server
+	DefaultBurst = 100 // DefaultBurst defines the maximum number of requests allowed in a burst to the Kubernetes API server
+)
+
 type KubernetesExecutor struct {
 	client        kubernetes.Interface
 	namespace     string
@@ -39,6 +44,10 @@ func NewKubernetesExecutor() (*KubernetesExecutor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %s", err)
 	}
+
+	// Configure QPS and Burst limits to avoid client-side throttling
+	clusterConfig.QPS = DefaultQPS
+	clusterConfig.Burst = DefaultBurst
 
 	// Create the Kubernetes clientset using the in-cluster config
 	// This clientset provides access to all Kubernetes API operations (pods, services, etc.)
