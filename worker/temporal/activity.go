@@ -33,7 +33,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	if err == nil {
 		defer logFile.Close()
 	} else {
-		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+		return nil, fmt.Errorf("failed to prepare workflow logger: %w", err)
 	}
 
 	logger.Ctx(ctx).Infof(
@@ -66,7 +66,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	if err == nil {
 		defer logFile.Close()
 	} else {
-		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+		return nil, temporal.NewNonRetryableApplicationError("failed to prepare workflow logging", "WorkflowLoggerError", err)
 	}
 
 	logger.Ctx(ctx).Infof("executing sync activity for job: jobID=%d", req.JobID)
@@ -120,7 +120,7 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 	if err == nil {
 		defer logFile.Close()
 	} else {
-		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+		return fmt.Errorf("failed to prepare workflow logging: %w", err)
 	}
 
 	logger.Ctx(ctx).Infof("cleaning up sync for job: jobID=%d", req.JobID)
@@ -159,7 +159,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	if err == nil {
 		defer logFile.Close()
 	} else {
-		logger.Ctx(ctx).Errorf("failed to prepare workflow logging: %s, using global logger instead", err)
+		return fmt.Errorf("failed to prepare workflow logging: %w", err)
 	}
 
 	logger.Ctx(ctx).Infof("cleaning up clear-destination for job: jobID=%d", req.JobID)

@@ -14,20 +14,24 @@ import (
 var rootLogger zerolog.Logger // global logger instance
 
 func Init() {
-	format := viper.GetString(constants.EnvLogFormat)
 	level := viper.GetString(constants.EnvLogLevel)
-
 	zerolog.TimestampFunc = func() time.Time { return time.Now().UTC() }
 
-	var writer io.Writer
-	if strings.EqualFold(format, "console") {
-		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-	} else {
-		writer = os.Stdout
-	}
-
+	writer := createStdoutWriter()
 	rootLogger = zerolog.New(writer).With().Timestamp().Logger()
 	zerolog.SetGlobalLevel(parseLogLevel(level))
+}
+
+// createStdoutWriter creates a writer for stdout based on the configured log format.
+func createStdoutWriter() io.Writer {
+	format := viper.GetString(constants.EnvLogFormat)
+	if strings.EqualFold(format, "console") {
+		return zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: time.RFC3339,
+		}
+	}
+	return os.Stdout
 }
 
 func parseLogLevel(levelStr string) zerolog.Level {

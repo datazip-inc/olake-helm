@@ -3,15 +3,11 @@ package logger
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/rs/zerolog"
-	"github.com/spf13/viper"
 )
 
 // ctxKey is the key type for the logger in the context.
@@ -36,27 +32,15 @@ func (wf *WorkflowLogFile) Close() error {
 
 // InitWorkflowLogger creates a zerolog.Logger instance that writes to both stdout and <workflowDir>/worker.log.
 // Returns the logger instance and a file handle that must be closed when the workflow finishes.
+// Note: workflowDir must already exist before calling this function.
 func InitWorkflowLogger(ctx context.Context, workflowDir string) (context.Context, *WorkflowLogFile, error) {
-	if err := os.MkdirAll(workflowDir, constants.DefaultDirPermissions); err != nil {
-		return ctx, nil, fmt.Errorf("failed to create workflow dir %s: %w", workflowDir, err)
-	}
-
 	logFilePath := filepath.Join(workflowDir, "worker.log")
 	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("failed to open worker.log: %w", err)
 	}
 
-	format := viper.GetString(constants.EnvLogFormat)
-
-	stdoutWriter := io.Writer(os.Stdout)
-	if strings.EqualFold(format, "console") {
-		stdoutWriter = zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		}
-	}
-
+	stdoutWriter := createStdoutWriter()
 	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, file)
 	log := zerolog.New(multiWriter).With().Timestamp().Logger()
 	logFile := &WorkflowLogFile{file: file}
