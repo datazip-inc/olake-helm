@@ -404,16 +404,26 @@ useStandardResources: false
 ```
 
 **Option 2: Migrate to Standard Resources (Recommended)**
-To adopt the new behavior, you must manually remove the hook annotations from the existing resources before upgrading:
+To adopt the new behavior, you must manually remove the hook annotations and label the resources for Helm adoption before upgrading:
 
 ```bash
-# 1. Remove annotations from existing resources
-kubectl annotate role olake-workers helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake
-kubectl annotate rolebinding olake-workers helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake
-kubectl annotate serviceaccount olake-workers helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake
-kubectl annotate secret olake-workers-secret helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake
+# 1. ServiceAccount
+kubectl annotate serviceaccount olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label serviceaccount olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
 
-# 2. Perform the upgrade
+# 2. Role
+kubectl annotate role olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label role olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 3. RoleBinding
+kubectl annotate rolebinding olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label rolebinding olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 4. Secret
+kubectl annotate secret olake-workers-secret meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label secret olake-workers-secret app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 5. Perform the upgrade
 helm upgrade olake olake/olake
 ```
 
