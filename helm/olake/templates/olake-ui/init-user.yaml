@@ -3,9 +3,7 @@ kind: Job
 metadata:
   name: olake-signup-init
   namespace: {{ include "olake.namespace" . }}
-  annotations:
-    "helm.sh/hook": post-install
-    "helm.sh/hook-delete-policy": before-hook-creation
+  annotations: {}
   labels:
     app.kubernetes.io/name: olake-ui-init
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -107,5 +105,7 @@ spec:
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeUI.initUser.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
-  # Automatically clean up completed jobs after 1 hour
+  # Automatically clean up completed jobs after 1 hour only if not using standard resources
+  {{- if not .Values.useStandardResources }}
   ttlSecondsAfterFinished: 3600
+  {{- end }}
