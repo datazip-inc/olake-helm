@@ -3,7 +3,9 @@ kind: Job
 metadata:
   name: olake-signup-init
   namespace: {{ include "olake.namespace" . }}
-  annotations: {}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": before-hook-creation
   labels:
     app.kubernetes.io/name: olake-ui-init
     app.kubernetes.io/instance: {{ .Release.Name }}
