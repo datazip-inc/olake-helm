@@ -58,7 +58,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 
 // Start starts the worker
 func (w *Worker) Start() error {
-	logger.Debugf("Starting Temporal worker")
+	logger.Info("starting Temporal worker...")
 	return w.worker.Start()
 }
 

@@ -46,7 +46,7 @@ func main() {
 	defer db.Close()
 
 	// Initialize executor
-	exec, err := executor.NewExecutor(db)
+	exec, err := executor.NewExecutor(ctx, db)
 	if err != nil {
 		logger.Fatalf("failed to create executor: %s", err)
 	}

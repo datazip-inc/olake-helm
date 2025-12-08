@@ -32,7 +32,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	logger.Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
+	logger.Ctx(ctx).Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
 
 	if slices.Contains(constants.AsyncCommands, req.Command) {
 		startOperation, err := d.shouldStartOperation(ctx, req, containerName, workdir)
@@ -68,7 +68,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
-	logger.Infof("running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
+	logger.Ctx(ctx).Infof("running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
 
 	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
@@ -80,7 +80,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 			defer cancel()
 
 			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
-				logger.Warnf("failed to remove container: %s", err)
+				logger.Ctx(ctx).Warnf("failed to remove container: %s", err)
 			}
 		}()
 	}
@@ -98,13 +98,11 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		return "", err
 	}
 
-	logger.Debugf("Docker container output: %s", string(output))
-
 	return string(output), nil
 }
 
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
-	logger.Infof("stopping container for cleanup %s", req.WorkflowID)
+	logger.Ctx(ctx).Infof("stopping container for cleanup %s", req.WorkflowID)
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		return fmt.Errorf("failed to stop container: %s", err)
 	}
