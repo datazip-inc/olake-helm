@@ -387,6 +387,46 @@ The uninstallation script performs the following cleanup steps:
 9. Cleans up any remaining ConfigMaps, Secrets, Services
 10. Deletes the namespace (unless --keep-namespace is specified)
 
+## Migrating to v0.0.7
+
+Version 0.0.7 introduces a significant change to how ServiceAccount, RBAC, and Secret resources are managed. By default, `useStandardResources` is now set to `true`, which converts these from Helm Hooks to standard resources. This improves compatibility with ArgoCD and prevents race conditions during updates.
+
+**For New Installations:**
+No action needed. The new default (`true`) is the recommended configuration.
+
+**For Existing Installations:**
+Upgrading directly may cause `resource already exists` errors because Helm tries to adopt resources that were previously created by hooks.
+
+**Option 1: Maintain Legacy Behavior (Easiest)**
+Set the flag to `false` in your `values.yaml` to keep the old hook-based behavior:
+```yaml
+useStandardResources: false
+```
+
+**Option 2: Migrate to Standard Resources (Recommended)**
+To adopt the new behavior, you must manually remove the hook annotations and label the resources for Helm adoption before upgrading:
+
+```bash
+# 1. ServiceAccount
+kubectl annotate serviceaccount olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label serviceaccount olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 2. Role
+kubectl annotate role olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label role olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 3. RoleBinding
+kubectl annotate rolebinding olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label rolebinding olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 4. Secret
+kubectl annotate secret olake-workers-secret meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label secret olake-workers-secret app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 5. Perform the upgrade
+helm upgrade olake olake/olake
+```
+
 ## Contributing
 
 We ❤️ contributions! Check our [Bounty Program](https://olake.io/docs/community/issues-and-prs#goodies).
