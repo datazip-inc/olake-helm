@@ -1,3 +1,6 @@
+{{- /*
+TODO: Remove the conditional TTL logic in a future release (e.g. v1.0.0).
+*/ -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -105,5 +108,7 @@ spec:
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeUI.initUser.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
-  # Automatically clean up completed jobs after 1 hour
+  # Automatically clean up completed jobs after 1 hour only if not using standard resources
+  {{- if not .Values.useStandardResources }}
   ttlSecondsAfterFinished: 3600
+  {{- end }}
