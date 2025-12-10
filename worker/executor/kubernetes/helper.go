@@ -17,16 +17,22 @@ import (
 // Returns empty map if no mapping is found (graceful fallback)
 // Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
-	// Only apply node mapping for async operations
-	if !slices.Contains(constants.AsyncCommands, operation) {
-		return make(map[string]string)
+	// 1. Try specific mapping (Preferred)
+	// Only apply specific mapping for async operations (sync)
+	if slices.Contains(constants.AsyncCommands, operation) {
+		if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
+			logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
+			return mapping
+		}
 	}
 
-	// Use live mapping from ConfigMapWatcher
-	if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
-		logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
+	// 2. Try default mapping (JobID 0)
+	// Apply default mapping for ALL operations (sync, check, discover)
+	if mapping, exists := k.configWatcher.GetJobMapping(0); exists {
+		logger.Debugf("using default node mapping")
 		return mapping
 	}
+
 	logger.Debugf("no node mapping found for JobID %d, using default scheduling", jobID)
 	return make(map[string]string)
 }
@@ -64,6 +70,13 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 	}
 
 	if _, exists := k.configWatcher.GetJobMapping(jobID); exists {
+		return nil
+	}
+
+	// If default mapping exists (JobID 0), trust it for placement.
+	// Do not auto-generate anti-affinity rules which might conflict with the default selector.
+	// Example: If Default=gpu and Job1=gpu, Anti-Affinity (NotIn gpu) would make unmapped jobs unschedulable on Default nodes.
+	if _, exists := k.configWatcher.GetJobMapping(0); exists {
 		return nil
 	}
 
