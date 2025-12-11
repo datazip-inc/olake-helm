@@ -45,7 +45,7 @@ func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) err
 
 // validateJobMapping validates a single job mapping entry
 func validateJobMapping(jobID int, nodeLabels map[string]string, stats *JobMappingStats) (map[string]string, bool) {
-	if jobID <= 0 {
+	if jobID < 0 {
 		stats.InvalidMappings = append(stats.InvalidMappings, fmt.Sprintf("Invalid JobID: %d", jobID))
 		return nil, false
 	}
