@@ -33,7 +33,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 		return mapping
 	}
 
-	logger.Debugf("no node mapping found for JobID %d, using default scheduling", jobID)
+	logger.Debugf("no specific or default mapping found for JobID %d, using standard scheduling", jobID)
 	return make(map[string]string)
 }
 
