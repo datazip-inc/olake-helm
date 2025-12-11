@@ -29,7 +29,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 	// 2. Try default mapping (JobID 0)
 	// Apply default mapping for ALL operations (sync, test, discover and spec)
 	if mapping, exists := k.configWatcher.GetJobMapping(0); exists {
-		logger.Debugf("using default node mapping")
+		logger.Debugf("using default node mapping: %v", mapping)
 		return mapping
 	}
 
