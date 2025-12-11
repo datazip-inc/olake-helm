@@ -35,7 +35,7 @@ global:
   # Format: { jobID: { node_label: node_value } }
   # Special Key "0": Defines the DEFAULT node selector.
   #   - Applied to all Sync jobs that don't have a specific JobID mapping.
-  #   - Applied to all short-lived jobs (check, discover, spec).
+  #   - Applied to all short-lived jobs (test, discover, spec).
   # Example:
   #   jobMapping:
   #     "0":                 # Default selector
