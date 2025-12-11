@@ -33,12 +33,15 @@ global:
   # -- JobID-based node mapping configuration for pods created by olake-workers
   # Maps JobID (integer) to specific node labels for pod scheduling
   # Format: { jobID: { node_label: node_value } }
+  # Special Key "0": Defines the DEFAULT node selector.
+  #   - Applied to all Sync jobs that don't have a specific JobID mapping.
+  #   - Applied to all short-lived jobs (test, discover, spec).
   # Example:
   #   jobMapping:
-  #     123:
+  #     "0":                 # Default selector
+  #       node-type: "standard"
+  #     123:                 # Specific job selector
   #       olake.io/workload-type: "heavy"
-  #     456:
-  #       node-type: "high-cpu"
   jobMapping: {}
 
   # -- Service account configuration for job pods created by olake-workers
