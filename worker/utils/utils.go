@@ -284,10 +284,11 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 // It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
 func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
 	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
-	if err := SetupWorkDirectory(workdirPath); err != nil {
+	workflowLogPath := filepath.Join(workdirPath, "logs")
+	if err := SetupWorkDirectory(workflowLogPath); err != nil {
 		return ctx, nil, err
 	}
 
-	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workdirPath)
+	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workflowLogPath)
 	return ctxWithLogger, logFile, err
 }

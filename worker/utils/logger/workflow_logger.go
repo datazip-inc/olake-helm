@@ -33,8 +33,8 @@ func (wf *WorkflowLogFile) Close() error {
 // InitWorkflowLogger creates a zerolog.Logger instance that writes to both stdout and <workflowDir>/worker.log.
 // Returns the logger instance and a file handle that must be closed when the workflow finishes.
 // Note: workflowDir must already exist before calling this function.
-func InitWorkflowLogger(ctx context.Context, workflowDir string) (context.Context, *WorkflowLogFile, error) {
-	logFilePath := filepath.Join(workflowDir, "worker.log")
+func InitWorkflowLogger(ctx context.Context, workflowLogsDir string) (context.Context, *WorkflowLogFile, error) {
+	logFilePath := filepath.Join(workflowLogsDir, "worker.log")
 	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("failed to open worker.log: %w", err)
