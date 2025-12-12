@@ -204,17 +204,26 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-// WorkflowAlreadyLaunched checked for the folder named log
-// inside the provided working directory
+// WorkflowAlreadyLaunched checks for olake.log file in the workdir/logs
 //
-// workdir/logs - present -> workflow has started already
-// workdir/logs - not present -> workflow is running for the first time
+// workdir/logs/sync_<timestamp>/olake.log - present -> workflow has started already
+// not present -> workflow is running for the first time
 func WorkflowAlreadyLaunched(workdir string) bool {
-	launchedMarker := filepath.Join(workdir, "logs")
-	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+	logDir := filepath.Join(workdir, "logs")
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
 		return false
 	}
-	return true
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
+			if _, err := os.Stat(olakeLogPath); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // WorkflowHash returns a deterministic hash string for a given workflowID
