@@ -29,19 +29,12 @@ func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Ac
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
-	if err == nil {
-		defer logFile.Close()
-	} else {
-		return nil, fmt.Errorf("failed to prepare workflow logger: %w", err)
-	}
-
-	logger.Ctx(ctx).Infof(
-		"executing activity: command=%s sourceType=%s version=%s workflowID=%s",
-		req.Command,
-		req.ConnectorType,
-		req.Version,
-		req.WorkflowID,
+	log := logger.Log(ctx)
+	log.Info("executing activity",
+		"command", req.Command,
+		"sourceType", req.ConnectorType,
+		"version", req.Version,
+		"workflowID", req.WorkflowID,
 	)
 
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
@@ -62,14 +55,8 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 }
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
-	if err == nil {
-		defer logFile.Close()
-	} else {
-		return nil, temporal.NewNonRetryableApplicationError("failed to prepare workflow logging", "WorkflowLoggerError", err)
-	}
-
-	logger.Ctx(ctx).Infof("executing sync activity for job: jobID=%d", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("executing sync activity", "jobID", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -98,7 +85,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
-			logger.Ctx(ctx).Infof("sync activity cancelled: jobID=%d", req.JobID)
+			log.Info("sync activity cancelled", "jobID", req.JobID)
 			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
@@ -107,7 +94,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
-		logger.Ctx(ctx).Errorf("sync command failed: error=%s", err)
+		log.Error("sync command failed", "error", err)
 		telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
@@ -116,14 +103,8 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 }
 
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
-	if err == nil {
-		defer logFile.Close()
-	} else {
-		return fmt.Errorf("failed to prepare workflow logging: %w", err)
-	}
-
-	logger.Ctx(ctx).Infof("cleaning up sync for job: jobID=%d", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
@@ -155,14 +136,8 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	ctx, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
-	if err == nil {
-		defer logFile.Close()
-	} else {
-		return fmt.Errorf("failed to prepare workflow logging: %w", err)
-	}
-
-	logger.Ctx(ctx).Infof("cleaning up clear-destination for job: jobID=%d", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
 	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
 		return err
@@ -175,7 +150,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
-	err = handle.Update(ctx, client.ScheduleUpdateOptions{
+	err := handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
 				ID:        workflowID,
@@ -189,33 +164,33 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		},
 	})
 	if err != nil {
-		logger.Ctx(ctx).Errorf("failed to update schedule action: error=%s", err)
+		log.Error("failed to update schedule action", "error", err)
 		return err
 	}
-	logger.Ctx(ctx).Infof("updated schedule action to sync for job: jobID=%d scheduleID=%s", req.JobID, scheduleID)
+	log.Info("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	// unpause schedule
 	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
 		Note: "resumed schedule after clear-destination",
 	})
 	if err != nil {
-		logger.Ctx(ctx).Errorf("failed to unpause schedule: error=%s", err)
+		log.Error("failed to unpause schedule", "error", err)
 		return err
 	}
-	logger.Ctx(ctx).Infof("resumed schedule for job: jobID=%d scheduleID=%s", req.JobID, scheduleID)
+	log.Info("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	return nil
 }
 
 func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req types.WebhookNotificationArgs) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
+	log := logger.Log(ctx)
+	log.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
 
 	projectID := req.ProjectID
 	if projectID == "" {
 		// TODO: introduce a dedicated migration to backfill project_id into schedules for older jobs and remove this hardcoded fallback.
 		projectID = "123"
-		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
+		log.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
 	}
 
 	settings, err := a.db.GetProjectSettingsByProjectID(ctx, projectID)
@@ -225,7 +200,7 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req type
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		activityLogger.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
+		log.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
 	}
 	jobName := jobDetails.JobName
 
