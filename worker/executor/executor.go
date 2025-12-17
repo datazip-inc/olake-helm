@@ -65,7 +65,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return nil, err
 	}
 	if req.Command != types.Sync {
-		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", output)
+		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", logger.StripANSI(output))
 	}
 
 	// generated file as response
