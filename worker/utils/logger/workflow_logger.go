@@ -13,10 +13,6 @@ import (
 // ctxKey is the key type for the logger in the context.
 type ctxKey struct{}
 
-type ContextLogger struct {
-	logger zerolog.Logger
-}
-
 // WorkflowLogFile holds the file handle for a workflow's log file.
 type WorkflowLogFile struct {
 	file *os.File
@@ -62,63 +58,4 @@ func FromContext(ctx context.Context) zerolog.Logger {
 		return log
 	}
 	return rootLogger
-}
-
-// Ctx returns a ContextLogger instance derived from the provided context.
-func Ctx(ctx context.Context) ContextLogger {
-	return ContextLogger{logger: FromContext(ctx)}
-}
-
-func (l ContextLogger) Info(v ...interface{}) {
-	logArgs(l.logger.Info(), v...)
-}
-
-func (l ContextLogger) Infof(format string, v ...interface{}) {
-	l.logger.Info().Msgf(format, v...)
-}
-
-func (l ContextLogger) Debug(v ...interface{}) {
-	logArgs(l.logger.Debug(), v...)
-}
-
-func (l ContextLogger) Debugf(format string, v ...interface{}) {
-	l.logger.Debug().Msgf(format, v...)
-}
-
-func (l ContextLogger) Warn(v ...interface{}) {
-	logArgs(l.logger.Warn(), v...)
-}
-
-func (l ContextLogger) Warnf(format string, v ...interface{}) {
-	l.logger.Warn().Msgf(format, v...)
-}
-
-func (l ContextLogger) Error(v ...interface{}) {
-	logArgs(l.logger.Error(), v...)
-}
-
-func (l ContextLogger) Errorf(format string, v ...interface{}) {
-	l.logger.Error().Msgf(format, v...)
-}
-
-func (l ContextLogger) Fatal(v ...interface{}) {
-	logArgs(l.logger.Fatal(), v...)
-	os.Exit(1)
-}
-
-func (l ContextLogger) Fatalf(format string, v ...interface{}) {
-	l.logger.Fatal().Msgf(format, v...)
-	os.Exit(1)
-}
-
-// logArgs writes arguments to the provided event using zerolog conventions.
-func logArgs(event *zerolog.Event, v ...interface{}) {
-	switch len(v) {
-	case 0:
-		event.Send()
-	case 1:
-		event.Interface("message", v[0]).Send()
-	default:
-		event.Msgf("%s", v...)
-	}
 }

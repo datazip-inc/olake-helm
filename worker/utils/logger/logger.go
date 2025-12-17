@@ -92,3 +92,15 @@ func Fatalf(format string, v ...interface{}) {
 	rootLogger.Fatal().Msgf(format, v...)
 	os.Exit(1)
 }
+
+// logArgs writes arguments to the provided event using zerolog conventions.
+func logArgs(event *zerolog.Event, v ...interface{}) {
+	switch len(v) {
+	case 0:
+		event.Send()
+	case 1:
+		event.Interface("message", v[0]).Send()
+	default:
+		event.Msgf("%s", v...)
+	}
+}
