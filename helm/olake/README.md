@@ -133,24 +133,31 @@ With this powerful feature, specific data jobs can be routed to specific Kuberne
 ***Where is the JobID found?***
 The JobID is an integer that is automatically assigned to each job created in OLake UI. The JobID can be found in the corresponding row for each job on the Jobs page.
 
+**Default Node Selector:**
+You can define a **default node selector** using the special key `"0"`. This selector will be applied to:
+1. All unmapped Sync jobs (jobs without a specific ID mapping).
+2. All short-lived operations (Check Connection, Schema Discovery).
+
 ```yaml
 global:
   jobMapping:
-    123:
+    "0": # Default for all unmapped jobs & short-lived tasks
+      node-type: "standard"
+    123: # Specific mapping for Job 123
       olake.io/workload-type: "heavy"
     456:
       node-type: "high-cpu"
     789:
       olake.io/workload-type: "small"
-    999: {} # Empty mapping uses default scheduling
   
-  # - JobID Format: Must be positive integers (e.g., 123, 456, 789)
+  # - JobID Format: Must be positive integers or "0" for default
   # - Label Keys: Must follow RFC 1123 DNS subdomain format (lowercase letters, numbers, hyphens, dots)
   # - Label Values: Must be valid Kubernetes label values (63 chars max, alphanumeric with hyphens)
 ```
 
 **Note on Default Behavior:** 
-- For any JobID that is not specified in the jobMapping configuration, the corresponding job's pod will be scheduled by the standard Kubernetes scheduler, which places it on any available node in the cluster. 
+- If `"0"` (Default) is configured, it is used for all unmapped jobs and other activities (Fetch, Test, Discover).
+- If `"0"` is NOT configured, unmapped jobs are scheduled by the standard Kubernetes scheduler (on any available node), but with automatic anti-affinity rules to avoid nodes reserved for other mapped jobs. 
 
 ### Cloud IAM Integration
 
@@ -386,6 +393,46 @@ The uninstallation script performs the following cleanup steps:
 8. Deletes ClusterRole and ClusterRoleBinding
 9. Cleans up any remaining ConfigMaps, Secrets, Services
 10. Deletes the namespace (unless --keep-namespace is specified)
+
+## Migrating to v0.0.7
+
+Version 0.0.7 introduces a significant change to how ServiceAccount, RBAC, and Secret resources are managed. By default, `useStandardResources` is now set to `true`, which converts these from Helm Hooks to standard resources. This improves compatibility with ArgoCD and prevents race conditions during updates.
+
+**For New Installations:**
+No action needed. The new default (`true`) is the recommended configuration.
+
+**For Existing Installations:**
+Upgrading directly may cause `resource already exists` errors because Helm tries to adopt resources that were previously created by hooks.
+
+**Option 1: Maintain Legacy Behavior (Easiest)**
+Set the flag to `false` in your `values.yaml` to keep the old hook-based behavior:
+```yaml
+useStandardResources: false
+```
+
+**Option 2: Migrate to Standard Resources (Recommended)**
+To adopt the new behavior, you must manually remove the hook annotations and label the resources for Helm adoption before upgrading:
+
+```bash
+# 1. ServiceAccount
+kubectl annotate serviceaccount olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label serviceaccount olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 2. Role
+kubectl annotate role olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label role olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 3. RoleBinding
+kubectl annotate rolebinding olake-workers meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label rolebinding olake-workers app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 4. Secret
+kubectl annotate secret olake-workers-secret meta.helm.sh/release-name=olake meta.helm.sh/release-namespace=olake helm.sh/hook- helm.sh/hook-weight- helm.sh/hook-delete-policy- -n olake --overwrite
+kubectl label secret olake-workers-secret app.kubernetes.io/managed-by=Helm -n olake --overwrite
+
+# 5. Perform the upgrade
+helm upgrade olake olake/olake
+```
 
 ## Contributing
 

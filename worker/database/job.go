@@ -39,6 +39,9 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 
 func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error {
 	log := logger.Log(ctx)
+
+	log.Info("updating job state", "jobID", jobId, "state", state)
+
 	tableName := pq.QuoteIdentifier(db.tables["job"])
 	query := fmt.Sprintf(`
 			UPDATE %s
@@ -55,6 +58,7 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
-	log.Info("successfully updated job state", "jobID", jobId)
+	log.Info("successfully updated job state", "jobID", jobId, "state", state)
+
 	return nil
 }

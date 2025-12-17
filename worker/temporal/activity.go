@@ -158,26 +158,34 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 				Args:      []any{req},
 				TaskQueue: constants.TaskQueue,
 			}
+
+			if input.Description.Schedule.State != nil {
+				input.Description.Schedule.State.Paused = false
+				input.Description.Schedule.State.Note = "Restored to sync after clear-destination"
+			}
+
 			return &client.ScheduleUpdate{
 				Schedule: &input.Description.Schedule,
 			}, nil
 		},
 	})
 	if err != nil {
-		log.Error("failed to update schedule action", "error", err)
+		log.Error("failed to update schedule", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
 		return err
 	}
-	log.Info("updated schedule action to sync for job", "jobID", req.JobID, "scheduleID", scheduleID)
 
-	// unpause schedule
-	err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{
-		Note: "resumed schedule after clear-destination",
-	})
+	// Verify the schedule is actually unpaused
+	desc, err := handle.Describe(ctx)
 	if err != nil {
-		log.Error("failed to unpause schedule", "error", err)
+		log.Error("failed to describe schedule after update", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
 		return err
 	}
-	log.Info("resumed schedule for job", "jobID", req.JobID, "scheduleID", scheduleID)
+	if desc.Schedule.State.Paused {
+		log.Error("schedule still paused after update", "jobID", req.JobID, "scheduleID", scheduleID)
+		return fmt.Errorf("schedule %s, jobID: %d still paused after update", scheduleID, req.JobID)
+	}
+
+	log.Info("successfully updated schedule (clear-destination to sync)", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	return nil
 }
