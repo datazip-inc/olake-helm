@@ -3,6 +3,7 @@ package logger
 import (
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,7 +12,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-var rootLogger zerolog.Logger // global logger instance
+var (
+	rootLogger zerolog.Logger
+
+	// ansiColorRegex matches common ANSI color escape sequences (e.g., "\x1b[32m", "\x1b[0m").
+	ansiColorRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+)
 
 func Init() {
 	level := viper.GetString(constants.EnvLogLevel)
@@ -91,4 +97,20 @@ func Fatal(v ...interface{}) {
 func Fatalf(format string, v ...interface{}) {
 	rootLogger.Fatal().Msgf(format, v...)
 	os.Exit(1)
+}
+
+// logArgs writes arguments to the provided event using zerolog conventions.
+func logArgs(event *zerolog.Event, v ...interface{}) {
+	switch len(v) {
+	case 0:
+		event.Send()
+	case 1:
+		event.Interface("message", v[0]).Send()
+	default:
+		event.Msgf("%s", v...)
+	}
+}
+
+func StripANSI(s string) string {
+	return ansiColorRegex.ReplaceAllString(s, "")
 }

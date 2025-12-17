@@ -48,21 +48,24 @@ func NewExecutor(ctx context.Context, db *database.DB) (*AbstractExecutor, error
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
+	log := logger.Log(ctx)
 	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
 	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
 		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
+			log.Error("failed to write config files", "workdir", workdir, "error", err)
 			return nil, err
 		}
 	}
 
 	output, err := a.executor.Execute(ctx, req, workdir)
 	if err != nil {
+		log.Error("executor failed", "command", req.Command, "error", err)
 		return nil, err
 	}
 	if req.Command != types.Sync {
-		logger.Ctx(ctx).Infof("executor output [%s]: %s", utils.GetExecutorEnvironment(), output)
+		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", logger.StripANSI(output))
 	}
 
 	// generated file as response
@@ -73,11 +76,13 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 	outputJSON, err := utils.ExtractJSONAndMarshal(output)
 	if err != nil {
+		log.Error("failed to extract JSON from output", "error", err)
 		return nil, err
 	}
 
 	outputPath := filepath.Join(workdir, constants.OutputFileName)
 	if err := utils.WriteFile(outputPath, outputJSON); err != nil {
+		log.Error("failed to write output file", "path", outputPath, "error", err)
 		return nil, err
 	}
 
@@ -87,20 +92,25 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 // CleanupAndPersistState stops the container/pod and saves the state file in the database
 func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *types.ExecutionRequest) error {
+	log := logger.Log(ctx)
+
 	if err := a.executor.Cleanup(ctx, req); err != nil {
+		log.Error("failed to cleanup executor", "workflowID", req.WorkflowID, "error", err)
 		return err
 	}
 
 	stateFile, err := utils.GetStateFileFromWorkdir(req.WorkflowID, req.Command)
 	if err != nil {
+		log.Error("failed to read state file", "workflowID", req.WorkflowID, "error", err)
 		return err
 	}
 
 	if err := a.db.UpdateJobState(ctx, req.JobID, stateFile); err != nil {
+		log.Error("failed to update job state in database", "jobID", req.JobID, "error", err)
 		return err
 	}
 
-	logger.Ctx(ctx).Infof("successfully cleaned up sync for job %d", req.JobID)
+	log.Info("successfully cleaned up and persisted state", "jobID", req.JobID)
 	return nil
 }
 

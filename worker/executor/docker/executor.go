@@ -30,13 +30,15 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
+	log := logger.Log(ctx)
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	logger.Ctx(ctx).Infof("running container - command: %s, image: %s, name: %s", req.Command, imageName, containerName)
+	log.Info("running container", "command", req.Command, "image", imageName, "containerName", containerName)
 
 	if slices.Contains(constants.AsyncCommands, req.Command) {
 		startOperation, err := d.shouldStartOperation(ctx, req, containerName, workdir)
 		if err != nil {
+			log.Error("failed to check operation status", "containerName", containerName, "error", err)
 			return "", err
 		}
 		if !startOperation.OK {
@@ -45,6 +47,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	if err := d.PullImage(ctx, imageName, req.Version); err != nil {
+		log.Error("failed to pull image", "image", imageName, "error", err)
 		return "", err
 	}
 
@@ -68,10 +71,11 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
-	logger.Ctx(ctx).Infof("running Docker container with image: %s, name: %s, command: %v", imageName, containerName, req.Args)
+	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
 	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
+		log.Error("failed to create container", "containerName", containerName, "error", err)
 		return "", err
 	}
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
@@ -80,21 +84,24 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 			defer cancel()
 
 			if err := d.client.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
-				logger.Ctx(ctx).Warnf("failed to remove container: %s", err)
+				log.Warn("failed to remove container", "containerID", containerID, "error", err)
 			}
 		}()
 	}
 
 	if err := d.startContainer(ctx, containerID); err != nil {
+		log.Error("failed to start container", "containerID", containerID, "error", err)
 		return "", err
 	}
 
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
+		log.Error("container failed to complete", "containerID", containerID, "error", err)
 		return "", err
 	}
 
 	output, err := d.getContainerLogs(ctx, containerID)
 	if err != nil {
+		log.Error("failed to get container logs", "containerID", containerID, "error", err)
 		return "", err
 	}
 
@@ -102,10 +109,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 }
 
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
-	logger.Ctx(ctx).Infof("stopping container for cleanup %s", req.WorkflowID)
+	log := logger.Log(ctx)
+	log.Info("stopping container for cleanup", "workflowID", req.WorkflowID)
+
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
+		log.Error("failed to stop container", "workflowID", req.WorkflowID, "error", err)
 		return fmt.Errorf("failed to stop container: %s", err)
 	}
+
+	log.Info("container cleanup completed", "workflowID", req.WorkflowID)
 	return nil
 }
 
