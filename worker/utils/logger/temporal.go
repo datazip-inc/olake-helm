@@ -1,13 +1,18 @@
 package logger
 
 import (
+	"context"
+
 	"go.temporal.io/sdk/log"
 )
 
-// temporalLogger wraps our existing logger functions to implement Temporal's interface
-type temporalLogger struct{}
+// contextAwareLogger implements Temporal's log.Logger but writes to workflow file if available.
+type contextAwareLogger struct {
+	ctx context.Context
+}
 
-func (l temporalLogger) Debug(msg string, keyvals ...interface{}) {
+func (l contextAwareLogger) Debug(msg string, keyvals ...interface{}) {
+	logger := FromContext(l.ctx)
 	if len(keyvals) > 0 {
 		logger.Debug().Fields(keyvals).Msg(msg)
 	} else {
@@ -15,7 +20,8 @@ func (l temporalLogger) Debug(msg string, keyvals ...interface{}) {
 	}
 }
 
-func (l temporalLogger) Info(msg string, keyvals ...interface{}) {
+func (l contextAwareLogger) Info(msg string, keyvals ...interface{}) {
+	logger := FromContext(l.ctx)
 	if len(keyvals) > 0 {
 		logger.Info().Fields(keyvals).Msg(msg)
 	} else {
@@ -23,7 +29,8 @@ func (l temporalLogger) Info(msg string, keyvals ...interface{}) {
 	}
 }
 
-func (l temporalLogger) Warn(msg string, keyvals ...interface{}) {
+func (l contextAwareLogger) Warn(msg string, keyvals ...interface{}) {
+	logger := FromContext(l.ctx)
 	if len(keyvals) > 0 {
 		logger.Warn().Fields(keyvals).Msg(msg)
 	} else {
@@ -31,7 +38,8 @@ func (l temporalLogger) Warn(msg string, keyvals ...interface{}) {
 	}
 }
 
-func (l temporalLogger) Error(msg string, keyvals ...interface{}) {
+func (l contextAwareLogger) Error(msg string, keyvals ...interface{}) {
+	logger := FromContext(l.ctx)
 	if len(keyvals) > 0 {
 		logger.Error().Fields(keyvals).Msg(msg)
 	} else {
@@ -39,7 +47,8 @@ func (l temporalLogger) Error(msg string, keyvals ...interface{}) {
 	}
 }
 
-// NewTemporalLogger creates a Temporal-compatible logger using our existing zerolog logger
-func NewTemporalLogger() log.Logger {
-	return temporalLogger{}
+// Log returns a Temporal-compatible logger that writes to workflow file if available.
+// Usage: logger.Log(ctx).Info("message", "key", value)
+func Log(ctx context.Context) log.Logger {
+	return contextAwareLogger{ctx: ctx}
 }

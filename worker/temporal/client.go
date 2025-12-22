@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -23,7 +24,7 @@ func NewClient() (*Temporal, error) {
 	err := utils.RetryWithBackoff(func() error {
 		client, err := client.Dial(client.Options{
 			HostPort: viper.GetString(constants.EnvTemporalAddress),
-			Logger:   logger.NewTemporalLogger(),
+			Logger:   logger.Log(context.Background()),
 		})
 		if err != nil {
 			return err

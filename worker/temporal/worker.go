@@ -11,6 +11,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"google.golang.org/grpc/codes"
 )
@@ -24,7 +25,12 @@ type Worker struct {
 
 // NewWorker creates a new Temporal worker with the provided client
 func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Worker, error) {
-	w := worker.New(t.GetClient(), constants.TaskQueue, worker.Options{})
+	workerOptions := worker.Options{
+		Interceptors: []interceptor.WorkerInterceptor{
+			NewLoggingInterceptor(),
+		},
+	}
+	w := worker.New(t.GetClient(), constants.TaskQueue, workerOptions)
 
 	// regsiter workflows
 	w.RegisterWorkflow(RunSyncWorkflow)
@@ -58,7 +64,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 
 // Start starts the worker
 func (w *Worker) Start() error {
-	logger.Debugf("Starting Temporal worker")
+	logger.Info("starting Temporal worker...")
 	return w.worker.Start()
 }
 

@@ -27,7 +27,7 @@ type AbstractExecutor struct {
 }
 
 // NewExecutor creates and returns the executor client based on the executor environment
-func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
+func NewExecutor(ctx context.Context, db *database.DB) (*AbstractExecutor, error) {
 	executorEnv := utils.GetExecutorEnvironment()
 
 	var exec Executor
@@ -37,7 +37,7 @@ func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
 	case string(types.Docker):
 		exec, err = docker.NewDockerExecutor()
 	case string(types.Kubernetes):
-		exec, err = kubernetes.NewKubernetesExecutor()
+		exec, err = kubernetes.NewKubernetesExecutor(ctx)
 	default:
 		exec, err = nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
 	}
@@ -48,22 +48,24 @@ func NewExecutor(db *database.DB) (*AbstractExecutor, error) {
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	subdir := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
-	workdir, err := utils.SetupWorkDirectory(utils.GetConfigDir(), subdir)
-	if err != nil {
-		return nil, err
-	}
+	log := logger.Log(ctx)
+	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
 	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
 		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
+			log.Error("failed to write config files", "workdir", workdir, "error", err)
 			return nil, err
 		}
 	}
 
-	out, err := a.executor.Execute(ctx, req, workdir)
+	output, err := a.executor.Execute(ctx, req, workdir)
 	if err != nil {
+		log.Error("executor failed", "command", req.Command, "error", err)
 		return nil, err
+	}
+	if req.Command != types.Sync {
+		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", logger.StripANSI(output))
 	}
 
 	// generated file as response
@@ -72,13 +74,15 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return &types.ExecutorResponse{Response: filePath}, nil
 	}
 
-	outJSON, err := utils.ExtractJSONAndMarshal(out)
+	outputJSON, err := utils.ExtractJSONAndMarshal(output)
 	if err != nil {
+		log.Error("failed to extract JSON from output", "error", err)
 		return nil, err
 	}
 
 	outputPath := filepath.Join(workdir, constants.OutputFileName)
-	if err := utils.WriteFile(outputPath, outJSON); err != nil {
+	if err := utils.WriteFile(outputPath, outputJSON); err != nil {
+		log.Error("failed to write output file", "path", outputPath, "error", err)
 		return nil, err
 	}
 
@@ -88,20 +92,25 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 // CleanupAndPersistState stops the container/pod and saves the state file in the database
 func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *types.ExecutionRequest) error {
+	log := logger.Log(ctx)
+
 	if err := a.executor.Cleanup(ctx, req); err != nil {
+		log.Error("failed to cleanup executor", "workflowID", req.WorkflowID, "error", err)
 		return err
 	}
 
 	stateFile, err := utils.GetStateFileFromWorkdir(req.WorkflowID, req.Command)
 	if err != nil {
+		log.Error("failed to read state file", "workflowID", req.WorkflowID, "error", err)
 		return err
 	}
 
 	if err := a.db.UpdateJobState(ctx, req.JobID, stateFile); err != nil {
+		log.Error("failed to update job state in database", "jobID", req.JobID, "error", err)
 		return err
 	}
 
-	logger.Infof("successfully cleaned up sync for job %d", req.JobID)
+	log.Info("successfully cleaned up and persisted state", "jobID", req.JobID)
 	return nil
 }
 

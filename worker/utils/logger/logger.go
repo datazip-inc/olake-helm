@@ -3,6 +3,7 @@ package logger
 import (
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,32 +12,34 @@ import (
 	"github.com/spf13/viper"
 )
 
-var logger zerolog.Logger
+var (
+	rootLogger zerolog.Logger
+
+	// ansiColorRegex matches common ANSI color escape sequences (e.g., "\x1b[32m", "\x1b[0m").
+	ansiColorRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+)
 
 func Init() {
-	format := viper.GetString(constants.EnvLogFormat)
 	level := viper.GetString(constants.EnvLogLevel)
-
 	zerolog.TimestampFunc = func() time.Time { return time.Now().UTC() }
 
-	var writer io.Writer
-	switch strings.ToLower(format) {
-	case "console":
-		// Use ConsoleWriter with built-in colors and formatting
-		writer = zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		}
-	default:
-		// Default to JSON for production safety
-		writer = os.Stdout
-	}
-
-	logger = zerolog.New(writer).With().Timestamp().Logger()
+	writer := createStdoutWriter()
+	rootLogger = zerolog.New(writer).With().Timestamp().Logger()
 	zerolog.SetGlobalLevel(parseLogLevel(level))
 }
 
-// parseLogLevel converts a string level to a zerolog.Level
+// createStdoutWriter creates a writer for stdout based on the configured log format.
+func createStdoutWriter() io.Writer {
+	format := viper.GetString(constants.EnvLogFormat)
+	if strings.EqualFold(format, "console") {
+		return zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: time.RFC3339,
+		}
+	}
+	return os.Stdout
+}
+
 func parseLogLevel(levelStr string) zerolog.Level {
 	switch strings.ToLower(levelStr) {
 	case "debug":
@@ -50,53 +53,64 @@ func parseLogLevel(levelStr string) zerolog.Level {
 	case "fatal":
 		return zerolog.FatalLevel
 	default:
-		return zerolog.InfoLevel // Default to info level
+		return zerolog.InfoLevel
 	}
 }
 
-// Info writes record with log level INFO
 func Info(v ...interface{}) {
-	if len(v) == 1 {
-		logger.Info().Interface("message", v[0]).Send()
-	} else {
-		logger.Info().Msgf("%s", v...)
-	}
+	logArgs(rootLogger.Info(), v...)
 }
 
 func Infof(format string, v ...interface{}) {
-	logger.Info().Msgf(format, v...)
-}
-
-func Debug(v ...interface{}) {
-	logger.Debug().Msgf("%s", v...)
-}
-
-func Debugf(format string, v ...interface{}) {
-	logger.Debug().Msgf(format, v...)
-}
-
-func Error(v ...interface{}) {
-	logger.Error().Msgf("%s", v...)
-}
-
-func Errorf(format string, v ...interface{}) {
-	logger.Error().Msgf(format, v...)
+	rootLogger.Info().Msgf(format, v...)
 }
 
 func Warn(v ...interface{}) {
-	logger.Warn().Msgf("%s", v...)
+	logArgs(rootLogger.Warn(), v...)
 }
 
 func Warnf(format string, v ...interface{}) {
-	logger.Warn().Msgf(format, v...)
+	rootLogger.Warn().Msgf(format, v...)
+}
+
+func Error(v ...interface{}) {
+	logArgs(rootLogger.Error(), v...)
+}
+
+func Errorf(format string, v ...interface{}) {
+	rootLogger.Error().Msgf(format, v...)
+}
+
+func Debug(v ...interface{}) {
+	logArgs(rootLogger.Debug(), v...)
+}
+
+func Debugf(format string, v ...interface{}) {
+	rootLogger.Debug().Msgf(format, v...)
 }
 
 func Fatal(v ...interface{}) {
-	logger.Fatal().Msgf("%s", v...)
+	logArgs(rootLogger.Fatal(), v...)
 	os.Exit(1)
 }
 
 func Fatalf(format string, v ...interface{}) {
-	logger.Fatal().Msgf(format, v...)
+	rootLogger.Fatal().Msgf(format, v...)
 	os.Exit(1)
+}
+
+// logArgs writes arguments to the provided event using zerolog conventions.
+func logArgs(event *zerolog.Event, v ...interface{}) {
+	switch len(v) {
+	case 0:
+		event.Send()
+	case 1:
+		event.Interface("message", v[0]).Send()
+	default:
+		event.Msgf("%s", v...)
+	}
+}
+
+func StripANSI(s string) string {
+	return ansiColorRegex.ReplaceAllString(s, "")
 }

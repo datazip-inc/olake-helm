@@ -10,6 +10,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
@@ -28,11 +29,13 @@ func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Ac
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing", req.Command, "activity",
+	log := logger.Log(ctx)
+	log.Info("executing activity",
+		"command", req.Command,
 		"sourceType", req.ConnectorType,
 		"version", req.Version,
-		"workflowID", req.WorkflowID)
+		"workflowID", req.WorkflowID,
+	)
 
 	activity.RecordHeartbeat(ctx, "executing %s activity", req.Command)
 	req.HeartbeatFunc = activity.RecordHeartbeat
@@ -52,8 +55,8 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 }
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Debug("executing sync activity for job", "jobID", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("executing sync activity", "jobID", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -82,7 +85,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
-			activityLogger.Info("sync activity cancelled", "jobID", req.JobID)
+			log.Info("sync activity cancelled", "jobID", req.JobID)
 			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
@@ -91,7 +94,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
-		activityLogger.Error("sync command failed", "error", err)
+		log.Error("sync command failed", "error", err)
 		telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
@@ -100,8 +103,8 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 }
 
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up sync for job", "jobID", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
@@ -133,8 +136,8 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("cleaning up clear-destination for job", "jobID", req.JobID)
+	log := logger.Log(ctx)
+	log.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
 	if err := a.executor.CleanupAndPersistState(ctx, req); err != nil {
 		return err
@@ -167,35 +170,35 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		},
 	})
 	if err != nil {
-		activityLogger.Error("failed to update", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
+		log.Error("failed to update schedule", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
 		return err
 	}
 
 	// Verify the schedule is actually unpaused
 	desc, err := handle.Describe(ctx)
 	if err != nil {
-		activityLogger.Error("failed to describe schedule after update", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
+		log.Error("failed to describe schedule after update", "jobID", req.JobID, "scheduleID", scheduleID, "error", err)
 		return err
 	}
 	if desc.Schedule.State.Paused {
-		activityLogger.Error("schedule still paused after update", "jobID", req.JobID, "scheduleID", scheduleID)
+		log.Error("schedule still paused after update", "jobID", req.JobID, "scheduleID", scheduleID)
 		return fmt.Errorf("schedule %s, jobID: %d still paused after update", scheduleID, req.JobID)
 	}
 
-	activityLogger.Info("successfully updated schedule (clear-destination to sync)", "jobID", req.JobID, "scheduleID", scheduleID)
+	log.Info("successfully updated schedule (clear-destination to sync)", "jobID", req.JobID, "scheduleID", scheduleID)
 
 	return nil
 }
 
 func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req types.WebhookNotificationArgs) error {
-	activityLogger := activity.GetLogger(ctx)
-	activityLogger.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
+	log := logger.Log(ctx)
+	log.Info("Sending webhook alert", "jobID", req.JobID, "projectID", req.ProjectID)
 
 	projectID := req.ProjectID
 	if projectID == "" {
 		// TODO: introduce a dedicated migration to backfill project_id into schedules for older jobs and remove this hardcoded fallback.
 		projectID = "123"
-		activityLogger.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
+		log.Info("project_id is empty, defaulting to fallback project_id", "jobID", req.JobID, "fallbackProjectID", projectID)
 	}
 
 	settings, err := a.db.GetProjectSettingsByProjectID(ctx, projectID)
@@ -205,7 +208,7 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req type
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		activityLogger.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
+		log.Warn("failed to get job data for webhook notification", "jobID", req.JobID, "error", err)
 	}
 	jobName := jobDetails.JobName
 
