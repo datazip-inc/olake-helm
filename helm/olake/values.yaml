@@ -30,19 +30,37 @@ global:
   #     - name: "docker-hub-secret"
   imagePullSecrets: []
 
-  # -- JobID-based node mapping configuration for pods created by olake-workers
-  # Maps JobID (integer) to specific node labels for pod scheduling
-  # Format: { jobID: { node_label: node_value } }
-  # Special Key "0": Defines the DEFAULT node selector.
-  #   - Applied to all Sync jobs that don't have a specific JobID mapping.
-  #   - Applied to all short-lived jobs (test, discover, spec).
-  # Example:
-  #   jobMapping:
-  #     "0":                 # Default selector
-  #       node-type: "standard"
-  #     123:                 # Specific job selector
-  #       olake.io/workload-type: "heavy"
+  # -- [DEPRECATED] JobID-based node mapping configuration
+  # Use `global.jobProfiles` instead. This field will be removed in a future release.
+  # Maps JobID (integer) to specific node labels for pod scheduling (NodeSelector only).
   jobMapping: {}
+
+  # -- JobID-based scheduling profiles for pods created by olake-workers
+  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity).
+  # Overrides `jobMapping` if both are defined for the same JobID.
+  #
+  # Special Key "0": Defines the DEFAULT profile for all short-lived jobs (test, discover, spec)
+  # and any Sync jobs not mapped to a specific profile.
+  #
+  # Example:
+  #   jobProfiles:
+  #     0:    # Default Profile
+  #       nodeSelector:
+  #         node-type: "standard"
+  #       tolerations:
+  #         - key: "spot"
+  #           operator: "Exists"
+  #           effect: "NoSchedule"
+  #     123:                 # Specific Job Profile
+  #       affinity:
+  #         nodeAffinity:
+  #           requiredDuringSchedulingIgnoredDuringExecution:
+  #             nodeSelectorTerms:
+  #               - matchExpressions:
+  #                 - key: "gpu"
+  #                   operator: "In"
+  #                   values: ["true"]
+  jobProfiles: {}
 
   # -- Service account configuration for job pods created by olake-workers
   # Used for cloud provider IAM integration (AWS IRSA, GCP Workload Identity, Azure Workload Identity)
@@ -253,23 +271,6 @@ olakeWorker:
 
   # -- OLake Worker application configuration
   config:
-    worker:
-      # -- Maximum concurrent activities(https://docs.temporal.io/activities) per worker
-      # Increase for higher throughput, decrease for resource constraints
-      maxConcurrentActivities: 15
-
-      # -- Maximum concurrent workflows(https://docs.temporal.io/workflows) per worker
-      maxConcurrentWorkflows: 10
-
-    # -- Timeout configuration for different operation types
-    timeouts:
-      # -- Activity execution timeouts
-      activity:
-        discover: 2h
-        test: 2h
-        sync: 700h
-        spec: 5m
-
     # -- Logging configuration
     logging:
       level: info

@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -25,7 +24,7 @@ type ConfigMapWatcher struct {
 
 	// Thread-safe job mapping storage
 	mu         sync.RWMutex
-	jobMapping map[int]map[string]string // TODO: use sync.Map
+	jobMapping map[int]JobSchedulingConfig
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -37,7 +36,7 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 		clientset:     clientset,
 		namespace:     namespace,
 		configMapName: "olake-workers-config",
-		jobMapping:    make(map[int]map[string]string),
+		jobMapping:    make(map[int]JobSchedulingConfig),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -104,63 +103,52 @@ func (w *ConfigMapWatcher) Stop() {
 	w.cancel()
 }
 
-// GetJobMapping returns mapping for specific jobID (thread-safe)
-// Uses RWMutex because this function is called concurrently by multiple pod creation goroutines
-// while the ConfigMap informer goroutine may be updating w.jobMapping in the background.
-// RLock allows multiple concurrent readers while preventing data races with writer updates.
-func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
+// GetJobMapping returns mapping for specific jobID
+func (w *ConfigMapWatcher) GetJobMapping(jobID int) (JobSchedulingConfig, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	mapping, exists := w.jobMapping[jobID]
-	if !exists {
-		return map[string]string{}, false
-	}
-
-	result := make(map[string]string, len(mapping))
-	for k, v := range mapping {
-		result[k] = v
-	}
-	return result, true
-}
-
-// GetAllJobMapping returns all job mappings (thread-safe)
-// Returns a deep copy to prevent external modification of internal state
-func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	result := make(map[int]map[string]string, len(w.jobMapping))
-	for jobID, labels := range w.jobMapping {
-		labelsCopy := make(map[string]string, len(labels))
-		for k, v := range labels {
-			labelsCopy[k] = v
-		}
-		result[jobID] = labelsCopy
-	}
-	return result
+	config, exists := w.jobMapping[jobID]
+	return config, exists
 }
 
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
-	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
-	if !exists || rawMapping == "" {
-		log := utils.Ternary(!exists, "no OLAKE_JOB_MAPPING in ConfigMap %s", "mmpty OLAKE_JOB_MAPPING in ConfigMap %s").(string)
-		logger.Debugf(log, w.configMapName)
-		w.mu.Lock()
-		w.jobMapping = map[int]map[string]string{}
-		w.mu.Unlock()
-		return
+	// TODO: Remove legacy OLAKE_JOB_MAPPING loading logic (Deprecated).
+	// This block supports the legacy `jobMapping` configuration which only supports NodeSelectors.
+	// It has been superseded by `jobProfiles` and should be removed in a future major release to clean up the codebase.
+	// 1. Load Legacy Mapping
+	var legacyMapping map[int]JobSchedulingConfig
+	if mapping, exists := cm.Data["OLAKE_JOB_MAPPING"]; exists && mapping != "" {
+		legacyMapping = LoadJobMapping(mapping)
+	} else {
+		legacyMapping = make(map[int]JobSchedulingConfig)
 	}
 
-	newMapping := LoadJobMapping(rawMapping)
+	// 2. Load New Profiles
+	var jobProfiles map[int]JobSchedulingConfig
+	if profiles, exists := cm.Data["OLAKE_JOB_PROFILES"]; exists && profiles != "" {
+		jobProfiles = LoadJobProfiles(profiles)
+	} else {
+		jobProfiles = make(map[int]JobSchedulingConfig)
+	}
 
-	// Update thread-safe storage with exclusive lock
-	// Multiple Temporal activity goroutines call GetJobMapping() concurrently (readers)
-	// while this ConfigMap informer goroutine updates jobMapping (writer).
-	// RWMutex prevents data races and map corruption during concurrent access.
+	// 3. Merge: Start with Legacy, Overwrite with Profiles
+	finalConfig := make(map[int]JobSchedulingConfig)
+
+	// Add Legacy entries
+	for jobID, config := range legacyMapping {
+		finalConfig[jobID] = config
+	}
+
+	// Overwrite/Add Profiles
+	for jobID, config := range jobProfiles {
+		finalConfig[jobID] = config
+	}
+
 	w.mu.Lock()
-	w.jobMapping = newMapping
+	w.jobMapping = finalConfig
 	w.mu.Unlock()
 
-	logger.Infof("updated job mapping with %d entries", len(newMapping))
+	logger.Infof("updated job configuration: %d legacy entries, %d profiles, %d total merged",
+		len(legacyMapping), len(jobProfiles), len(finalConfig))
 }
