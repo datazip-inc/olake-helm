@@ -21,6 +21,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 				logger.Infof("found node selector for JobID %d: %v", jobID, config.NodeSelector)
 				return config.NodeSelector
 			}
+			return map[string]string{}
 		}
 	}
 
@@ -33,21 +34,22 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 	}
 
 	logger.Debugf("no specific or default node selector for JobID %d", jobID)
-	return make(map[string]string)
+	return map[string]string{}
 }
 
 // GetTolerationsForJob returns tolerations for the given jobID
 func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Command) []corev1.Toleration {
-	// 1. Try specific mapping (Preferred)
+	// 1. Try specific mapping
 	if slices.Contains(constants.AsyncCommands, operation) {
 		if config, exists := k.configWatcher.GetJobMapping(jobID); exists {
 			if len(config.Tolerations) > 0 {
 				return config.Tolerations
 			}
+			return []corev1.Toleration{}
 		}
 	}
 
-	// 2. Try default mapping (JobID 0)
+	// 2. Try default mapping
 	if config, exists := k.configWatcher.GetJobMapping(0); exists {
 		if len(config.Tolerations) > 0 {
 			return config.Tolerations
