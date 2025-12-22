@@ -50,7 +50,7 @@ func LoadJobMapping(mapping string) map[int]JobSchedulingConfig {
 	return result
 }
 
-// LoadJobProfiles parses new OLAKE_JOB_PROFILES JSON string
+// LoadJobProfiles parses OLAKE_JOB_PROFILES JSON string
 func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 	if strings.TrimSpace(profiles) == "" {
 		logger.Info("no Job Profiles found")
@@ -59,17 +59,16 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 
 	result := make(map[int]JobSchedulingConfig)
 
-	// Use standard json.Unmarshal (Helm converts YAML -> JSON)
 	if err := json.Unmarshal([]byte(profiles), &result); err != nil {
 		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s", err)
 		return map[int]JobSchedulingConfig{}
 	}
 
-	logger.Infof("profiles loaded: %d entries", len(result))
+	logger.Infof("job profiles loaded: %d entries", len(result))
 
 	if len(result) > 0 {
 		if jsonBytes, err := json.Marshal(result); err == nil {
-			logger.Debugf("profiles configuration: %s", string(jsonBytes))
+			logger.Debugf("job profiles configuration: %s", string(jsonBytes))
 		}
 	}
 
