@@ -46,6 +46,10 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 			return nil, err
 		}
 
+		if req.Options != nil && req.Options.UseEmptyState {
+			jobDetails.State = "{}"
+		}
+
 		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
 			return nil, err
 		}
