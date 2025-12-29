@@ -134,7 +134,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
 
-	if req.Options.TempPath != "" {
+	if req.Options != nil && req.Options.TempPath != "" {
 		data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.Options.TempPath))
 		if err != nil {
 			return fmt.Errorf("failed to read streams file: %s", err)
