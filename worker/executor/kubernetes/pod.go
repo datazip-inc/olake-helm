@@ -21,7 +21,8 @@ import (
 )
 
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
-	logger.Debugf("waiting for Pod %s to complete (timeout: %v)", podName, timeout)
+	log := logger.Log(ctx)
+	log.Debug("waiting for pod to complete", "podName", podName, "timeout", timeout)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
@@ -32,12 +33,13 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 		pod, err := k.client.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
+			log.Error("failed to get pod status", "podName", podName, "error", err)
 			return fmt.Errorf("failed to get pod status: %s", err)
 		}
 
 		// Check if pod completed successfully
 		if pod.Status.Phase == corev1.PodSucceeded {
-			logger.Infof("pod %s completed successfully", podName)
+			log.Info("pod completed successfully", "podName", podName)
 			return nil
 		}
 
@@ -46,7 +48,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			// Check if this is a retryable infrastructure failure
 			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
 			if slices.Contains(retryableReasons, pod.Status.Reason) {
-				logger.Warnf("pod %s is not running: %s, message: %s - continuing to poll", podName, pod.Status.Reason, pod.Status.Message)
+				log.Warn("pod not running, continuing to poll", "podName", podName, "reason", pod.Status.Reason, "message", pod.Status.Message)
 				continue
 			}
 
@@ -64,6 +66,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
 				}
 			}
+			log.Error("pod failed", "podName", podName, "containerInfo", containerInfo)
 			return fmt.Errorf("%w: pod %s failed (%s)", constants.ErrExecutionFailed, podName, containerInfo)
 		}
 
@@ -72,32 +75,36 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		case <-time.After(5 * time.Second):
 			// Continue to next iteration
 		case <-ctx.Done():
-			logger.Warnf("context cancelled while waiting for pod %s", podName)
+			log.Warn("context cancelled while waiting for pod", "podName", podName)
 			return ctx.Err()
 		}
 	}
 
+	log.Error("pod timed out", "podName", podName, "timeout", timeout)
 	return fmt.Errorf("pod timed out after %v", timeout)
 }
 
 func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (string, error) {
+	log := logger.Log(ctx)
 	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: "connector",
 	})
 
 	logs, err := req.Stream(ctx)
 	if err != nil {
+		log.Error("failed to stream pod logs", "podName", podName, "error", err)
 		return "", fmt.Errorf("failed to get pod logs: %s", err)
 	}
 	defer func() {
 		if err := logs.Close(); err != nil {
-			logger.Warnf("failed to close logs: %s", err)
+			log.Warn("failed to close log stream", "podName", podName, "error", err)
 		}
 	}()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
 	if err != nil {
+		log.Error("failed to read pod logs", "podName", podName, "error", err)
 		return "", fmt.Errorf("failed to read pod logs: %s", err)
 	}
 
@@ -105,20 +112,22 @@ func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (st
 }
 
 func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) error {
-	logger.Debugf("cleaning up pod %s in namespace %s", podName, k.namespace)
+	log := logger.Log(ctx)
+	log.Debug("cleaning up pod", "podName", podName, "namespace", k.namespace)
 
 	// Delete the pod only
 	err := k.client.CoreV1().Pods(k.namespace).Delete(ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		// Treat "not found" as success - cleanup is idempotent
 		if apierrors.IsNotFound(err) {
-			logger.Infof("pod %s already deleted in namespace %s - cleanup complete", podName, k.namespace)
+			log.Info("pod already deleted", "podName", podName, "namespace", k.namespace)
 			return nil
 		}
+		log.Error("failed to delete pod", "podName", podName, "namespace", k.namespace, "error", err)
 		return fmt.Errorf("failed to delete pod %s in namespace %s: %s", podName, k.namespace, err)
 	}
 
-	logger.Debugf("successfully cleaned up pod %s in namespace %s", podName, k.namespace)
+	log.Debug("successfully cleaned up pod", "podName", podName, "namespace", k.namespace)
 	return nil
 }
 
@@ -244,22 +253,25 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 }
 
 func (k *KubernetesExecutor) createPod(ctx context.Context, podSpec *corev1.Pod) (*corev1.Pod, error) {
+	log := logger.Log(ctx)
 	result, err := k.client.CoreV1().Pods(k.namespace).Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {
 		if !apierrors.IsAlreadyExists(err) {
+			log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
 			return nil, fmt.Errorf("failed to create pod: %s", err)
 		}
 
-		logger.Infof("pod already exists, resuming polling for Pod: %s", podSpec.Name)
+		log.Info("pod already exists, resuming polling", "podName", podSpec.Name)
 
 		// Fetch the existing pod
 		existing, getErr := k.client.CoreV1().Pods(k.namespace).Get(ctx, podSpec.Name, metav1.GetOptions{})
 		if getErr != nil {
+			log.Error("pod exists but failed to fetch", "podName", podSpec.Name, "error", getErr)
 			return nil, fmt.Errorf("pod exists but failed to fetch: %s", getErr)
 		}
 		return existing, nil
 	}
 
-	logger.Debugf("successfully created pod %s", podSpec.Name)
+	log.Info("successfully created pod", "podName", podSpec.Name)
 	return result, nil
 }

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -47,7 +48,7 @@ func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duratio
 		if err := fn(); err != nil {
 			errMsg = err
 			if retry < maxRetries-1 {
-				logger.Warnf("Retry attempt %d/%d failed: %s. Retrying in %v...", retry+1, maxRetries, err, delay)
+				logger.Warnf("retry attempt %d/%d failed: %s. retrying in %v...", retry+1, maxRetries, err, delay)
 				time.Sleep(delay)
 				delay *= 2
 				continue
@@ -203,17 +204,26 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-// WorkflowAlreadyLaunched checked for the folder named log
-// inside the provided working directory
+// WorkflowAlreadyLaunched checks for olake.log file in the workdir/logs
 //
-// workdir/logs - present -> workflow has started already
-// workdir/logs - not present -> workflow is running for the first time
+// workdir/logs/sync_<timestamp>/olake.log - present -> workflow has started already
+// not present -> workflow is running for the first time
 func WorkflowAlreadyLaunched(workdir string) bool {
-	launchedMarker := filepath.Join(workdir, "logs")
-	if _, err := os.Stat(launchedMarker); os.IsNotExist(err) {
+	logDir := filepath.Join(workdir, "logs")
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
 		return false
 	}
-	return true
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
+			if _, err := os.Stat(olakeLogPath); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // WorkflowHash returns a deterministic hash string for a given workflowID
@@ -226,6 +236,12 @@ func GetExecutorEnvironment() string {
 		return string(types.Kubernetes)
 	}
 	return string(types.Docker)
+}
+
+func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, string) {
+	subdir := GetWorkflowDirectory(command, workflowID)
+	workdir := filepath.Join(GetConfigDir(), subdir)
+	return subdir, workdir
 }
 
 // RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
@@ -271,4 +287,17 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("no valid JSON block found in output")
+}
+
+// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
+// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
+func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
+	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
+	workflowLogPath := filepath.Join(workdirPath, "logs")
+	if err := SetupWorkDirectory(workflowLogPath); err != nil {
+		return ctx, nil, err
+	}
+
+	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workflowLogPath)
+	return ctxWithLogger, logFile, err
 }

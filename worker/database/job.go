@@ -15,6 +15,7 @@ const (
 )
 
 func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) {
+	log := logger.Log(ctx)
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -30,13 +31,16 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 
 	var jobData types.JobData
 	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver); err != nil {
+		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
 	return jobData, nil
 }
 
 func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error {
-	logger.Infof("updating job[%d] with state: %s", jobId, state)
+	log := logger.Log(ctx)
+
+	log.Info("updating job state", "jobID", jobId, "state", state)
 
 	tableName := pq.QuoteIdentifier(db.tables["job"])
 	query := fmt.Sprintf(`
@@ -50,9 +54,11 @@ func (db *DB) UpdateJobState(ctx context.Context, jobId int, state string) error
 
 	_, err := db.client.ExecContext(cctx, query, state, jobId)
 	if err != nil {
+		log.Error("failed to update job state", "jobID", jobId, "error", err)
 		return fmt.Errorf("failed to update job state: %s", err)
 	}
 
-	logger.Info("successfully updated job[%d] with state: %s", jobId, state)
+	log.Info("successfully updated job state", "jobID", jobId, "state", state)
+
 	return nil
 }
