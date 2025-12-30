@@ -112,6 +112,40 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (JobSchedulingConfig, bool) 
 	return config, exists
 }
 
+// GetAllJobMapping returns a copy of all job scheduling configs.
+// This is primarily used to preserve legacy scheduling behavior (auto anti-affinity generation)
+// for unmapped sync jobs when only legacy job mappings are configured.
+func (w *ConfigMapWatcher) GetAllJobMapping() map[int]JobSchedulingConfig {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	out := make(map[int]JobSchedulingConfig, len(w.jobMapping))
+	for jobID, cfg := range w.jobMapping {
+		// Deep copy the node selector map to prevent external mutation.
+		var ns map[string]string
+		if cfg.NodeSelector != nil {
+			ns = make(map[string]string, len(cfg.NodeSelector))
+			for k, v := range cfg.NodeSelector {
+				ns[k] = v
+			}
+		}
+
+		// Shallow copy tolerations slice (elements are structs).
+		var tols []corev1.Toleration
+		if cfg.Tolerations != nil {
+			tols = make([]corev1.Toleration, len(cfg.Tolerations))
+			copy(tols, cfg.Tolerations)
+		}
+
+		out[jobID] = JobSchedulingConfig{
+			NodeSelector: ns,
+			Tolerations:  tols,
+			Affinity:     cfg.Affinity, // treated as read-only
+		}
+	}
+	return out
+}
+
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	// TODO: Remove legacy OLAKE_JOB_MAPPING loading logic (Deprecated).
 	// This block supports the legacy `jobMapping` configuration which only supports NodeSelectors.
@@ -140,8 +174,29 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 		finalConfig[jobID] = config
 	}
 
-	// Overwrite/Add Profiles
+	// Merge/Overwrite with Profiles
 	for jobID, config := range jobProfiles {
+		if legacy, ok := finalConfig[jobID]; ok {
+			// Field-wise merge for migration safety:
+			// - If a profile omits a field, inherit it from legacy mapping.
+			// - If a profile explicitly sets an empty object/array, it overrides (clears).
+			merged := legacy
+
+			if config.NodeSelector != nil {
+				merged.NodeSelector = config.NodeSelector
+			}
+			// nil slice = not provided; empty slice = explicitly provided empty (clear)
+			if config.Tolerations != nil {
+				merged.Tolerations = config.Tolerations
+			}
+			if config.Affinity != nil {
+				merged.Affinity = config.Affinity
+			}
+
+			finalConfig[jobID] = merged
+			continue
+		}
+
 		finalConfig[jobID] = config
 	}
 
