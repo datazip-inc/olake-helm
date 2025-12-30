@@ -127,37 +127,54 @@ olakeUI:
           - olake.example.com
 ```
 
-### JobID-Based Node Mapping
-With this powerful feature, specific data jobs can be routed to specific Kubernetes nodes, by which performance and reliability can be optimized.
+### Job Scheduling (Job Profiles)
+OLake workers create “activity pods” for each job execution. You can control where those pods schedule using **JobID-based scheduling profiles**: `nodeSelector`, `tolerations`, and `affinity`.
 
 ***Where is the JobID found?***
 The JobID is an integer that is automatically assigned to each job created in OLake UI. The JobID can be found in the corresponding row for each job on the Jobs page.
 
-**Default Node Selector:**
-You can define a **default node selector** using the special key `"0"`. This selector will be applied to:
-1. All unmapped Sync jobs (jobs without a specific ID mapping).
+**Default Profile (`0`):**
+You can define a **default scheduling profile** using the special key `"0"`. This profile is applied to:
+1. All unmapped Sync jobs (jobs without a specific ID profile).
 2. All short-lived operations (Check Connection, Schema Discovery).
 
 ```yaml
 global:
-  jobMapping:
-    "0": # Default for all unmapped jobs & short-lived tasks
-      node-type: "standard"
-    123: # Specific mapping for Job 123
-      olake.io/workload-type: "heavy"
-    456:
-      node-type: "high-cpu"
-    789:
-      olake.io/workload-type: "small"
+  jobProfiles:
+    0: # Default for all unmapped jobs & short-lived tasks
+      nodeSelector:
+        node-type: "standard"
+      tolerations:
+        - key: "spot"
+          operator: "Exists"
+          effect: "NoSchedule"
+    123: # Specific profile for Job 123
+      nodeSelector:
+        olake.io/workload-type: "heavy"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: "gpu"
+                    operator: "In"
+                    values: ["true"]
   
   # - JobID Format: Must be positive integers or "0" for default
   # - Label Keys: Must follow RFC 1123 DNS subdomain format (lowercase letters, numbers, hyphens, dots)
   # - Label Values: Must be valid Kubernetes label values (63 chars max, alphanumeric with hyphens)
 ```
 
-**Note on Default Behavior:** 
-- If `"0"` (Default) is configured, it is used for all unmapped jobs and other activities (Fetch, Test, Discover).
-- If `"0"` is NOT configured, unmapped jobs are scheduled by the standard Kubernetes scheduler (on any available node), but with automatic anti-affinity rules to avoid nodes reserved for other mapped jobs. 
+**Note on Default Behavior:**
+- If `0` (Default) is configured, it is used for all unmapped jobs and other activities (Fetch, Test, Discover).
+- If `0` is NOT configured, unmapped Sync jobs are scheduled by the standard Kubernetes scheduler (on any available node), but with automatic anti-affinity rules to avoid nodes reserved for other mapped jobs.
+
+### Legacy JobID-Based Node Mapping (Deprecated)
+`global.jobMapping` is still supported for backward compatibility, but it is **deprecated** and will be removed in a future release. It only supports **nodeSelector** (no tolerations/affinity).
+
+Migration notes:
+- You can define both `jobMapping` and `jobProfiles` during migration.
+- If both are defined for the same JobID, `jobProfiles` takes precedence for fields it explicitly sets, and can inherit missing fields from `jobMapping` for safer incremental migration.
 
 ### Cloud IAM Integration
 
