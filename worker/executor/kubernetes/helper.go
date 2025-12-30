@@ -61,10 +61,6 @@ func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Com
 
 // BuildAffinityForJob returns affinity rules for the given jobID
 func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Command) *corev1.Affinity {
-	if !slices.Contains(constants.AsyncCommands, operation) {
-		return nil
-	}
-
 	// 1. Explicit Config (Preferred)
 	if config, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		if config.Affinity != nil {
