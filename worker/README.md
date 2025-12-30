@@ -18,6 +18,8 @@ The OLake Kubernetes Worker executes Temporal activities as isolated Kubernetes 
 - **Discover**: Analyzes source systems to catalog available tables/schemas
 - **Test**: Validates connectivity to destination systems  
 - **Sync**: Performs data replication between source and destination
+- **Fetch**: Retrieves list of streams from source
+- **Spec**: Specifies the supported functionalities of driver version
 
 ### Execution Model
 1. **Receives activity** from Temporal server
@@ -151,16 +153,16 @@ minikube image load olakego/olake-workers:local
 ### Project Structure
 
 ```
-olake-workers/k8s/
+worker/
 ├── main.go              # Entry point
-├── activities/          # Temporal activity implementations
-├── workflows/           # Temporal workflow definitions
-├── worker/              # Worker setup and health endpoints
-├── pods/                # Kubernetes Pod management
-├── config/              # Configuration loading and validation
+├── constants/           # Constants, environment variables, error definitions
 ├── database/            # PostgreSQL integration
-├── shared/              # Shared types and constants
-└── utils/               # Utility packages
+├── executor/            # Executor implementations
+│   ├── docker/          # Docker-based executor
+│   └── kubernetes/      # Kubernetes Pod executor
+├── temporal/            # Temporal client, activities, workflows, worker, health
+├── types/               # Type definitions and interfaces
+└── utils/               # Utility packages (logger, etc.)
 ```
 
 ### Local Development Workflow
@@ -189,7 +191,6 @@ The worker is configured via environment variables:
 |-----------------------|---------------------------|-----------------------------------------|
 | `TEMPORAL_HOST_PORT`  | Temporal server address   | `temporal.olake.svc.cluster.local:7233` |
 | `TEMPORAL_NAMESPACE`  | Temporal namespace        | `default`                               |
-| `TEMPORAL_TASK_QUEUE` | Task queue to listen on   | `olake-workers`                      |
 | `DB_HOST`             | PostgreSQL host           | `postgresql.olake.svc.cluster.local`    |
 | `DB_PORT`             | PostgreSQL port           | `5432`                                  |
 | `DB_NAME`             | Database name             | `temporal`                              |
@@ -202,18 +203,6 @@ The worker is configured via environment variables:
 |-----------------------------|------------------------------------------|---------|
 | `LOG_LEVEL`                 | Logging level (debug, info, warn, error) | `info`  |
 | `HEALTH_PORT`               | Health check server port                 | `8090`  |
-| `MAX_CONCURRENT_ACTIVITIES` | Max parallel activities                  | `15`    |
-| `MAX_CONCURRENT_WORKFLOWS`  | Max parallel workflows                   | `10`    |
-
-### Worker-Specific Timeouts
-
-Configure activity and workflow timeouts:
-
-| Variable                    | Description               | Default |
-|-----------------------------|---------------------------|---------|
-| `TIMEOUT_ACTIVITY_DISCOVER` | Discover activity timeout | `2h`    |
-| `TIMEOUT_ACTIVITY_TEST`     | Test activity timeout     | `2h`    |
-| `TIMEOUT_ACTIVITY_SYNC`     | Sync activity timeout     | `700h`  |
 
 ---
 
@@ -290,12 +279,6 @@ kubectl top pods -n olake
 
 # Check node resources
 kubectl describe nodes
-```
-
-**Adjust timeouts if needed:**
-```bash
-# Increase activity timeout
-export TIMEOUT_ACTIVITY_SYNC=800h
 ```
 
 ### Common Issues
