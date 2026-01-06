@@ -21,10 +21,8 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 	if slices.Contains(constants.AsyncCommands, operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if profile.NodeSelector != nil {
-				logger.Infof("using profile NodeSelector for JobID %d: %v", jobID, profile.NodeSelector)
 				return profile.NodeSelector
 			}
-			logger.Debugf("profile exists for JobID %d but NodeSelector is nil, using empty selector", jobID)
 			return map[string]string{}
 		}
 	}
@@ -65,10 +63,8 @@ func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Com
 	if slices.Contains(constants.AsyncCommands, operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if len(profile.Tolerations) > 0 {
-				logger.Infof("using profile tolerations for JobID %d", jobID)
 				return profile.Tolerations
 			}
-			logger.Debugf("profile exists for JobID %d but tolerations empty", jobID)
 			return []corev1.Toleration{}
 		}
 	}
@@ -117,10 +113,8 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 	// Check if profile has explicit affinity
 	if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 		if profile.Affinity != nil {
-			logger.Infof("using explicit affinity from profile for JobID %d", jobID)
 			return profile.Affinity
 		}
-		logger.Debugf("profile exists for JobID %d but affinity is nil", jobID)
 		return nil
 	}
 
