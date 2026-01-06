@@ -27,6 +27,14 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 		}
 	}
 
+	// Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+		if profile.NodeSelector != nil {
+			return profile.NodeSelector
+		}
+		return map[string]string{}
+	}
+
 	// [TO BE DEPRECATED]
 	// Try specific mapping (Preferred)
 	if slices.Contains(constants.AsyncCommands, operation) {
@@ -34,16 +42,6 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 			logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
 			return mapping
 		}
-	}
-
-	// Check default profile
-	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
-		if profile.NodeSelector != nil {
-			logger.Debugf("using default profile NodeSelector: %v", profile.NodeSelector)
-			return profile.NodeSelector
-		}
-		logger.Debugf("default profile exists but NodeSelector is nil")
-		return map[string]string{}
 	}
 
 	// [TO BE DEPRECATED]
@@ -118,17 +116,16 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 		return nil
 	}
 
-	// Check if job has explicit mapping
-	if _, exists := k.configWatcher.GetJobMapping(jobID); exists {
-		return nil
-	}
-
 	// Check default profile
 	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
 		if profile.Affinity != nil {
-			logger.Debugf("using default profile affinity")
 			return profile.Affinity
 		}
+		return nil
+	}
+
+	// Check if job has explicit mapping
+	if _, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		return nil
 	}
 
