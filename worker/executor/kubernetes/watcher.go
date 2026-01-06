@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -24,8 +23,9 @@ type ConfigMapWatcher struct {
 	configMapName   string
 
 	// Thread-safe job mapping storage
-	mu         sync.RWMutex
-	jobMapping map[int]map[string]string // TODO: use sync.Map
+	mu          sync.RWMutex
+	jobMapping  map[int]map[string]string // TODO: use sync.Map
+	jobProfiles map[int]JobSchedulingConfig
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -38,6 +38,7 @@ func NewConfigMapWatcher(clientset kubernetes.Interface, namespace string) *Conf
 		namespace:     namespace,
 		configMapName: "olake-workers-config",
 		jobMapping:    make(map[int]map[string]string),
+		jobProfiles:   make(map[int]JobSchedulingConfig),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -124,6 +125,15 @@ func (w *ConfigMapWatcher) GetJobMapping(jobID int) (map[string]string, bool) {
 	return result, true
 }
 
+// GetJobProfile returns profile for specific jobID (thread-safe)
+func (w *ConfigMapWatcher) GetJobProfile(jobID int) (JobSchedulingConfig, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	profile, exists := w.jobProfiles[jobID]
+	return profile, exists
+}
+
 // GetAllJobMapping returns all job mappings (thread-safe)
 // Returns a deep copy to prevent external modification of internal state
 func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
@@ -142,25 +152,25 @@ func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
 }
 
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
-	rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]
-	if !exists || rawMapping == "" {
-		log := utils.Ternary(!exists, "no OLAKE_JOB_MAPPING in ConfigMap %s", "mmpty OLAKE_JOB_MAPPING in ConfigMap %s").(string)
-		logger.Debugf(log, w.configMapName)
-		w.mu.Lock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// [TO BE DEPRECATED]
+	// 1. Load legacy job mapping
+	if rawMapping, exists := cm.Data["OLAKE_JOB_MAPPING"]; exists && rawMapping != "" {
+		w.jobMapping = LoadJobMapping(rawMapping)
+		logger.Infof("updated job mapping with %d entries", len(w.jobMapping))
+	} else {
+		logger.Debugf("no OLAKE_JOB_MAPPING in ConfigMap %s", w.configMapName)
 		w.jobMapping = map[int]map[string]string{}
-		w.mu.Unlock()
-		return
 	}
 
-	newMapping := LoadJobMapping(rawMapping)
-
-	// Update thread-safe storage with exclusive lock
-	// Multiple Temporal activity goroutines call GetJobMapping() concurrently (readers)
-	// while this ConfigMap informer goroutine updates jobMapping (writer).
-	// RWMutex prevents data races and map corruption during concurrent access.
-	w.mu.Lock()
-	w.jobMapping = newMapping
-	w.mu.Unlock()
-
-	logger.Infof("updated job mapping with %d entries", len(newMapping))
+	// 2. Load job profiles
+	if rawProfiles, exists := cm.Data["OLAKE_JOB_PROFILES"]; exists && rawProfiles != "" {
+		w.jobProfiles = LoadJobProfiles(rawProfiles)
+		logger.Infof("updated job profiles with %d entries", len(w.jobProfiles))
+	} else {
+		logger.Debugf("no OLAKE_JOB_PROFILES in ConfigMap %s", w.configMapName)
+		w.jobProfiles = map[int]JobSchedulingConfig{}
+	}
 }

@@ -17,8 +17,20 @@ import (
 // Returns empty map if no mapping is found (graceful fallback)
 // Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
-	// 1. Try specific mapping (Preferred)
-	// Only apply specific mapping for async operations (sync)
+	// Check profiles for async operations
+	if slices.Contains(constants.AsyncCommands, operation) {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
+			if profile.NodeSelector != nil {
+				logger.Infof("using profile NodeSelector for JobID %d: %v", jobID, profile.NodeSelector)
+				return profile.NodeSelector
+			}
+			logger.Debugf("profile exists for JobID %d but NodeSelector is nil, using empty selector", jobID)
+			return map[string]string{}
+		}
+	}
+
+	// [TO BE DEPRECATED]
+	// Try specific mapping (Preferred)
 	if slices.Contains(constants.AsyncCommands, operation) {
 		if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 			logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
@@ -26,8 +38,18 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 		}
 	}
 
-	// 2. Try default mapping (JobID 0)
-	// Apply default mapping for ALL operations (sync, test, discover and spec)
+	// Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+		if profile.NodeSelector != nil {
+			logger.Debugf("using default profile NodeSelector: %v", profile.NodeSelector)
+			return profile.NodeSelector
+		}
+		logger.Debugf("default profile exists but NodeSelector is nil")
+		return map[string]string{}
+	}
+
+	// [TO BE DEPRECATED]
+	// Try default mapping (JobID 0)
 	if mapping, exists := k.configWatcher.GetJobMapping(0); exists {
 		logger.Debugf("using default node mapping: %v", mapping)
 		return mapping
@@ -35,6 +57,33 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 
 	logger.Debugf("no specific or default mapping found for JobID %d, using standard scheduling", jobID)
 	return make(map[string]string)
+}
+
+// GetTolerationsForJob returns tolerations for the given jobID
+func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Command) []corev1.Toleration {
+	// 1. Check specific profile
+	if slices.Contains(constants.AsyncCommands, operation) {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
+			if len(profile.Tolerations) > 0 {
+				logger.Infof("using profile tolerations for JobID %d", jobID)
+				return profile.Tolerations
+			}
+			logger.Debugf("profile exists for JobID %d but tolerations empty", jobID)
+			return []corev1.Toleration{}
+		}
+	}
+
+	// 2. Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+		if len(profile.Tolerations) > 0 {
+			logger.Debugf("using default profile tolerations")
+			return profile.Tolerations
+		}
+		logger.Debugf("default profile exists but tolerations empty")
+		return []corev1.Toleration{}
+	}
+
+	return []corev1.Toleration{}
 }
 
 func (k *KubernetesExecutor) sanitizeName(name string) string {
@@ -65,18 +114,41 @@ func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
 // Uses NotIn operator to exclude nodes with label key-value pairs used by any mapped job.
 // Reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
 func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Command) *corev1.Affinity {
-	if !slices.Contains(constants.AsyncCommands, operation) {
+	// Check if profile has explicit affinity
+	if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
+		if profile.Affinity != nil {
+			logger.Infof("using explicit affinity from profile for JobID %d", jobID)
+			return profile.Affinity
+		}
+		logger.Debugf("profile exists for JobID %d but affinity is nil", jobID)
 		return nil
 	}
 
+	// Check if job has explicit mapping
 	if _, exists := k.configWatcher.GetJobMapping(jobID); exists {
 		return nil
 	}
 
+	// Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+		if profile.Affinity != nil {
+			logger.Debugf("using default profile affinity")
+			return profile.Affinity
+		}
+		return nil
+	}
+
+	// [TO BE DEPRECATED]
 	// If default mapping exists (JobID 0), trust it for placement.
 	// Do not auto-generate anti-affinity rules which might conflict with the default selector.
 	// Example: If Default=gpu and Job1=gpu, Anti-Affinity (NotIn gpu) would make unmapped jobs unschedulable on Default nodes.
 	if _, exists := k.configWatcher.GetJobMapping(0); exists {
+		return nil
+	}
+
+	// For non-async operations, don't auto-generate anti-affinity
+	// They should only use explicit configs (profiles or mappings)
+	if !slices.Contains(constants.AsyncCommands, operation) {
 		return nil
 	}
 
