@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -17,6 +18,13 @@ type JobMappingStats struct {
 	TotalEntries    int
 	ValidEntries    int
 	InvalidMappings []string // TODO:  remove invalidMappings from struct{}
+}
+
+// JobSchedulingConfig defines the scheduling constraints for a job
+type JobSchedulingConfig struct {
+	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
+	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
+	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
 }
 
 func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) error {
@@ -132,5 +140,31 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 			logger.Infof("JobID %d: %s", jobID, strings.Join(labels, " "))
 		}
 	}
+	return result
+}
+
+// LoadJobProfiles parses OLAKE_JOB_PROFILES JSON string
+// Does NOT validate NodeSelector labels - trusts user input for new format
+func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
+	if strings.TrimSpace(profiles) == "" {
+		logger.Info("no Job Profiles found")
+		return map[int]JobSchedulingConfig{}
+	}
+
+	result := make(map[int]JobSchedulingConfig)
+
+	if err := json.Unmarshal([]byte(profiles), &result); err != nil {
+		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s", err)
+		return map[int]JobSchedulingConfig{}
+	}
+
+	logger.Infof("job profiles loaded: %d entries", len(result))
+
+	if len(result) > 0 {
+		if jsonBytes, err := json.Marshal(result); err == nil {
+			logger.Debugf("job profiles configuration: %s", string(jsonBytes))
+		}
+	}
+
 	return result
 }
