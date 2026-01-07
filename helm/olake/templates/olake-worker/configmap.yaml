@@ -10,25 +10,10 @@ metadata:
 data:
   # Temporal Configuration
   TEMPORAL_ADDRESS: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
-  TEMPORAL_TASK_QUEUE: {{ .Values.olakeWorker.env.TEMPORAL_TASK_QUEUE | default "OLAKE_DOCKER_TASK_QUEUE" }}
-  
-  # Timeout Configuration
-  TIMEOUT_ACTIVITY_DISCOVER: {{ .Values.olakeWorker.config.timeouts.activity.discover | quote }}
-  TIMEOUT_ACTIVITY_TEST: {{ .Values.olakeWorker.config.timeouts.activity.test | quote }}
-  TIMEOUT_ACTIVITY_SYNC: {{ .Values.olakeWorker.config.timeouts.activity.sync | quote }}
-  TIMEOUT_ACTIVITY_SPEC: {{ .Values.olakeWorker.config.timeouts.activity.spec | quote }}
   
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
-  IMAGE_REGISTRY: "olakego"
-  IMAGE_PULL_POLICY: "Always"
-  SERVICE_ACCOUNT: {{ include "olake.workerServiceAccountName" . | quote }}
   OLAKE_STORAGE_PVC_NAME: {{ include "olake.sharedStoragePVC" . | quote }}
-  
-  # Worker Configuration
-  MAX_CONCURRENT_ACTIVITIES: {{ .Values.olakeWorker.config.worker.maxConcurrentActivities | quote }}
-  MAX_CONCURRENT_WORKFLOWS: {{ .Values.olakeWorker.config.worker.maxConcurrentWorkflows | quote }}
-
 
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}
@@ -40,10 +25,18 @@ data:
   # API Callback
   OLAKE_CALLBACK_URL: "http://olake-ui.{{ include "olake.namespace" . }}.svc.cluster.local:8000/internal/worker/callback"
   # =================================================================
-  # JOB MAPPING CONFIGURATION
+  # JOB MAPPING CONFIGURATION (Deprecated)
   # =================================================================
   {{- if .Values.global.jobMapping }}
   OLAKE_JOB_MAPPING: {{ .Values.global.jobMapping | toJson | quote }}
+  {{- end }}
+
+  # =================================================================
+  # JOB PROFILES CONFIGURATION
+  # =================================================================
+  {{- if .Values.global.jobProfiles }}
+  # Converted to JSON for consistent parsing by the worker
+  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
   {{- end }}
   
   # =================================================================

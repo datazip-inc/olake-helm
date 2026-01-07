@@ -8,7 +8,7 @@
       "properties": {
         "jobMapping": {
           "type": "object",
-          "description": "Mapping of JobIDs to node selectors for pod scheduling. Example: { \"123\": { \"node-type\": \"gpu\" }, \"456\": { \"instance-type\": \"memory-optimized\" } }",
+          "description": "[Deprecated] Mapping of JobIDs to node selectors for pod scheduling",
           "patternProperties": {
             "^[0-9]+$": {
               "type": "object",
@@ -38,6 +38,51 @@
               }
             }
           ]
+        },
+        "jobProfiles": {
+          "type": "object",
+          "description": "Advanced scheduling profiles for specific JobIDs. Allows defining nodeSelector, tolerations, and affinity.",
+          "patternProperties": {
+            "^[0-9]+$": {
+              "type": "object",
+              "properties": {
+                "nodeSelector": {
+                  "type": "object",
+                  "description": "Node labels for pod assignment.",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "tolerations": {
+                  "type": "array",
+                  "description": "List of tolerations.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": { "type": "string" },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["Exists", "Equal"]
+                      },
+                      "value": { "type": "string" },
+                      "effect": {
+                        "type": "string",
+                        "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+                      },
+                      "tolerationSeconds": { "type": "integer" }
+                    }
+                  }
+                },
+                "affinity": {
+                  "type": "object",
+                  "description": "Kubernetes affinity/anti-affinity rules.",
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       }
     }

@@ -127,37 +127,45 @@ olakeUI:
           - olake.example.com
 ```
 
-### JobID-Based Node Mapping
-With this powerful feature, specific data jobs can be routed to specific Kubernetes nodes, by which performance and reliability can be optimized.
+### JobID-Based Scheduling
+With this powerful feature, data jobs can be routed to specific Kubernetes nodes with advanced scheduling controls.
 
-***Where is the JobID found?***
-The JobID is an integer that is automatically assigned to each job created in OLake UI. The JobID can be found in the corresponding row for each job on the Jobs page.
-
-**Default Node Selector:**
-You can define a **default node selector** using the special key `"0"`. This selector will be applied to:
-1. All unmapped Sync jobs (jobs without a specific ID mapping).
-2. All short-lived operations (Check Connection, Schema Discovery).
+_**Where is the JobID found?**_ The JobID is an integer that is automatically assigned to each job created in OLake UI. The JobID can be found in the corresponding row for each job on the Jobs page.
 
 ```yaml
 global:
-  jobMapping:
-    "0": # Default for all unmapped jobs & short-lived tasks
-      node-type: "standard"
-    123: # Specific mapping for Job 123
-      olake.io/workload-type: "heavy"
-    456:
-      node-type: "high-cpu"
-    789:
-      olake.io/workload-type: "small"
-  
-  # - JobID Format: Must be positive integers or "0" for default
-  # - Label Keys: Must follow RFC 1123 DNS subdomain format (lowercase letters, numbers, hyphens, dots)
-  # - Label Values: Must be valid Kubernetes label values (63 chars max, alphanumeric with hyphens)
+  jobProfiles:
+    123: # JobID
+      nodeSelector:
+        olake.io/workload-type: "heavy"
+      tolerations:
+        - key: "heavy-workload"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+    456: # JobID
+      tolerations:
+        - key: "spot-instance"
+          operator: "Exists"
+          effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: "olake.io/workload-type"
+                    operator: "In"
+                    values:
+                      - "small"
+    0: # Default profile for unmapped jobs
+      nodeSelector:
+        olake.io/workload-type: "general"
 ```
 
-**Note on Default Behavior:** 
 - If `"0"` (Default) is configured, it is used for all unmapped jobs and other activities (Fetch, Test, Discover).
-- If `"0"` is NOT configured, unmapped jobs are scheduled by the standard Kubernetes scheduler (on any available node), but with automatic anti-affinity rules to avoid nodes reserved for other mapped jobs. 
+- If `"0"` is NOT configured, unmapped jobs are scheduled by the standard Kubernetes scheduler on any available node.
+
+**Deprecation Notice:** The legacy `global.jobMapping` configuration (which only supported `nodeSelector`) is deprecated and will be removed in a future release. Users are strongly advised to migrate to `global.jobProfiles`, which provides feature-rich scheduling capabilities including tolerations and affinity rules.
 
 ### Cloud IAM Integration
 
