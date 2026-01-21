@@ -46,8 +46,10 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	w.RegisterActivity(activitiesInstance.SendWebhookNotificationActivity)
 
 	// Register search attributes
+	// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
 	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
+		Namespace:        "default",
 	})
 	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
 		return nil, err
