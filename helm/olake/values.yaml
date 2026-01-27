@@ -400,6 +400,16 @@ postgresql:
     #     --from-literal=ssl_mode=disable
     existingSecret: ""
 
+    # -- Explicit PostgreSQL properties (used if existingSecret is not set)
+    properties:
+      host: ""
+      port: 5432
+      username: ""
+      password: ""
+      olake_database: ""
+      temporal_database: ""
+      ssl_mode: "disable"
+
     # -- Map the keys from existing secret to the required fields
     secretKeys:
       host: "host"

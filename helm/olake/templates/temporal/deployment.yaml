@@ -113,11 +113,15 @@ spec:
           {{- end }}
         {{- $sslConfig := dict "mode" "disable" }}
         {{- if not .Values.postgresql.enabled }}
-          {{- with lookup "v1" "Secret" .Release.Namespace .Values.postgresql.external.existingSecret }}
-            {{- $key := $.Values.postgresql.external.secretKeys.ssl_mode }}
-            {{- if and .data (hasKey .data $key) }}
-              {{- $_ := set $sslConfig "mode" (index .data $key | b64dec) }}
+          {{- if .Values.postgresql.external.existingSecret }}
+            {{- with lookup "v1" "Secret" .Release.Namespace .Values.postgresql.external.existingSecret }}
+              {{- $key := $.Values.postgresql.external.secretKeys.ssl_mode }}
+              {{- if and .data (hasKey .data $key) }}
+                {{- $_ := set $sslConfig "mode" (index .data $key | b64dec) }}
+              {{- end }}
             {{- end }}
+          {{- else }}
+            {{- $_ := set $sslConfig "mode" .Values.postgresql.external.properties.ssl_mode }}
           {{- end }}
         {{- end }}
         {{- if ne $sslConfig.mode "disable" }}
