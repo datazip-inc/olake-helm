@@ -95,7 +95,9 @@ Return the PostgreSQL secret name
 {{- define "olake.postgresql.secretName" -}}
 {{- if .Values.postgresql.enabled }}
 {{- printf "%s-postgresql-secret" (include "olake.fullname" .) }}
-{{- else }}
+{{- else if .Values.postgresql.external.existingSecret }}
 {{- .Values.postgresql.external.existingSecret }}
+{{- else }}
+{{- printf "%s-external-postgresql" (include "olake.fullname" .) }}
 {{- end }}
 {{- end }}

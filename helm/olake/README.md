@@ -238,7 +238,13 @@ External PostgreSQL databases can be used instead of the built-in postgresql dep
 - Both OLake and Temporal databases created on the PostgreSQL instance
 - Network connectivity from Kubernetes cluster to PostgreSQL instance
 
-**1. Create database secret:**
+There are two ways to configure an external PostgreSQL database:
+
+#### Option 1: Using `existingSecret`
+
+Reference a pre-existing Kubernetes Secret containing the database credentials. The secret must be created manually before installing the chart.
+
+**1. Create the database secret:**
 ```bash
 kubectl create secret generic external-postgres-secret \
   --from-literal=host="postgres-host" \
@@ -250,20 +256,32 @@ kubectl create secret generic external-postgres-secret \
   --from-literal=ssl_mode="require"
 ```
 
-**2. Configure values.yaml:**
+**2. Configure `values.yaml`:**
 ```yaml
 postgresql:
   enabled: false
   external:
     existingSecret: "external-postgres-secret"
-    secretKeys:
-      host:              "host"
-      port:              "port"
-      olake_database:    "olake_database"
-      temporal_database: "temporal_database"
-      username:          "username"
-      password:          "password"
-      ssl_mode:          "ssl_mode"
+```
+
+**Warning:** When using `existingSecret`, SSL/TLS settings for Temporal rely on Helm's `lookup` function to read the secret at install time. This requires direct cluster access and does **not** work with ArgoCD or any tool that renders templates offline via `helm template`. If you are deploying with ArgoCD, use **Option 2** instead.
+
+#### Option 2: Using `properties` (Recommended for ArgoCD/GitOps)
+
+Specify the database connection details directly in `values.yaml`. The chart automatically creates a Kubernetes Secret from these values at template time. This approach is fully compatible with ArgoCD and other GitOps tools that use `helm template` for rendering.
+
+```yaml
+postgresql:
+  enabled: false
+  external:
+    properties:
+      host: "postgres-host"
+      port: 5432
+      username: "username"
+      password: "password"
+      olake_database: "olakeDB"
+      temporal_database: "temporalDB"
+      ssl_mode: "require"
 ```
 
 ### Global Environment Variables
