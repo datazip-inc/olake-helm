@@ -49,7 +49,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
 	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
-		Namespace:        "default",
+		Namespace:        constants.DefaultTemporalNamespace,
 	})
 	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
 		return nil, err

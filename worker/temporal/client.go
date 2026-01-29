@@ -25,7 +25,7 @@ func NewClient() (*Temporal, error) {
 		client, err := client.Dial(client.Options{
 			HostPort: viper.GetString(constants.EnvTemporalAddress),
 			Logger:   logger.Log(context.Background()),
-			Namespace: "default",
+			Namespace: constants.DefaultTemporalNamespace,
 		})
 		if err != nil {
 			return err
