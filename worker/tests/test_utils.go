@@ -94,14 +94,14 @@ const (
 
 	// Install Playwright and dependencies
 	installPlaywrightCmd = `
-        cd /mnt/ui &&
+        cd /mnt/ui/ui &&
         pnpm add -D @playwright/test &&
         pnpm exec playwright install --with-deps chromium
     `
 
 	// Run Playwright tests
 	runPlaywrightCmd = `
-        cd /mnt/ui &&
+        cd /mnt/ui/ui &&
         PLAYWRIGHT_TEST_BASE_URL=http://localhost:8000 DEBUG=pw:api npx playwright test tests/flows/job-end-to-end.spec.ts
     `
 
@@ -331,7 +331,7 @@ func VerifyIcebergTest(ctx context.Context, t *testing.T, ctr testcontainers.Con
 		if ctr != nil {
 			t.Log("Running cleanup...")
 			// Stop docker-compose services
-			_, _, _ = ExecCommand(ctx, ctr, "cd /mnt && docker-compose down -v --remove-orphans")
+			_, _, _ = ExecCommand(ctx, ctr, "cd /mnt/ui && docker compose down -v --remove-orphans")
 			// Terminate the DinD container
 			if err := ctr.Terminate(ctx); err != nil {
 				t.Logf("Warning: failed to terminate container: %v", err)
