@@ -22,7 +22,7 @@ const (
 	// Install required tools during initial setup
 	setupToolsCmd = `
         apt-get update && 
-        apt-get install -y curl postgresql-client dnsutils iputils-ping ncurses-bin ca-certificates gnupg lsb-release netcat-openbsd && 
+        apt-get install -y git curl postgresql-client dnsutils iputils-ping ncurses-bin ca-certificates gnupg lsb-release netcat-openbsd && 
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&
         apt-get install -y nodejs &&
         npm install -g pnpm &&
