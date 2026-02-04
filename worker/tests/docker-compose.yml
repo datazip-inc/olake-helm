@@ -15,7 +15,7 @@ services:
     volumes:
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
     networks:
-      - olake-network
+      - default
     command:
       - bash
       - -c
@@ -82,7 +82,7 @@ services:
     ports:
       - "8181:8181"
     networks:
-      olake-network:
+      - default
 
   migrate:
     image: *lakekeeper-image
@@ -94,13 +94,13 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      olake-network:
+      - default
 
   spark-iceberg:
     image: olakego/spark-connect:v0.0.1
     container_name: spark-iceberg
     networks:
-      olake-network:
+      - default
     depends_on:
       - minio
       - postgres
@@ -134,7 +134,7 @@ services:
       - MINIO_ROOT_PASSWORD=password
       - MINIO_DOMAIN=minio
     networks:
-      olake-network:
+      default:
         aliases:
           - warehouse.minio
     ports:
@@ -150,7 +150,7 @@ services:
     image: minio/mc:RELEASE.2025-04-03T17-07-56Z
     container_name: mc
     networks:
-      olake-network:
+      - default
     environment:
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
@@ -169,7 +169,7 @@ services:
     image: postgres:15
     container_name: iceberg-postgres
     networks:
-      olake-network:
+      - default
     environment:
       - POSTGRES_USER=iceberg
       - POSTGRES_PASSWORD=password
@@ -191,7 +191,7 @@ services:
     profiles:
       - hive
     networks:
-      olake-network:
+      - default
     ports:
       - "9083:9083"
     environment:
@@ -235,7 +235,3 @@ services:
       # Start the hive metastore service
       sh -c "/entrypoint.sh"
       "
-
-networks:
-  olake-network:
-    name: olake-network

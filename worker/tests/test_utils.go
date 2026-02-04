@@ -72,9 +72,8 @@ const (
 
 	// Network setup
 	networkSetupCmd = `
-        docker network connect olake-network olake-ui || true
+        docker network connect tests_default olake-ui || true
     `
-
 	// Install Playwright and dependencies
 	installPlaywrightCmd = `
         cd /mnt/ui/ui &&
