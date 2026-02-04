@@ -239,4 +239,3 @@ services:
 networks:
   olake-network:
     name: olake-network
-    external: true

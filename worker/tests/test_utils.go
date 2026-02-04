@@ -42,7 +42,6 @@ const (
 	// Start test infrastructure (source & destination)
 	startTestInfraCmd = `
         cd /mnt/worker/tests &&
-        (docker network create olake-network || true) &&
         docker compose up -d source-postgres spark-iceberg mc &&
         for i in $(seq 1 30); do
             if docker exec olake_postgres-test psql -h localhost -U postgres -d postgres -c "SELECT 1" 2>/dev/null; then
