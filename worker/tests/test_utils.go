@@ -49,7 +49,7 @@ const (
 
 	// Start postgres test infrastructure
 	startPostgresCmd = `
-        cd /mnt/server/tests &&
+        cd /mnt/worker/tests &&
         docker compose up -d &&
         for i in $(seq 1 30); do
             if docker exec olake_postgres-test psql -h localhost -U postgres -d postgres -c "SELECT 1" 2>/dev/null; then
