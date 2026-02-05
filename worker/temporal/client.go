@@ -9,7 +9,10 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Temporal provides methods to interact with Temporal
@@ -49,4 +52,25 @@ func (t *Temporal) Close() {
 }
 func (t *Temporal) GetClient() client.Client {
 	return t.client
+}
+
+// UpdateRetention updates the workflow execution retention period for the default namespace.
+func (t *Temporal) UpdateRetention(ctx context.Context, retentionString string) error {
+	retentionPeriod, err := time.ParseDuration(retentionString)
+	if err != nil {
+		return fmt.Errorf("failed to parse retention string: %w", err)
+	}
+
+	_, err = t.client.WorkflowService().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: constants.DefaultTemporalNamespace,
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: durationpb.New(retentionPeriod),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update namespace %q retention: %w", constants.DefaultTemporalNamespace, err)
+	}
+
+	logger.Infof("namespace %q retention set to %s", constants.DefaultTemporalNamespace, retentionPeriod)
+	return nil
 }

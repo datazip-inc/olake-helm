@@ -58,6 +58,12 @@ func main() {
 	}
 	defer tClient.Close()
 
+	// Update namespace retention period (non-fatal on failure)
+	retentionPeriod := viper.GetString(constants.EnvTemporalRetentionPeriod)
+	if err := tClient.UpdateRetention(ctx, retentionPeriod); err != nil {
+		logger.Warnf("failed to update namespace retention: %s", err)
+	}
+
 	worker, err := temporal.NewWorker(ctx, tClient, exec, db)
 	if err != nil {
 		logger.Fatalf("failed to create Temporal worker: %s", err)
