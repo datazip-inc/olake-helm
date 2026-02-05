@@ -336,6 +336,18 @@ nfsServer:
     # -- Name of the StorageClass created by NFS server
     name: "nfs-server"
 
+  # -- NFS Server resource requirements (optional overrides)
+  # Defaults: requests: memory=256Mi, cpu=250m ; limits: memory=512Mi, cpu=500m
+  # Example customizations:
+  # resources:
+  #   requests:
+  #     memory: "1Gi"
+  #     cpu: "750m"
+  #   limits:
+  #     memory: "2Gi"
+  #     cpu: "1500m"
+  resources: {}
+
 # Temporal configuration for workflow orchestration
 temporal:
   # -- Temporal server configuration
