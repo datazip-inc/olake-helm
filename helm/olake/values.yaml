@@ -480,6 +480,11 @@ postgresql:
 
 # Elasticsearch is used by Temporal for advanced visibility features
 elasticsearch:
+
+  # -- Enable Elasticsearch deployment when using it as visibility store for Temporal
+  # Shifting default visibility store to postgresql from Jan 30th, 2026 onwards.
+  enabled: false
+
   # -- Elasticsearch image configuration
   image:
     repository: elasticsearch

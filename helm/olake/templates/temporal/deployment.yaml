@@ -19,6 +19,7 @@ spec:
   template:
     metadata:
       annotations:
+        checksum/worker-image: {{ .Values.olakeWorker.image.tag | sha256sum }}
         {{- with .Values.temporal.server.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -30,6 +31,18 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- /* 
+      COMPATIBILITY GUARD:
+      The 'New Flow' (without Elasticsearch) requires OLake Worker v0.2.8 or higher.
+      If ES is disabled, we verify the worker tag is compatible.
+      */ -}}
+      {{- if not .Values.elasticsearch.enabled }}
+        {{- $workerTag := .Values.olakeWorker.image.tag -}}
+        {{- /* Block versions < 0.2.8 (0.0.x, 0.1.x, 0.2.0-0.2.7) */ -}}
+        {{- if and (ne $workerTag "latest") (regexMatch "^v?0\\.(0|1|2\\.[0-7])($|[^0-9])" $workerTag) }}
+          {{- fail (printf "INCOMPATIBLE WORKER: The Postgres visibility flow (Elasticsearch disabled) requires olakeWorker image tag >= v0.2.8 or 'latest'. Found: %s" $workerTag) }}
+        {{- end }}
+      {{- end }}
       {{- with .Values.temporal.server.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -134,12 +147,14 @@ spec:
         - name: SQL_HOST_VERIFICATION
           value: "false"
         {{- end }}
+        {{- if .Values.elasticsearch.enabled }}
         - name: ENABLE_ES
           value: "true"
         - name: ES_SEEDS
           value: "elasticsearch.{{ include "olake.namespace" . }}.svc.cluster.local"
         - name: ES_VERSION
           value: "v7"
+        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
