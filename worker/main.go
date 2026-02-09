@@ -58,9 +58,8 @@ func main() {
 	}
 	defer tClient.Close()
 
-	// Update namespace retention period (non-fatal on failure)
-	retentionPeriod := viper.GetString(constants.EnvTemporalRetentionPeriod)
-	if err := tClient.UpdateRetention(ctx, retentionPeriod); err != nil {
+	// Set namespace retention for workflow history visibility (default: 7 days).
+	if err := tClient.SetWorkflowRetentionPeriod(ctx); err != nil {
 		logger.Warnf("failed to update namespace retention: %s", err)
 	}
 
