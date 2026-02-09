@@ -19,7 +19,6 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/worker-image: {{ .Values.olakeWorker.image.tag | sha256sum }}
         {{- with .Values.temporal.server.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
