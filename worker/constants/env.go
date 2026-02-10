@@ -15,7 +15,8 @@ const (
 	EnvConnectionMaxLifetime = "DB_CONN_MAX_LIFETIME"
 
 	// temporal
-	EnvTemporalAddress = "TEMPORAL_ADDRESS"
+	EnvTemporalAddress         = "TEMPORAL_ADDRESS"
+	EnvTemporalRetentionPeriod = "TEMPORAL_RETENTION_PERIOD"
 
 	// worker
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"
