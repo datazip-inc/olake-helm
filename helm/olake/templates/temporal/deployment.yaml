@@ -134,12 +134,14 @@ spec:
         - name: SQL_HOST_VERIFICATION
           value: "false"
         {{- end }}
+        {{- if .Values.elasticsearch.enabled }}
         - name: ENABLE_ES
           value: "true"
         - name: ES_SEEDS
           value: "elasticsearch.{{ include "olake.namespace" . }}.svc.cluster.local"
         - name: ES_VERSION
           value: "v7"
+        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
