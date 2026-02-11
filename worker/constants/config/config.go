@@ -25,6 +25,7 @@ func Init() error {
 func setDefaults() {
 	// Temporal defaults
 	viper.SetDefault("TEMPORAL_ADDRESS", "temporal:7233")
+	viper.SetDefault("TEMPORAL_RETENTION_PERIOD", "168h")
 
 	// Worker defaults
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)

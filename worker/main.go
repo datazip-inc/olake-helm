@@ -58,6 +58,12 @@ func main() {
 	}
 	defer tClient.Close()
 
+	// Set namespace retention for workflow history visibility (default: 7 days).
+	// TODO: add healthcheck for temporal worker service in docker compose
+	if err := tClient.SetWorkflowRetentionPeriod(ctx); err != nil {
+		logger.Fatalf("failed to update namespace retention: %s", err)
+	}
+
 	worker, err := temporal.NewWorker(ctx, tClient, exec, db)
 	if err != nil {
 		logger.Fatalf("failed to create Temporal worker: %s", err)
