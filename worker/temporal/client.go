@@ -58,7 +58,7 @@ func (t *Temporal) GetClient() client.Client {
 // SetWorkflowRetentionPeriod sets the workflow execution retention period for the default namespace.
 // This ensures workflow history is available for debugging (defaults to 7 days).
 // Handles both fresh installs and upgrades from shorter retention periods.
-// Non-fatal: worker continues with default retention period of 1 day if this fails.
+// Fatal: worker fails to start if this fails.
 func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 	retentionPeriod, err := time.ParseDuration(viper.GetString(constants.EnvTemporalRetentionPeriod))
 	if err != nil {
