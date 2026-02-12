@@ -17,6 +17,12 @@ global:
   # Set to "" to use default storage class
   # Examples: gp2, standard, managed
   storageClass: ""
+  
+  # -- Global container registry for connector images
+  # Used by the worker to pull connector images.
+  # For ECR, use the full registry URL: e.g., "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+  # Default: "registry-1.docker.io"
+  containerRegistryBase: "registry-1.docker.io"
 
   # -- Global image pull secrets for private container registries
   # List of Kubernetes secret names containing registry credentials

@@ -14,6 +14,8 @@ data:
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
   OLAKE_STORAGE_PVC_NAME: {{ include "olake.sharedStoragePVC" . | quote }}
+  CONTAINER_REGISTRY_BASE: {{ .Values.global.containerRegistryBase | quote }}
+  KUBERNETES_IMAGE_PULL_SECRETS: {{ .Values.global.imagePullSecrets | toJson | quote }}
 
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}

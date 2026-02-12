@@ -29,5 +29,8 @@ data:
     OLAKE_POSTGRES_DBNAME   = ${OLAKE_POSTGRES_DBNAME}
     OLAKE_POSTGRES_SSLMODE  = ${OLAKE_POSTGRES_SSLMODE}
     
+    # Registry Configuration
+    CONTAINER_REGISTRY_BASE = {{ .Values.global.containerRegistryBase | quote }}
+
     # Temporal Configuration
     TEMPORAL_ADDRESS = temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233

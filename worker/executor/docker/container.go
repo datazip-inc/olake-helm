@@ -38,6 +38,21 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
+
+		// If using ECR, ensure login before pull
+		if strings.Contains(imageName, "ecr") {
+			accountID, region, _, err := utils.ParseECRDetails(imageName)
+			if err != nil {
+				log.Warn("failed to parse ECR details (skipping login)", "image", imageName, "error", err)
+			} else {
+				if err := utils.DockerLoginECR(ctx, region, accountID); err != nil {
+					log.Error("failed to login to ECR", "region", region, "accountID", accountID, "error", err)
+					return fmt.Errorf("failed to login to ECR: %s", err)
+				}
+				log.Info("successfully logged in to ECR", "region", region, "accountID", accountID)
+			}
+		}
+
 		reader, err := d.client.ImagePull(pullCtx, imageName, image.PullOptions{})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {

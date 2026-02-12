@@ -26,6 +26,9 @@ func setDefaults() {
 	// Temporal defaults
 	viper.SetDefault("TEMPORAL_ADDRESS", "temporal:7233")
 
+	// registry defaults
+	viper.SetDefault("CONTAINER_REGISTRY_BASE", "registry-1.docker.io")
+
 	// Worker defaults
 	viper.SetDefault("LOG_RETENTION_PERIOD", 30)
 

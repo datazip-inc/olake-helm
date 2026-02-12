@@ -61,24 +61,33 @@ func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duratio
 }
 
 func GetDockerImageName(sourceType, version string) string {
-	return fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
+	registryBase := viper.GetString(constants.ConfContainerRegistryBase)
+	imageName := fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
+	
+	// for cases where registryBase is set to a custom registry, like an instance of AWS ECR
+	if registryBase != "" && registryBase != "registry-1.docker.io" {
+		return fmt.Sprintf("%s/%s", registryBase, imageName)
+	}
+
+	return imageName
 }
 
 // GetWorkerEnvVars returns the environment variables from the worker container.
 func GetWorkerEnvVars() map[string]string {
 	// ignoredWorkerEnv is a map of environment variables that are ignored from the worker container.
 	var ignoredWorkerEnv = map[string]any{
-		"HOSTNAME":                nil,
-		"PATH":                    nil,
-		"PWD":                     nil,
-		"HOME":                    nil,
-		"SHLVL":                   nil,
-		"TERM":                    nil,
-		"PERSISTENT_DIR":          nil,
-		"CONTAINER_REGISTRY_BASE": nil,
-		"TEMPORAL_ADDRESS":        nil,
-		"OLAKE_SECRET_KEY":        nil,
-		"_":                       nil,
+		"HOSTNAME":                      nil,
+		"PATH":                          nil,
+		"PWD":                           nil,
+		"HOME":                          nil,
+		"SHLVL":                         nil,
+		"TERM":                          nil,
+		"PERSISTENT_DIR":                nil,
+		"CONTAINER_REGISTRY_BASE":       nil,
+		"KUBERNETES_IMAGE_PULL_SECRETS": nil,
+		"TEMPORAL_ADDRESS":              nil,
+		"OLAKE_SECRET_KEY":              nil,
+		"_":                             nil,
 	}
 
 	vars := make(map[string]string)

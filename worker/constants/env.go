@@ -17,6 +17,9 @@ const (
 	// temporal
 	EnvTemporalAddress = "TEMPORAL_ADDRESS"
 
+	// registry
+	ConfContainerRegistryBase = "CONTAINER_REGISTRY_BASE"
+
 	// worker
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"
 	EnvHostPersistentDir  = "PERSISTENT_DIR"
@@ -26,6 +29,7 @@ const (
 	EnvStoragePVCName        = "OLAKE_STORAGE_PVC_NAME"
 	EnvJobServiceAccountName = "JOB_SERVICE_ACCOUNT_NAME"
 	EnvSecretKey             = "OLAKE_SECRET_KEY"
+	EnvImagePullSecrets      = "KUBERNETES_IMAGE_PULL_SECRETS"
 	EnvPodName               = "POD_NAME"
 	EnvKubernetesServiceHost = "KUBERNETES_SERVICE_HOST"
 
