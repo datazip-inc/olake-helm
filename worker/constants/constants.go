@@ -13,6 +13,7 @@ const (
 	DefaultSyncTimeout       = time.Hour * 24 * 30
 	TaskQueue                = "OLAKE_DOCKER_TASK_QUEUE"
 	OperationTypeKey         = "OperationType"
+	DefaultTemporalNamespace = "default"
 
 	// Directory paths
 	// TODO: make persistent path alias same for both docker and k8s.

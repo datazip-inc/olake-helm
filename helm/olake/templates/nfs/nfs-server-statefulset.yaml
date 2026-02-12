@@ -122,13 +122,13 @@ spec:
           timeoutSeconds: 10
           failureThreshold: 3
           successThreshold: 1
+        {{- $defaultResources := dict 
+          "requests" (dict "cpu" "250m" "memory" "256Mi")
+          "limits" (dict "cpu" "500m" "memory" "512Mi")
+        }}
+        {{- $resources := mergeOverwrite $defaultResources (.Values.nfsServer.resources | default dict) }}
         resources:
-          requests:
-            cpu: 250m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+          {{- toYaml $resources | nindent 10 }}
   volumeClaimTemplates:
   - metadata:
       name: export-volume

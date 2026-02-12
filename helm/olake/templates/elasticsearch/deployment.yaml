@@ -1,3 +1,4 @@
+{{- if .Values.elasticsearch.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -121,3 +122,4 @@ spec:
       resources:
         requests:
           storage: {{ .Values.elasticsearch.persistence.size | default "8Gi" }}
+{{- end -}}
