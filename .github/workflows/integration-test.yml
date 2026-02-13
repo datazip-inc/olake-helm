@@ -3,9 +3,13 @@ on:
   push:
     branches:
       - master
+    paths:
+      - '**/*.go'
   pull_request:
     branches:
-      - staging
+      - '*'
+    paths:
+      - '**/*.go'
 
 jobs:
   integration-tests:

@@ -60,7 +60,7 @@ const (
 	startOLakeUICmd = `
         cd /mnt/ui && 
         mkdir -p /mnt/olake-data && 
-        docker compose up -d && 
+        docker compose -f docker-compose-v1.yml up -d && 
         for i in $(seq 1 60); do
             if curl -f http://localhost:8000/health 2>/dev/null || curl -f http://localhost:8000 2>/dev/null; then
                 echo "OLake UI ready."
@@ -100,7 +100,6 @@ func DinDTestContainer(t *testing.T) error {
 		return fmt.Errorf("could not determine project root: %w", err)
 	}
 	t.Logf("Project root identified at: %s", projectRoot)
-
 	req := testcontainers.ContainerRequest{
 		Image: "ubuntu:22.04",
 		Env: map[string]string{
@@ -257,7 +256,7 @@ func ExecCommandWithStreaming(ctx context.Context, t *testing.T, ctr testcontain
 	return exitCode, output.String(), nil
 }
 
-// PatchDockerCompose updates olake-ui to build from local code
+// PatchDockerCompose updates temporal-worker to build from local code
 func PatchDockerCompose(ctx context.Context, t *testing.T, ctr testcontainers.Container) error {
 	patchCmd := `
     set -e
@@ -275,15 +274,15 @@ func PatchDockerCompose(ctx context.Context, t *testing.T, ctr testcontainers.Co
       }
       print
     }
-    ' /mnt/ui/docker-compose.yml > "$tmpfile" && mv "$tmpfile" /mnt/ui/docker-compose.yml
+    ' /mnt/ui/docker-compose-v1.yml > "$tmpfile" && mv "$tmpfile" /mnt/ui/docker-compose-v1.yml
 `
 
 	code, out, err := ExecCommand(ctx, ctr, patchCmd)
 	if err != nil || code != 0 {
 		t.Logf("docker-compose patch output: %s", string(out))
-		return fmt.Errorf("failed to patch docker-compose.yml (%d): %s\n%s", code, err, out)
+		return fmt.Errorf("failed to patch docker-compose-v1.yml (%d): %s\n%s", code, err, out)
 	}
-	t.Log("docker-compose.yml patched to build local images")
+	t.Log("docker-compose-v1.yml patched to build local images")
 
 	return nil
 }
@@ -299,7 +298,7 @@ func VerifyIcebergTest(ctx context.Context, t *testing.T, ctr testcontainers.Con
 		if ctr != nil {
 			t.Log("Running cleanup...")
 			// Stop docker-compose services
-			_, _, _ = ExecCommand(ctx, ctr, "cd /mnt/ui && docker compose down -v --remove-orphans")
+			_, _, _ = ExecCommand(ctx, ctr, "cd /mnt/ui && docker compose -f docker-compose-v1.yml down -v --remove-orphans")
 			// Terminate the DinD container
 			if err := ctr.Terminate(ctx); err != nil {
 				t.Logf("Warning: failed to terminate container: %v", err)
