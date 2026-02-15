@@ -301,3 +301,25 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workflowLogPath)
 	return ctxWithLogger, logFile, err
 }
+
+// IsStateEmpty returns true if the state is empty or an empty JSON object
+func IsStateEmpty(state string) bool {
+	state = strings.TrimSpace(state)
+	return state == "" || state == "{}"
+}
+
+// RemoveFlagFromArgs returns a new slice with the given flag
+// and its associated value removed.
+func RemoveFlagFromArgs(arguments []string, flagName string) []string {
+	result := make([]string, 0, len(arguments))
+
+	for idx := 0; idx < len(arguments); idx++ {
+		if arguments[idx] == flagName {
+			idx++ // skip the value
+			continue
+		}
+		result = append(result, arguments[idx])
+	}
+
+	return result
+}

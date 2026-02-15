@@ -25,6 +25,8 @@ const (
 	// File and directory permissions
 	DefaultDirPermissions  = 0755
 	DefaultFilePermissions = 0644
+
+	StateFlag = "--state"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}

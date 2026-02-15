@@ -78,6 +78,11 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// update the configs with latest job details
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
+	// Remove --state flag if state is empty
+	if utils.IsStateEmpty(jobDetails.State) {
+		req.Args = utils.RemoveFlagFromArgs(req.Args, constants.StateFlag)
+	}
+
 	// Send telemetry event - "sync started"
 	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventStarted)
 
