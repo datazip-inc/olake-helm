@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       initContainers:
       - name: wait-for-olake-ui
-        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}busybox:latest"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/library/{{ end }}busybox:latest"
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh

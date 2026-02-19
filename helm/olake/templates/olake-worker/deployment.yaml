@@ -48,7 +48,7 @@ spec:
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
       initContainers:
       - name: wait-for-temporal
-        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}busybox:latest"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/library/{{ end }}busybox:latest"
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh
