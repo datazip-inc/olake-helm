@@ -62,7 +62,7 @@ spec:
           echo "Temporal is ready!"
       containers:
       - name: olake-workers
-        image: "{{ .Values.olakeWorker.image.repository }}:{{ .Values.olakeWorker.image.tag }}"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{- end }}{{ .Values.olakeWorker.image.repository }}:{{ .Values.olakeWorker.image.tag }}"
         imagePullPolicy: {{ .Values.olakeWorker.image.pullPolicy }}
         ports:
         - name: health

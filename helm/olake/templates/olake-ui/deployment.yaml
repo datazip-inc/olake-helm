@@ -65,7 +65,7 @@ spec:
           echo "Temporal is ready!"
       containers:
       - name: olake-ui
-        image: "{{ .Values.olakeUI.image.repository }}:{{ .Values.olakeUI.image.tag }}"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{- end }}{{ .Values.olakeUI.image.repository }}:{{ .Values.olakeUI.image.tag }}"
         imagePullPolicy: {{ .Values.olakeUI.image.pullPolicy }}
         ports:
         - name: olake-ui

@@ -50,7 +50,7 @@ spec:
       {{- end }}
       containers:
       - name: postgresql
-        image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{- end }}{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
         imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
         ports:
         - name: postgres
