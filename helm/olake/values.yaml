@@ -440,7 +440,7 @@ postgresql:
 
   # -- PostgreSQL image configuration
   image:
-    repository: postgres
+    repository: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/library/{{- end }}postgres"
     tag: "14-alpine"
     pullPolicy: Always
 
