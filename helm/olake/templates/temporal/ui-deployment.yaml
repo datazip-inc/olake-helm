@@ -30,7 +30,7 @@ spec:
       {{- end }}
       initContainers:
       - name: wait-for-temporal
-        image: busybox:latest
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}busybox:latest"
         command:
         - /bin/sh
         - -c
@@ -43,7 +43,7 @@ spec:
           echo "Temporal server is ready!"
       containers:
       - name: temporal-ui
-        image: "temporalio/ui:2.16.2"
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}temporalio/ui:2.16.2"
         imagePullPolicy: Always
         ports:
         - name: http

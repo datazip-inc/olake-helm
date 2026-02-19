@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       initContainers:
       - name: wait-for-olake-ui
-        image: busybox:latest
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}busybox:latest"
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh
@@ -41,7 +41,7 @@ spec:
           echo "OLake UI is ready!"
       containers:
       - name: signup-init
-        image: curlimages/curl:latest
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}curlimages/curl:latest"
         imagePullPolicy: IfNotPresent
         env:
         {{- if .Values.olakeUI.initUser.existingSecret }}

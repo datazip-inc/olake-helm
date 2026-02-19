@@ -105,6 +105,21 @@ olakeUI:
       email: "email"
 ```
 
+### Using a Custom Container Registry
+
+If you need to pull OLake images from a private container registry such as
+Amazon ECR, set the `global.containerRegistryBase` value. All component image
+repositories configured in the chart will be prefixed with this base string
+when the Helm templates are rendered.
+
+Example:
+
+```yaml
+global:
+  containerRegistryBase: "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+``` 
+
+
 ### Ingress Configuration
 
 The OLake UI can be exposed using an Ingress. Any Ingress controller can be used; however, the following example assumes the use of the Nginx Ingress controller and includes annotations specific to it.

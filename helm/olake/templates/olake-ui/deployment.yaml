@@ -51,7 +51,7 @@ spec:
       {{- end }}
       initContainers:
       - name: wait-for-temporal
-        image: busybox:latest
+        image: "{{- if .Values.global.containerRegistryBase }}{{ .Values.global.containerRegistryBase }}/{{ end }}busybox:latest"
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh
