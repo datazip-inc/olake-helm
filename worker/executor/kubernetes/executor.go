@@ -2,10 +2,8 @@ package kubernetes
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -37,7 +35,6 @@ type KubernetesConfig struct {
 	SecretKey         string
 	BasePath          string
 	WorkerIdentity    string
-	ImagePullSecrets  []string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -67,20 +64,6 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	secretKey := viper.GetString(constants.EnvSecretKey)
 	basePath := utils.GetConfigDir()
 
-	// Parse image pull secrets from environment (comma-separated or json list)
-	var imagePullSecrets []string
-	if secretsStr := viper.GetString(constants.EnvImagePullSecrets); secretsStr != "" {
-		// Try parsing as JSON first
-		if err := json.Unmarshal([]byte(secretsStr), &imagePullSecrets); err != nil {
-			// Fallback to comma-separated for backward compatibility or simple usage
-			for _, s := range strings.Split(secretsStr, ",") {
-				if trimmed := strings.TrimSpace(s); trimmed != "" {
-					imagePullSecrets = append(imagePullSecrets, trimmed)
-				}
-			}
-		}
-	}
-
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -102,7 +85,6 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			SecretKey:         secretKey,
 			BasePath:          basePath,
 			WorkerIdentity:    workerIdenttity,
-			ImagePullSecrets:  imagePullSecrets,
 		},
 	}, nil
 }

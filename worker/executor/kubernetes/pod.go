@@ -249,15 +249,6 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		}
 	}
 
-	// Add image pull secrets if configured
-	if len(k.config.ImagePullSecrets) > 0 {
-		for _, secretName := range k.config.ImagePullSecrets {
-			pod.Spec.ImagePullSecrets = append(pod.Spec.ImagePullSecrets, corev1.LocalObjectReference{
-				Name: secretName,
-			})
-		}
-	}
-
 	return pod
 }
 

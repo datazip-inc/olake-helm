@@ -109,7 +109,7 @@ olakeUI:
 
   # -- OLake UI image configuration
   image:
-    repository: "olakego/ui"
+    repository: olakego/ui
     tag: latest
     pullPolicy: Always
 
@@ -227,7 +227,7 @@ olakeUI:
 olakeWorker:
   # -- OLake Worker image configuration
   image:
-    repository: "olakego/ui-worker"
+    repository: olakego/ui-worker
     tag: latest
     pullPolicy: Always
 
@@ -360,7 +360,7 @@ temporal:
   server:
     # -- Temporal server image configuration
     image:
-      repository: "temporalio/auto-setup"
+      repository: temporalio/auto-setup
       tag: "1.22.3"
       pullPolicy: Always
 
@@ -440,7 +440,7 @@ postgresql:
 
   # -- PostgreSQL image configuration
   image:
-    repository: "postgres"
+    repository: postgres
     tag: "14-alpine"
     pullPolicy: Always
 
@@ -493,7 +493,7 @@ elasticsearch:
 
   # -- Elasticsearch image configuration
   image:
-    repository: "elasticsearch"
+    repository: elasticsearch
     tag: "7.17.10"
     pullPolicy: Always
 
