@@ -43,16 +43,46 @@ deployments:
 dev:
   # Worker development environment
   worker:
-    # Search for the worker container for development
-    imageSelector: olakego/k8s-worker
+    # Select the worker pod by labels (more reliable than imageSelector through bastion/proxy)
+    labelSelector:
+      app.kubernetes.io/name: olake-workers
+      app.kubernetes.io/component: workers
     # Replace the container image with this dev-optimized image (allows to skip image building during development)
-    devImage: ghcr.io/loft-sh/devspace-containers/go:1.24-alpine
+    devImage: 672919669757.dkr.ecr.us-east-1.amazonaws.com/devspace-containers/go:1.24-alpine
+    # Container name to target (required when using labelSelector and pod has multiple containers)
+    container: olake-workers
     # Sync worker code for development
     sync:
       - path: ./
     # Open a terminal and use the following command to start it
     terminal:
       command: ./devspace_start.sh
+    # Inject a lightweight SSH server into the container (so your IDE can connect to the remote dev env)
+    ssh:
+      enabled: false
+    # Make the following commands from my local machine available inside the dev container
+    proxyCommands:
+      - command: devspace
+      - command: kubectl
+      - command: helm
+      - gitCredentials: true
+
+  # UI development environment
+  ui:
+    # Select the UI pod by labels (more reliable than imageSelector through bastion/proxy)
+    labelSelector:
+      app.kubernetes.io/name: olake-ui
+      app.kubernetes.io/component: olake-ui
+    # Replace the container image with this dev-optimized image (allows to skip image building during development)
+    devImage: 672919669757.dkr.ecr.us-east-1.amazonaws.com/devspace-containers/go:1.24-alpine
+    # Container name to target
+    container: olake-ui
+    # Sync olake-ui code for development
+    sync:
+      - path: /Users/saptarshi/work/olake-ui:/app
+    # Open a terminal and use the following command to start it
+    terminal:
+      command: /app/devspace_start_ui.sh
     # Inject a lightweight SSH server into the container (so your IDE can connect to the remote dev env)
     ssh:
       enabled: true
@@ -62,14 +92,10 @@ dev:
       - command: kubectl
       - command: helm
       - gitCredentials: true
-  
-  # UI port forwarding (for accessing the frontend to control workflows)
-  ui:
-    # Search for the UI container for port forwarding
-    imageSelector: olakego/ui
     # Forward the UI port to access the frontend
     ports:
       - port: "8000"
     # Open the following URLs once they return an HTTP status code other than 502 or 503
     open:
       - url: http://localhost:8000
+ 
