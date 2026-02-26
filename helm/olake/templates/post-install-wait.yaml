@@ -23,7 +23,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: wait-for-stack
-        image: curlimages/curl:8.1.2
+        image: "{{ include "olake.registryBase" . }}/curlimages/curl:8.1.2"
         imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: true

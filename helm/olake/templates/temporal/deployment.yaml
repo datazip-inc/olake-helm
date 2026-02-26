@@ -48,7 +48,7 @@ spec:
       {{- end }}
       initContainers:
       - name: wait-for-postgresql
-        image: busybox:latest
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh

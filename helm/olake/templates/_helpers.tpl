@@ -90,6 +90,14 @@ Reserves 2Gi for filesystem overhead
 {{- end -}}
 
 {{/*
+Return the container registry base URL.
+Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to registry-1.docker.io
+*/}}
+{{- define "olake.registryBase" -}}
+{{- .Values.global.env.CONTAINER_REGISTRY_BASE | default "registry-1.docker.io" -}}
+{{- end -}}
+
+{{/*
 Return the PostgreSQL secret name
 */}}
 {{- define "olake.postgresql.secretName" -}}
