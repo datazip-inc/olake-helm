@@ -54,7 +54,7 @@ spec:
       {{- end }}
       containers:
       - name: elasticsearch
-        image: "{{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}"
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}"
         imagePullPolicy: {{ .Values.elasticsearch.image.pullPolicy }}
         ports:
         - name: http

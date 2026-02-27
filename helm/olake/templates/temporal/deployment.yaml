@@ -73,7 +73,7 @@ spec:
               key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
       containers:
       - name: temporal
-        image: "{{ .Values.temporal.server.image.repository }}:{{ .Values.temporal.server.image.tag }}"
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.temporal.server.image.repository }}:{{ .Values.temporal.server.image.tag }}"
         imagePullPolicy: {{ .Values.temporal.server.image.pullPolicy }}
         ports:
         - name: grpc

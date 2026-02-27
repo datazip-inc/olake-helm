@@ -43,7 +43,7 @@ spec:
           echo "Temporal server is ready!"
       containers:
       - name: temporal-ui
-        image: "temporalio/ui:2.16.2"
+        image: "{{ include "olake.registryBase" . }}/temporalio/ui:2.16.2"
         imagePullPolicy: Always
         ports:
         - name: http
