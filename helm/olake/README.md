@@ -445,6 +445,15 @@ The uninstallation script performs the following cleanup steps:
 9. Cleans up any remaining ConfigMaps, Secrets, Services
 10. Deletes the namespace (unless --keep-namespace is specified)
 
+## Migrating to v0.0.12
+
+When upgrading from a previous version, the `olake-signup-init` Job must be deleted before running `helm upgrade`. Kubernetes does not allow modifications to a Job's pod template, and the updated image references in this version will cause the upgrade to fail.
+
+```bash
+kubectl delete job olake-signup-init -n olake
+helm upgrade olake olake/olake
+```
+
 ## Migrating to v0.0.7
 
 Version 0.0.7 introduces a significant change to how ServiceAccount, RBAC, and Secret resources are managed. By default, `useStandardResources` is now set to `true`, which converts these from Helm Hooks to standard resources. This improves compatibility with ArgoCD and prevents race conditions during updates.
