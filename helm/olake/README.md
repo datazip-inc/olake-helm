@@ -311,7 +311,7 @@ When set, all init container images (`busybox`, `curlimages/curl`) and worker co
 **Note:** Ensure all required images are mirrored to your private registry before deploying. The images that need mirroring are:
 - `library/busybox:latest` (mirrored as `1234567890123.dkr.ecr.us-east-1.amazonaws.com/dockerhub_mirror/library/busybox:latest`)
 - `curlimages/curl:8.1.2` (mirrored as `1234567890123.dkr.ecr.us-east-1.amazonaws.com/dockerhub_mirror/curlimages/curl:8.1.2`)
-- `olakego/source-*` and `olakego/destination-*` (connector images, mirrored as `1234567890123.dkr.ecr.us-east-1.amazonaws.com/dockerhub_mirror/olakego/source-*`)
+- `olakego/source-*` (connector images, mirrored as `1234567890123.dkr.ecr.us-east-1.amazonaws.com/dockerhub_mirror/olakego/source-*`)
 - The main application images defined in `olakeUI.image`, `olakeWorker.image`, `temporal.image`, `nfsServer.image`, etc.
 
 ## Monitoring and Troubleshooting
