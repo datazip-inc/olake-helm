@@ -20,7 +20,7 @@ spec:
     protocol: TCP
     name: olake-ui
     {{- if eq .Values.olakeUI.service.type "NodePort" }}
-    nodePort: 30082
+    nodePort: {{ .Values.olakeUI.service.nodePort | default "30082" | int }}
     {{- end }}
   selector:
     app.kubernetes.io/name: olake-ui
