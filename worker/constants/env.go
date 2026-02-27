@@ -18,6 +18,9 @@ const (
 	EnvTemporalAddress         = "TEMPORAL_ADDRESS"
 	EnvTemporalRetentionPeriod = "TEMPORAL_RETENTION_PERIOD"
 
+	// registry
+	ContainerRegistryBase = "CONTAINER_REGISTRY_BASE"
+
 	// worker
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"
 	EnvHostPersistentDir  = "PERSISTENT_DIR"
