@@ -312,7 +312,7 @@ When set, **all** container images are automatically prefixed with this registry
 - `library/busybox:latest`
 - `curlimages/curl:8.1.2`
 - `olakego/ui:latest`, `olakego/ui-worker:latest`
-- `olakego/source-*` (connector images)
+- `olakego/source-*` (connector images, example `1234567890123.dkr.ecr.us-east-1.amazonaws.com/dockerhub_mirror/olakego/source-mysql:v0.4.0`)
 - `temporalio/auto-setup:1.22.3`, `temporalio/ui:2.16.2`
 - `library/postgres:14-alpine`
 - `sig-storage/nfs-provisioner:v4.0.8` (built-in NFS server; sourced from `registry.k8s.io`, not Docker Hub)
