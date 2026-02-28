@@ -61,7 +61,14 @@ func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duratio
 }
 
 func GetDockerImageName(sourceType, version string) string {
-	return fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
+	registryBase := strings.TrimRight(viper.GetString(constants.ContainerRegistryBase), "/")
+	imageName := fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
+
+	if registryBase == "" || registryBase == "registry-1.docker.io" {
+		return imageName
+	}
+
+	return fmt.Sprintf("%s/%s", registryBase, imageName)
 }
 
 // GetWorkerEnvVars returns the environment variables from the worker container.

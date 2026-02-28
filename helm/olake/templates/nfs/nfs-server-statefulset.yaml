@@ -51,7 +51,11 @@ spec:
       serviceAccountName: {{ include "olake.fullname" . }}-nfs-server
       containers:
       - name: nfs-server
+        {{- if .Values.global.env.CONTAINER_REGISTRY_BASE }}
+        image: "{{ include "olake.registryBase" . }}/sig-storage/nfs-provisioner:v4.0.8"
+        {{- else }}
         image: "registry.k8s.io/sig-storage/nfs-provisioner:v4.0.8"
+        {{- end }}
         imagePullPolicy: IfNotPresent
         ports:
         - name: nfs

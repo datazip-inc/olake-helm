@@ -434,7 +434,7 @@ postgresql:
 
   # -- PostgreSQL image configuration
   image:
-    repository: postgres
+    repository: library/postgres
     tag: "14-alpine"
     pullPolicy: Always
 
