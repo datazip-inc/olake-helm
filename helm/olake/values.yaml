@@ -128,6 +128,7 @@ olakeUI:
     # -- Service type (ClusterIP for internal, NodePort/LoadBalancer for external access)
     type: ClusterIP
     annotations: {}
+    nodePort: ""  # Only used if type is NodePort, can customize the nodeport
 
   # -- OLake UI resource requirements (optional overrides)
   # Defaults: requests: memory=512Mi, cpu=500m (no limits by default)
