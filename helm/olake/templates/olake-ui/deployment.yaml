@@ -46,6 +46,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.olakeUI.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if (include "olake.jobServiceAccountName" .) }}
       serviceAccountName: {{ include "olake.jobServiceAccountName" . }}
       {{- end }}

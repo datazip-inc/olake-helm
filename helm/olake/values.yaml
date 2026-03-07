@@ -142,6 +142,15 @@ olakeUI:
   #       cpu: "1500m"
   resources: {}
 
+  # -- Olake UI security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+  
   # -- Environment variables for OLake UI
   # Add custom environment variables here
   # Example:
@@ -253,6 +262,15 @@ olakeWorker:
   #       cpu: "1000m"
   resources: {}
 
+  # -- Olake Worker security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+
   # -- Environment variables for OLake Worker
   # Add custom environment variables here
   # Example:
@@ -349,6 +367,15 @@ nfsServer:
   #     cpu: "1500m"
   resources: {}
 
+  # -- NFS server security context
+  # WARNING: The NFS provisioner MUST run as root. Do NOT set runAsNonRoot: true here.
+  # Reason: rpcbind requires binding to privileged port 111 and write access to /run/rpcbind/,
+  # and nfsd requires root to manage kernel-level NFS exports.
+  # For production/secure clusters, consider disabling the built-in NFS server
+  # (nfsServer.enabled: false) and using a cloud-native RWX storage solution
+  # (AWS EFS, Azure Files, GCP Filestore) instead.
+  securityContext: {}
+
 # Temporal configuration for workflow orchestration
 temporal:
   # -- Temporal server configuration
@@ -385,6 +412,14 @@ temporal:
     #       memory: "2Gi"
     #       cpu: "1500m"
     resources: {}
+
+    # -- Temporal server security context
+    # Example customizations:
+    # securityContext:
+    #   runAsNonRoot: true
+    #   runAsUser: 1000
+    #   runAsGroup: 1000
+    securityContext: {}
 
   # -- Temporal Web UI configuration (disabled by default)
   ui:
@@ -474,6 +509,18 @@ postgresql:
   #       cpu: "1000m"
   resources: {}
 
+    # -- Run PostgreSQL container as the 'postgres' user for enhanced security
+    # UID 70 / GID 70 is REQUIRED for the postgres:XX-alpine image.
+    # Alpine Linux's postgresql APK package creates the 'postgres' system user
+    # with a fixed UID/GID of 70. The entrypoint script uses 'gosu postgres'
+    # to drop privileges and expects data directories to be owned by this UID.
+    # (Note: Debian-based postgres images use UID 999 instead.)
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+
   # -- PostgreSQL persistence configuration
   persistence:
     # -- Size of persistent volume for PostgreSQL data
@@ -518,6 +565,12 @@ elasticsearch:
   #       memory: "4Gi"
   #       cpu: "2000m"
   resources: {}
+
+  # -- Elasticsearch security context
+  securityContext: 
+    fsGroup: 1000
+    runAsUser: 1000
+    runAsGroup: 1000
 
   # -- Elasticsearch persistence configuration
   persistence:

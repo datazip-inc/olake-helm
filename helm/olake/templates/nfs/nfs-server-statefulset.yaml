@@ -48,6 +48,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.nfsServer.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ include "olake.fullname" . }}-nfs-server
       containers:
       - name: nfs-server
