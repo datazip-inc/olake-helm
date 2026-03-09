@@ -5,7 +5,7 @@ A cloud-native Temporal worker that executes OLake Jobs as Kubernetes Pods. This
 ## 🚀 Quickstart
 
 ### Prerequisites
-- Go 1.24+
+- Go 1.25+
 - [DevSpace CLI](https://www.devspace.sh/docs/getting-started/installation) installed
 - Access to a Kubernetes cluster (minikube or remote cluster)
 - kubectl configured to access the cluster
@@ -58,7 +58,7 @@ DevSpace provides a streamlined development workflow with live code sync, port f
 
 This will:
 - Deploy the OLake Helm chart to the cluster
-- Start a development container with Go 1.24.2
+- Start a development container with Go 1.25.8
 - Sync local code changes to the container in real-time
 - Forward port 8000 from olakeUI to `http://localhost:8000`
 - Open a terminal in the dev container
@@ -108,7 +108,7 @@ DevSpace is configured via `devspace.yaml` in this directory:
 - **Images**: Builds `olakego/k8s-worker` from local Dockerfile
 - **Deployments**: Uses the OLake Helm chart from `../../helm/olake`
 - **Dev Environment**: 
-  - Worker dev container with Go 1.24.2
+  - Worker dev container with Go 1.25.8
   - Live code sync from current directory
   - SSH access for IDE integration
 - **Port Forwarding**: 
