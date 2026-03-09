@@ -46,7 +46,7 @@ dev:
     # Search for the worker container for development
     imageSelector: olakego/k8s-worker
     # Replace the container image with this dev-optimized image (allows to skip image building during development)
-    devImage: ghcr.io/loft-sh/devspace-containers/go:1.24-alpine
+    devImage: ghcr.io/loft-sh/devspace-containers/go:1.25.8-alpine
     # Sync worker code for development
     sync:
       - path: ./
