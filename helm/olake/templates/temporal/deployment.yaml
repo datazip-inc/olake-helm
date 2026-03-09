@@ -46,6 +46,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.temporal.server.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
       - name: wait-for-postgresql
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"

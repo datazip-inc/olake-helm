@@ -1,6 +1,6 @@
 module github.com/datazip-inc/olake-helm/worker
 
-go 1.24.2
+go 1.25.8
 
 require (
 	github.com/apache/spark-connect-go/v35 v35.0.0-20250317154112-ffd832059443
@@ -16,6 +16,7 @@ require (
 	go.temporal.io/api v1.51.0
 	go.temporal.io/sdk v1.36.0
 	google.golang.org/grpc v1.75.0
+	google.golang.org/protobuf v1.36.8
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
@@ -125,7 +126,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
