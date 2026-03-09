@@ -142,6 +142,15 @@ olakeUI:
   #       cpu: "1500m"
   resources: {}
 
+  # -- Olake UI security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+  
   # -- Environment variables for OLake UI
   # Add custom environment variables here
   # Example:
@@ -252,6 +261,15 @@ olakeWorker:
   #       memory: "1Gi"
   #       cpu: "1000m"
   resources: {}
+
+  # -- Olake Worker security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
 
   # -- Environment variables for OLake Worker
   # Add custom environment variables here
@@ -386,6 +404,14 @@ temporal:
     #       cpu: "1500m"
     resources: {}
 
+    # -- Temporal server security context
+    # Example customizations:
+    # securityContext:
+    #   runAsNonRoot: true
+    #   runAsUser: 1000
+    #   runAsGroup: 1000
+    securityContext: {}
+
   # -- Temporal Web UI configuration (disabled by default)
   ui:
     # -- Enable Temporal Web UI
@@ -474,6 +500,17 @@ postgresql:
   #       cpu: "1000m"
   resources: {}
 
+  # -- Run PostgreSQL container as the 'postgres' user for enhanced security
+  # UID 70 / GID 70 is REQUIRED for the postgres:XX-alpine image.
+  # Alpine Linux's postgresql APK package creates the 'postgres' system user
+  # with a fixed UID/GID of 70. The entrypoint script uses 'gosu postgres'
+  # to drop privileges and expects data directories to be owned by this UID.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+
   # -- PostgreSQL persistence configuration
   persistence:
     # -- Size of persistent volume for PostgreSQL data
@@ -518,6 +555,12 @@ elasticsearch:
   #       memory: "4Gi"
   #       cpu: "2000m"
   resources: {}
+
+  # -- Elasticsearch security context
+  securityContext: 
+    fsGroup: 1000
+    runAsUser: 1000
+    runAsGroup: 1000
 
   # -- Elasticsearch persistence configuration
   persistence:

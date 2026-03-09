@@ -48,6 +48,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.postgresql.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: postgresql
         image: "{{ include "olake.registryBase" . }}/{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"

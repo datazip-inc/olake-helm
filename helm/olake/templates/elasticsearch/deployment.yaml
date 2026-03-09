@@ -32,10 +32,10 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- with .Values.elasticsearch.securityContext }}
       securityContext:
-        fsGroup: 1000
-        runAsUser: 1000
-        runAsGroup: 1000
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.elasticsearch.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

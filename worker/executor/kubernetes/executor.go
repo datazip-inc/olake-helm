@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -35,6 +37,7 @@ type KubernetesConfig struct {
 	SecretKey         string
 	BasePath          string
 	WorkerIdentity    string
+	SecurityContext   *corev1.PodSecurityContext
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -64,6 +67,17 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	secretKey := viper.GetString(constants.EnvSecretKey)
 	basePath := utils.GetConfigDir()
 
+	// Parse security context JSON if available
+	var securityContext *corev1.PodSecurityContext
+	securityContextJSON := viper.GetString(constants.EnvPodSecurityContext)
+	if securityContextJSON != "" {
+		securityContext = &corev1.PodSecurityContext{}
+		if err := json.Unmarshal([]byte(securityContextJSON), securityContext); err != nil {
+			logger.Errorf("failed to unmarshal job security context: %s. using default.", err)
+			securityContext = nil // Reset to nil on error
+		}
+	}
+
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -85,6 +99,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			SecretKey:         secretKey,
 			BasePath:          basePath,
 			WorkerIdentity:    workerIdenttity,
+			SecurityContext:   securityContext,
 		},
 	}, nil
 }
