@@ -39,4 +39,7 @@ const (
 
 	// api
 	EnvCallbackURL = "OLAKE_CALLBACK_URL"
+
+	// security context
+	EnvPodSecurityContext = "POD_SECURITY_CONTEXT"
 )

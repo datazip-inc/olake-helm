@@ -43,3 +43,11 @@ data:
   # JOB SERVICE ACCOUNT CONFIGURATION
   # =================================================================
   JOB_SERVICE_ACCOUNT_NAME: {{ include "olake.jobServiceAccountName" . | quote }}
+
+
+  # =================================================================
+  # POD SECURITY CONTEXT CONFIGURATION
+  # =================================================================
+  {{- if .Values.olakeWorker.securityContext }}
+  POD_SECURITY_CONTEXT: {{ .Values.olakeWorker.securityContext | toJson | quote }}
+  {{- end }}

@@ -164,10 +164,11 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			NodeSelector:  k.GetNodeSelectorForJob(req.JobID, req.Command),
-			Tolerations:   k.GetTolerationsForJob(req.JobID, req.Command),
-			Affinity:      k.BuildAffinityForJob(req.JobID, req.Command),
+			RestartPolicy:   corev1.RestartPolicyNever,
+			NodeSelector:    k.GetNodeSelectorForJob(req.JobID, req.Command),
+			Tolerations:     k.GetTolerationsForJob(req.JobID, req.Command),
+			Affinity:        k.BuildAffinityForJob(req.JobID, req.Command),
+			SecurityContext: k.config.SecurityContext,
 			Containers: []corev1.Container{
 				{
 					Name:    "connector",
