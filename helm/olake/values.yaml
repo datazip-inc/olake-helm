@@ -367,15 +367,6 @@ nfsServer:
   #     cpu: "1500m"
   resources: {}
 
-  # -- NFS server security context
-  # WARNING: The NFS provisioner MUST run as root. Do NOT set runAsNonRoot: true here.
-  # Reason: rpcbind requires binding to privileged port 111 and write access to /run/rpcbind/,
-  # and nfsd requires root to manage kernel-level NFS exports.
-  # For production/secure clusters, consider disabling the built-in NFS server
-  # (nfsServer.enabled: false) and using a cloud-native RWX storage solution
-  # (AWS EFS, Azure Files, GCP Filestore) instead.
-  securityContext: {}
-
 # Temporal configuration for workflow orchestration
 temporal:
   # -- Temporal server configuration
@@ -509,12 +500,11 @@ postgresql:
   #       cpu: "1000m"
   resources: {}
 
-    # -- Run PostgreSQL container as the 'postgres' user for enhanced security
-    # UID 70 / GID 70 is REQUIRED for the postgres:XX-alpine image.
-    # Alpine Linux's postgresql APK package creates the 'postgres' system user
-    # with a fixed UID/GID of 70. The entrypoint script uses 'gosu postgres'
-    # to drop privileges and expects data directories to be owned by this UID.
-    # (Note: Debian-based postgres images use UID 999 instead.)
+  # -- Run PostgreSQL container as the 'postgres' user for enhanced security
+  # UID 70 / GID 70 is REQUIRED for the postgres:XX-alpine image.
+  # Alpine Linux's postgresql APK package creates the 'postgres' system user
+  # with a fixed UID/GID of 70. The entrypoint script uses 'gosu postgres'
+  # to drop privileges and expects data directories to be owned by this UID.
   securityContext:
     runAsNonRoot: true
     runAsUser: 70
