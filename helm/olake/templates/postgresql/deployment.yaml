@@ -54,7 +54,7 @@ spec:
       {{- end }}
       containers:
       - name: postgresql
-        image: "{{ include "olake.registryBase" . }}/{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        image: "{{ include "olake.imageRef" (dict "repository" .Values.postgresql.image.repository "tag" .Values.postgresql.image.tag "context" .) }}"
         imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
         ports:
         - name: postgres

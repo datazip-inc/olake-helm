@@ -98,6 +98,29 @@ Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to regis
 {{- end -}}
 
 {{/*
+Build a full container image reference.
+If the repository already contains a registry (first path segment has a dot),
+the registryBase prefix is skipped. Otherwise the global registry base is prepended.
+This allows users to specify fully-qualified image URLs (e.g. ECR, GCR, GHCR)
+while still supporting the offline/air-gapped CONTAINER_REGISTRY_BASE workflow
+for Docker Hub images.
+
+Usage:
+  {{ include "olake.imageRef" (dict "repository" .Values.olakeUI.image.repository "tag" .Values.olakeUI.image.tag "context" .) }}
+*/}}
+{{- define "olake.imageRef" -}}
+{{- $repo := .repository -}}
+{{- $tag := .tag -}}
+{{- $parts := splitList "/" $repo -}}
+{{- $firstSegment := index $parts 0 -}}
+{{- if contains "." $firstSegment -}}
+{{- printf "%s:%s" $repo $tag -}}
+{{- else -}}
+{{- printf "%s/%s:%s" (include "olake.registryBase" .context) $repo $tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Return the PostgreSQL secret name
 */}}
 {{- define "olake.postgresql.secretName" -}}
