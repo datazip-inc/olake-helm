@@ -19,7 +19,8 @@ const (
 	EnvTemporalRetentionPeriod = "TEMPORAL_RETENTION_PERIOD"
 
 	// registry
-	ContainerRegistryBase = "CONTAINER_REGISTRY_BASE"
+	ContainerRegistryBase  = "CONTAINER_REGISTRY_BASE"
+	SourceImagePrefix      = "SOURCE_IMAGE_PREFIX"
 
 	// worker
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"

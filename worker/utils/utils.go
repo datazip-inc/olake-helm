@@ -61,6 +61,13 @@ func RetryWithBackoff(fn func() error, maxRetries int, initialDelay time.Duratio
 }
 
 func GetDockerImageName(sourceType, version string) string {
+	// If SOURCE_IMAGE_PREFIX is set, use it as the full image prefix
+	// (e.g. "123456789012.dkr.ecr.eu-west-1.amazonaws.com/olake-source")
+	// This takes precedence over CONTAINER_REGISTRY_BASE + DefaultDockerImagePrefix.
+	if prefix := strings.TrimRight(viper.GetString(constants.SourceImagePrefix), "/"); prefix != "" {
+		return fmt.Sprintf("%s-%s:%s", prefix, sourceType, version)
+	}
+
 	registryBase := strings.TrimRight(viper.GetString(constants.ContainerRegistryBase), "/")
 	imageName := fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
 
