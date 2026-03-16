@@ -1,0 +1,161 @@
+{{- if .Values.fusion.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-config
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+data:
+  config.yaml: |
+    ams:
+      admin-username: {{ .Values.fusion.adminUser }}
+      admin-password: {{ .Values.fusion.adminPassword }}
+      server-bind-host: {{ .Values.fusion.server.bindHost | quote }}
+      server-expose-host: {{ .Values.fusion.server.exposeHost | quote }}
+
+      thrift-server:
+        max-message-size: 100MB
+        selector-thread-count: 2
+        selector-queue-size: 4
+        table-service:
+          bind-port: {{ .Values.fusion.server.table.port }}
+          worker-thread-count: 20
+        optimizing-service:
+          bind-port: {{ .Values.fusion.server.optimizing.port }}
+
+      http-server:
+        session-timeout: 7d
+        bind-port: {{ .Values.fusion.server.rest.port }}
+        rest-auth-type: token
+
+      refresh-external-catalogs:
+        interval: 3min
+        thread-count: 10
+        queue-size: 1000000
+
+      refresh-tables:
+        thread-count: 10
+        interval: 1min
+        max-pending-partition-count: 100
+
+      self-optimizing:
+        commit-thread-count: 10
+        runtime-data-keep-days: 30
+        runtime-data-expire-interval-hours: 1
+        refresh-group-interval: 30s
+
+      optimizer:
+        heart-beat-timeout: 1min
+        task-ack-timeout: 30s
+        task-execute-timeout: 1h
+        polling-timeout: 3s
+        max-planning-parallelism: 1
+
+      blocker:
+        timeout: 1min
+
+      expire-snapshots:
+        enabled: true
+        thread-count: 10
+
+      clean-orphan-files:
+        enabled: true
+        thread-count: 10
+        interval: 1d
+
+      clean-dangling-delete-files:
+        enabled: true
+        thread-count: 10
+
+      sync-hive-tables:
+        enabled: false
+        thread-count: 10
+
+      data-expiration:
+        enabled: true
+        thread-count: 10
+        interval: 1d
+
+      auto-create-tags:
+        enabled: true
+        thread-count: 3
+        interval: 1min
+
+      table-manifest-io:
+        thread-count: 20
+
+      catalog-meta-cache:
+        expiration-interval: 60s
+
+      shade:
+        identifier: default
+        sensitive-keywords: admin-password;database.password
+
+      overview-cache:
+        refresh-interval: 3min
+        max-size: 3360
+
+      database:
+        type: postgres
+        jdbc-driver-class: org.postgresql.Driver
+        url: {{ .Values.fusion.database.url | default (printf "jdbc:postgresql://postgresql:5432/%s" .Values.fusion.database.db) }}
+        username: {{ .Values.fusion.database.username | default .Values.postgresql.auth.postgresUser }}
+        password: {{ .Values.fusion.database.password | default .Values.postgresql.auth.postgresPassword }}
+        connection-pool-max-total: 20
+        connection-pool-max-idle: 16
+        connection-pool-max-wait-millis: 30000
+        auto-create-tables: true
+
+      terminal:
+        backend: local
+        result:
+          limit: 1000
+        stop-on-error: false
+        session:
+          timeout: 30min
+        local:
+          using-session-catalog-for-hive: false
+          spark.sql.iceberg.handle-timestamp-without-timezone: false
+          spark.sql.codegen.wholeStage: false
+
+    containers:
+      - name: localContainer
+        container-impl: org.apache.amoro.server.manager.LocalOptimizerContainer
+        properties: {}
+
+      - name: sparkContainer
+        container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
+        properties:
+          spark-home: {{ .Values.fusion.optimizer.spark.sparkHome | quote }}
+          master: {{ .Values.fusion.optimizer.spark.master }}
+          deploy-mode: {{ .Values.fusion.optimizer.spark.deployMode }}
+          job-uri: {{ .Values.fusion.optimizer.spark.jobUri }}
+          export.HADOOP_USER_NAME: spark
+          export.SPARK_CONF_DIR: /opt/spark/conf/
+          spark-conf.spark.kubernetes.container.image: "{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
+          spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
+          spark-conf.spark.kubernetes.namespace: "{{ if .Values.fusion.optimizer.spark.namespace }}{{ .Values.fusion.optimizer.spark.namespace }}{{ else }}{{ .Release.Namespace }}{{ end }}"
+          {{- if .Values.fusion.optimizer.spark.serviceAccount.name }}
+          spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
+          spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
+          {{- end }}
+          spark-conf.spark.dynamicAllocation.enabled: "true"
+          spark-conf.spark.shuffle.service.enabled: "false"
+          spark-conf.spark.dynamicAllocation.shuffleTracking.enabled: "true"
+          spark-conf.spark.driver.memory: {{ .Values.fusion.optimizer.spark.driverMemory | quote }}
+          spark-conf.spark.executor.memory: {{ .Values.fusion.optimizer.spark.executorMemory | quote }}
+          spark-conf.spark.executor.cores: {{ .Values.fusion.optimizer.spark.executorCores | quote }}
+          spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
+          spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
+          spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
+          spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
+          {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
+          {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
+          {{- end }}
+          {{- range $key, $value := .Values.fusion.optimizer.spark.properties }}
+          {{ $key }}: "{{ $value }}"
+          {{- end }}
+
+{{- end }}

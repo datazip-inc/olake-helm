@@ -566,3 +566,120 @@ elasticsearch:
   persistence:
     # -- Size of persistent volume for Elasticsearch data
     size: 8Gi
+
+# Fusion (Amoro) configuration for Iceberg compaction and optimizer
+fusion:
+  enabled: true
+
+  # --- Fusion admin credentials
+  adminUser: admin
+  adminPassword: password
+
+  # --- Fusion (Amoro) container image
+  image:
+    repository: olakego/fusion
+    tag: dev-v3
+    pullPolicy: IfNotPresent
+
+  # --- Fusion service configuration (ClusterIP service exposing Fusion ports)
+  service:
+    type: ClusterIP
+
+  # --- Fusion resource requirements (optional overrides)
+  resources: {}
+
+
+  # --- Fusion database connection (uses same Postgres as OLake by default)
+  database:
+    type: postgres
+    # Optional override for JDBC URL. If empty, it will use the embedded Postgres service.
+    url: ""
+    # Database to use for Iceberg catalog
+    db: postgres
+    # Database credentials (defaults to OLake Postgres credentials)
+    username: ""
+    password: ""
+
+  # --- Fusion service ports (used to expose REST / Thrift / optimizer services)
+  server:
+    # -- Server binding and exposure (used in config.yaml; AMS_SERVER__EXPOSE__HOST is set to pod IP)
+    bindHost: "0.0.0.0"
+    exposeHost: "127.0.0.1"
+
+    rest:
+      # HTTP REST / UI endpoint
+      port: 1630
+    table:
+      port: 1260
+    optimizing:
+      port: 1261
+
+  # --- Fusion UI access (optional)
+  ui:
+    # -- Enable Fusion UI service
+    enabled: true
+    # -- Optional override for UI port (defaults to fusion.server.rest.port)
+    port: 1630
+    # -- Service configuration for exposing the UI (optional)
+    service:
+      type: ClusterIP
+      annotations: {}
+      nodePort: ""
+
+  # --- S3 / MinIO configuration (used by Iceberg)
+  s3:
+    # S3 endpoint for Iceberg data.
+    # - If set, this value is used directly.
+    # - If empty, it falls back to global.env.AWS_EC2_METADATA_SERVICE_ENDPOINT (if set).
+    # - If both are empty, it defaults to a local MinIO-style endpoint.
+    endpoint: "http://host.minikube.internal:9000"
+    region: "us-east-1"
+    accessKeyId: "admin"
+    secretAccessKey: "password"
+    bucket: "warehouse"
+    # Optional explicit warehouse URI for external consumers (OLake destinations, etc.).
+    # The Fusion init job will derive its own warehouse internally as:
+    #   s3://<bucket>/<catalogName>/
+    warehouse: ""
+    pathStyleAccess: true
+    catalogName: "olake_iceberg"
+
+  # --- Iceberg catalog JDBC configuration used by Fusion init job
+  catalog:
+    # Optional explicit JDBC URI for the Iceberg catalog.
+    # Example: "jdbc:postgresql://my-postgres:5432/iceberg"
+    jdbcUri: "jdbc:postgresql://host.minikube.internal:5432/iceberg"
+    # Optional explicit JDBC username for the catalog connection.
+    jdbcUser: "iceberg"
+    # Optional explicit JDBC password for the catalog connection.
+    jdbcPassword: "password"
+  
+  # --- Optimizer configuration (Spark-on-Kubernetes)
+  optimizer:
+    spark:
+      enabled: true
+      # Spark installation home directory used by the Spark optimizer container.
+      sparkHome: "/opt/spark/"
+      master: "k8s://https://kubernetes.default.svc:443"
+      deployMode: "cluster"
+      jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
+      driverMemory: "1g"
+      executorMemory: "1g"
+      executorCores: 1
+      image:
+        repository: olakego/fusion-spark
+        tag: latest
+        pullPolicy: IfNotPresent
+      namespace: olake
+
+      serviceAccount: 
+        name: "spark"
+        annotations: {}
+
+
+      # Extra Spark config entries (map of key->value)
+      extraConfig: {}
+      # Additional container properties for the Spark optimizer container (map of key->value).
+      # This can be used to set properties like:
+      #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
+      properties: {}

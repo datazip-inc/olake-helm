@@ -1,0 +1,178 @@
+{{- if .Values.fusion.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: fusion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: fusion
+    spec:
+      {{- with .Values.fusion.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fusion.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fusion.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fusion.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Values.fusion.optimizer.spark.serviceAccount.name | default "spark" }}
+      initContainers:
+      - name: wait-for-postgres
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL to be ready..."
+          until nc -z "$POSTGRES_SEEDS" "$DB_PORT"; do
+            echo "PostgreSQL is not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "PostgreSQL is ready!"
+        #   # Ensure the Fusion database exists (separate from Temporal)
+        #   if ! psql -h "$POSTGRES_SEEDS" -p "$DB_PORT" -U "$POSTGRES_USER" -tc "SELECT 1 FROM pg_database WHERE datname='{{ .Values.fusion.database.db }}'" | grep -q 1; then
+        #     psql -h "$POSTGRES_SEEDS" -p "$DB_PORT" -U "$POSTGRES_USER" -c "CREATE DATABASE \"{{ .Values.fusion.database.db }}\";"
+        #   fi
+        env:
+        - name: POSTGRES_SEEDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+      - name: install-spark
+        image: olakego/fusion-spark:latest
+        command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
+        volumeMounts:
+          - name: spark-binaries
+            mountPath: /target
+      containers:
+        - name: fusion
+          image: "{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
+          imagePullPolicy: {{ .Values.fusion.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              DB_HOST="${POSTGRESQL_SERVICE_HOST:-$POSTGRES_SEEDS}"
+              DB_PORT="${POSTGRESQL_SERVICE_PORT:-$DB_PORT}"
+              DB_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}"
+              echo "Using PostgreSQL URL: $DB_URL"
+              export AMS_DATABASE_URL="$DB_URL"
+              exec /entrypoint.sh ams
+          ports:
+            - name: rest
+              containerPort: {{ .Values.fusion.server.rest.port }}
+            - name: table
+              containerPort: {{ .Values.fusion.server.table.port }}
+            - name: optimizing
+              containerPort: {{ .Values.fusion.server.optimizing.port }}
+          volumeMounts:
+            - name: fusion-config
+              mountPath: /usr/local/amoro/conf/config.yaml
+              subPath: config.yaml
+            - name: spark-binaries
+              mountPath: /opt/spark
+          env:
+            - name: AMS_CONFIG_PATH
+              value: "/usr/local/amoro/conf/config.yaml"
+            - name: AMS_SERVER__EXPOSE__HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POSTGRES_SEEDS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+            - name: DB_NAME
+              value: "{{ .Values.fusion.database.db | default "iceberg" }}"
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.fusion.s3.accessKeyId | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.fusion.s3.secretAccessKey | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.fusion.s3.region | default "us-east-1" | quote }}
+            - name: "AMS_ADMIN__USERNAME"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.fullname" . }}-fusion
+                  key: AdminUsername
+            - name: "AMS_ADMIN__PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.fullname" . }}-fusion
+                  key: AdminPassword
+            - name: AMS_DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  # TODO : need to import default from fusion secret not working currently
+                  # name: {{ include "olake.fullname" . }}-fusion
+                  # key: DatabaseUsername
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+            - name: AMS_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  # name: {{ include "olake.fullname" . }}-fusion
+                  # key: DatabasePassword
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+          {{- with .Values.fusion.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: fusion-config
+          configMap:
+            name: {{ include "olake.fullname" . }}-fusion-config
+        - name: spark-binaries
+          emptyDir: {}
+{{- end }}
