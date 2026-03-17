@@ -34,21 +34,6 @@ spec:
               value: "{{ .Values.fusion.adminUser }}"
             - name: FUSION_ADMIN_PASSWORD
               value: "{{ .Values.fusion.adminPassword }}"
-            # TODO: remove these env vars
-            - name: CATALOG_NAME
-              value: "{{ .Values.fusion.s3.catalogName }}"
-            - name: S3_ENDPOINT
-              value: "{{ .Values.fusion.s3.endpoint | default .Values.global.env.AWS_EC2_METADATA_SERVICE_ENDPOINT }}"
-            - name: S3_REGION
-              value: "{{ .Values.fusion.s3.region | default ""}}"
-            - name: S3_BUCKET
-              value: "{{ .Values.fusion.s3.bucket | default "" }}"
-            - name: S3_PATH_STYLE
-              value: "{{ if .Values.fusion.s3.pathStyleAccess }}true{{ else }}false{{ end }}"
-            - name: S3_ACCESS_KEY
-              value: "{{ .Values.fusion.s3.accessKeyId | default "" }}"
-            - name: S3_SECRET_KEY
-              value: "{{ .Values.fusion.s3.secretAccessKey | default "" }}"
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:
@@ -132,61 +117,11 @@ spec:
                 sleep 5
               fi
 
-              # TODO: remove
-              # ---- Catalog ----
-              echo "Checking catalog '${CATALOG_NAME}'..."
-              CATALOGS=$(curl -s -b /tmp/cookies.txt \
-                -H "X-Request-Source: Web" \
-                "${BASE_URL}/api/ams/v1/catalogs")
-
-              if echo "$CATALOGS" | grep -q "\"catalogName\":\"${CATALOG_NAME}\""; then
-                echo "  Catalog '${CATALOG_NAME}' already exists — skipping."
-              else
-                echo "  Creating catalog '${CATALOG_NAME}' (Iceberg JdbcCatalog on Postgres + S3)..."
-                WAREHOUSE_PATH="s3://${S3_BUCKET}/${CATALOG_NAME}/"
-                curl -s -b /tmp/cookies.txt \
-                  -X POST "${BASE_URL}/api/ams/v1/catalogs" \
-                  -H "Content-Type: application/json" \
-                  -H "X-Request-Source: Web" \
-                  -d "{
-                    \"name\":\"${CATALOG_NAME}\",
-                    \"type\":\"custom\",
-                    \"optimizerGroup\":\"spark-container\",
-                    \"tableFormatList\":[\"ICEBERG\"],
-                    \"storageConfig\":{
-                      \"storage.type\":\"S3\",
-                      \"storage.s3.endpoint\":\"${S3_ENDPOINT}\",
-                      \"storage.s3.region\":\"${S3_REGION}\"
-                    },
-                    \"authConfig\":{
-                      \"auth.type\":\"AKSK\",
-                      \"auth.aksk.access-key\":\"${S3_ACCESS_KEY}\",
-                      \"auth.aksk.secret-key\":\"${S3_SECRET_KEY}\"
-                    },
-                    \"properties\":{
-                      \"catalog-impl\":\"org.apache.iceberg.jdbc.JdbcCatalog\",
-                      \"uri\":\"{{ .Values.fusion.catalog.jdbcUri | default "jdbc:postgresql://${PG_HOST}:${PG_PORT}/${PG_DB}" }}\",
-                      \"jdbc.user\":\"{{ .Values.fusion.catalog.jdbcUser | default "${PG_USER}" }}\",
-                      \"jdbc.password\":\"{{ .Values.fusion.catalog.jdbcPassword | default "${PG_PASSWORD}" }}\",
-                      \"jdbc.driver\":\"org.postgresql.Driver\",
-                      \"jdbc.schema-version\":\"V1\",
-                      \"warehouse\":\"${WAREHOUSE_PATH}\",
-                      \"s3.path-style-access\":\"${S3_PATH_STYLE}\",
-                      \"io-impl\":\"org.apache.iceberg.aws.s3.S3FileIO\",
-                      \"endpoint\":\"${S3_ENDPOINT}\",
-                      \"access-key-id\":\"${S3_ACCESS_KEY}\",
-                      \"secret-access-key\":\"${S3_SECRET_KEY}\"
-                    },
-                    \"tableProperties\":{}
-                  }" >/dev/null
-              fi
-
               echo ""
               echo "============================================"
               echo "  Fusion is ready!"
               echo "  Web UI : ${BASE_URL}"
               echo "  Login  : ${FUSION_ADMIN_USER} / ${FUSION_ADMIN_PASSWORD}"
-              echo "  Catalog: ${CATALOG_NAME}"
               echo "============================================"
 
 {{- end }}

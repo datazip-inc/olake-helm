@@ -130,14 +130,11 @@ spec:
                   key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
             - name: DB_NAME
               value: "{{ .Values.fusion.database.db }}"
-            # TODO: remove
-            - name: AWS_ACCESS_KEY_ID
-              value: {{ .Values.fusion.s3.accessKeyId | quote }}
-            - name: AWS_SECRET_ACCESS_KEY
-              value: {{ .Values.fusion.s3.secretAccessKey | quote }}
-            - name: AWS_REGION
-              value: {{ .Values.fusion.s3.region | quote }}
             {{- range $key, $value := .Values.global.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.fusion.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}

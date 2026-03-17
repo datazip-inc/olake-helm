@@ -604,6 +604,14 @@ fusion:
   #       memory: "2Gi"
   resources: {}
 
+  # -- Environment variables for OLake Fusion
+  # Add custom environment variables here
+  # Example:
+  #   env:
+  #     CUSTOM_VAR: "value"
+  #     FEATURE_FLAG: "true"
+  env: {}
+
   # --- Pod scheduling and security options for the Fusion pod
   nodeSelector: {}
   tolerations: []
@@ -640,42 +648,6 @@ fusion:
     optimizing:
       # Thrift optimizing service port
       port: 1261
-
-  # TODO : remove s3 and catalog
-  # --- S3 / MinIO configuration (used by Iceberg)
-  s3:
-    # S3 endpoint for Iceberg data.
-    # - If set, this value is used directly.
-    # - If empty, it falls back to global.env.AWS_EC2_METADATA_SERVICE_ENDPOINT (if set).
-    # - If both are empty, it defaults to a local MinIO-style endpoint.
-    # Examples:
-    #   In-cluster MinIO: "http://minio:9000"
-    #   AWS S3        : "https://s3.us-east-1.amazonaws.com"
-    endpoint: ""
-    # S3 region used by the Iceberg catalog.
-    region: "us-east-1"
-    # Access key and secret used by both Fusion and the Spark optimizer when talking to S3/MinIO.
-    accessKeyId: "admin"
-    secretAccessKey: "password"
-    # Bucket that will contain Iceberg table data.
-    bucket: "warehouse"
-    # Whether to use path-style access for S3.
-    pathStyleAccess: true
-    # Name of the Iceberg catalog created by the Fusion init job.
-    catalogName: "olake_iceberg"
-
-  # --- Iceberg catalog JDBC configuration used by the Fusion init job
-  catalog:
-    # Optional explicit JDBC URI for the Iceberg catalog.
-    # If empty, it is constructed from the Postgres host/port and `fusion.database.db`.
-    # Example: "jdbc:postgresql://my-postgres:5432/iceberg"
-    jdbcUri: ""
-    # Optional explicit JDBC username for the catalog connection.
-    # Defaults to the Postgres user if left empty.
-    jdbcUser: "iceberg"
-    # Optional explicit JDBC password for the catalog connection.
-    # Defaults to the Postgres password if left empty.
-    jdbcPassword: "password"
   
   # --- Optimizer configuration (Spark-on-Kubernetes)
   optimizer:
