@@ -1,4 +1,4 @@
-{{- if and .Values.fusion.enabled .Values.fusion.ui.enabled }}
+{{- if .Values.fusion.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,8 +8,8 @@ metadata:
     {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: fusion
 spec:
-  type: {{ .Values.fusion.ui.service.type | default "ClusterIP" }}
-  {{- with .Values.fusion.ui.service.annotations }}
+  type: {{ .Values.fusion.service.type }}
+  {{- with .Values.fusion.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -18,8 +18,8 @@ spec:
       port: {{ .Values.fusion.server.rest.port }}
       targetPort: {{ .Values.fusion.server.rest.port }}
       protocol: TCP
-      {{- if .Values.fusion.ui.service.nodePort }}
-      nodePort: {{ .Values.fusion.ui.service.nodePort }}
+      {{- if eq .Values.fusion.service.type "NodePort" }}
+      nodePort: {{ .Values.fusion.service.nodePort }}
       {{- end }}
     - name: table
       port: {{ .Values.fusion.server.table.port }}

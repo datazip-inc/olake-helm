@@ -34,6 +34,7 @@ spec:
               value: "{{ .Values.fusion.adminUser }}"
             - name: FUSION_ADMIN_PASSWORD
               value: "{{ .Values.fusion.adminPassword }}"
+            # TODO: remove these env vars
             - name: CATALOG_NAME
               value: "{{ .Values.fusion.s3.catalogName }}"
             - name: S3_ENDPOINT
@@ -59,7 +60,7 @@ spec:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
             - name: PG_DB
-              value: "{{ .Values.fusion.database.db | default "postgres" }}"
+              value: "{{ .Values.fusion.database.db }}"
             - name: PG_USER
               valueFrom:
                 secretKeyRef:
@@ -131,12 +132,7 @@ spec:
                 sleep 5
               fi
 
-
-              #--- Debug
-              curl -s -b /tmp/cookies.txt \
-                -H "X-Request-Source: Web" \
-                "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=10"
-
+              # TODO: remove
               # ---- Catalog ----
               echo "Checking catalog '${CATALOG_NAME}'..."
               CATALOGS=$(curl -s -b /tmp/cookies.txt \

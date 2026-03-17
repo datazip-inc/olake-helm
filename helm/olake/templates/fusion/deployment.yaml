@@ -42,7 +42,7 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ .Values.fusion.optimizer.spark.serviceAccount.name | default "spark" }}
+      serviceAccountName: {{ .Values.fusion.optimizer.spark.serviceAccount.name }}
       initContainers:
       - name: wait-for-postgres
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
@@ -57,10 +57,6 @@ spec:
             sleep 5
           done
           echo "PostgreSQL is ready!"
-        #   # Ensure the Fusion database exists (separate from Temporal)
-        #   if ! psql -h "$POSTGRES_SEEDS" -p "$DB_PORT" -U "$POSTGRES_USER" -tc "SELECT 1 FROM pg_database WHERE datname='{{ .Values.fusion.database.db }}'" | grep -q 1; then
-        #     psql -h "$POSTGRES_SEEDS" -p "$DB_PORT" -U "$POSTGRES_USER" -c "CREATE DATABASE \"{{ .Values.fusion.database.db }}\";"
-        #   fi
         env:
         - name: POSTGRES_SEEDS
           valueFrom:
@@ -133,13 +129,18 @@ spec:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
             - name: DB_NAME
-              value: "{{ .Values.fusion.database.db | default "iceberg" }}"
+              value: "{{ .Values.fusion.database.db }}"
+            # TODO: remove
             - name: AWS_ACCESS_KEY_ID
               value: {{ .Values.fusion.s3.accessKeyId | quote }}
             - name: AWS_SECRET_ACCESS_KEY
               value: {{ .Values.fusion.s3.secretAccessKey | quote }}
             - name: AWS_REGION
-              value: {{ .Values.fusion.s3.region | default "us-east-1" | quote }}
+              value: {{ .Values.fusion.s3.region | quote }}
+            {{- range $key, $value := .Values.global.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
             - name: "AMS_ADMIN__USERNAME"
               valueFrom:
                 secretKeyRef:
@@ -153,18 +154,13 @@ spec:
             - name: AMS_DATABASE_USERNAME
               valueFrom:
                 secretKeyRef:
-                  # TODO : need to import default from fusion secret not working currently
-                  # name: {{ include "olake.fullname" . }}-fusion
-                  # key: DatabaseUsername
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+                  name: {{ include "olake.fullname" . }}-fusion
+                  key: DatabaseUsername
             - name: AMS_DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  # name: {{ include "olake.fullname" . }}-fusion
-                  # key: DatabasePassword
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+                  name: {{ include "olake.fullname" . }}-fusion
+                  key: DatabasePassword
           {{- with .Values.fusion.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

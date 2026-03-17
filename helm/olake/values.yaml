@@ -567,11 +567,16 @@ elasticsearch:
     # -- Size of persistent volume for Elasticsearch data
     size: 8Gi
 
-# Fusion (Amoro) configuration for Iceberg compaction and optimizer
+# Fusion configuration for Iceberg compaction and optimizer
 fusion:
-  enabled: true
+  # -- Enable Fusion (Amoro) components.
+  # Set to false to disable all Fusion resources.
+  enabled: false
 
   # --- Fusion admin credentials
+  # These credentials are used for:
+  # - Logging into the Fusion UI
+  # - Running the Fusion init job that creates the optimizer group and Iceberg catalog
   adminUser: admin
   adminPassword: password
 
@@ -581,28 +586,48 @@ fusion:
     tag: dev-v3
     pullPolicy: IfNotPresent
 
-  # --- Fusion service configuration (ClusterIP service exposing Fusion ports)
+  # -- Service configuration for exposing (ClusterIP / NodePort / LoadBalancer)
   service:
     type: ClusterIP
+    annotations: {}
+    # Only used if type is NodePort
+    nodePort: ""
 
-  # --- Fusion resource requirements (optional overrides)
+  # --- Fusion pod resource requirements (optional overrides)
+  # Example:
+  #   resources:
+  #     requests:
+  #       cpu: "500m"
+  #       memory: "1Gi"
+  #     limits:
+  #       cpu: "1"
+  #       memory: "2Gi"
   resources: {}
 
+  # --- Pod scheduling and security options for the Fusion pod
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  securityContext: {}
 
-  # --- Fusion database connection (uses same Postgres as OLake by default)
+  # --- Fusion database connection
   database:
     type: postgres
-    # Optional override for JDBC URL. If empty, it will use the embedded Postgres service.
+    # Optional override for JDBC URL.
+    # If empty, Fusion connects to the in-cluster PostgreSQL service configured by the chart.
+    # Example: "jdbc:postgresql://my-postgres:5432/postgres"
     url: ""
-    # Database to use for Iceberg catalog
+    # Name of the PostgreSQL database that Fusion (and the Iceberg catalog) will use.
+    # By default the internal Postgres instance is created with database "postgres".
     db: postgres
-    # Database credentials (defaults to OLake Postgres credentials)
+    # Optional database credentials. If empty, these default to the OLake Postgres
+    # credentials from `.Values.postgresql.auth`.
     username: ""
     password: ""
 
   # --- Fusion service ports (used to expose REST / Thrift / optimizer services)
   server:
-    # -- Server binding and exposure (used in config.yaml; AMS_SERVER__EXPOSE__HOST is set to pod IP)
+    # -- Server bind and expose hosts
     bindHost: "0.0.0.0"
     exposeHost: "127.0.0.1"
 
@@ -610,76 +635,86 @@ fusion:
       # HTTP REST / UI endpoint
       port: 1630
     table:
+      # Thrift table service port
       port: 1260
     optimizing:
+      # Thrift optimizing service port
       port: 1261
 
-  # --- Fusion UI access (optional)
-  ui:
-    # -- Enable Fusion UI service
-    enabled: true
-    # -- Optional override for UI port (defaults to fusion.server.rest.port)
-    port: 1630
-    # -- Service configuration for exposing the UI (optional)
-    service:
-      type: ClusterIP
-      annotations: {}
-      nodePort: ""
-
+  # TODO : remove s3 and catalog
   # --- S3 / MinIO configuration (used by Iceberg)
   s3:
     # S3 endpoint for Iceberg data.
     # - If set, this value is used directly.
     # - If empty, it falls back to global.env.AWS_EC2_METADATA_SERVICE_ENDPOINT (if set).
     # - If both are empty, it defaults to a local MinIO-style endpoint.
-    endpoint: "http://host.minikube.internal:9000"
+    # Examples:
+    #   In-cluster MinIO: "http://minio:9000"
+    #   AWS S3        : "https://s3.us-east-1.amazonaws.com"
+    endpoint: ""
+    # S3 region used by the Iceberg catalog.
     region: "us-east-1"
+    # Access key and secret used by both Fusion and the Spark optimizer when talking to S3/MinIO.
     accessKeyId: "admin"
     secretAccessKey: "password"
+    # Bucket that will contain Iceberg table data.
     bucket: "warehouse"
-    # Optional explicit warehouse URI for external consumers (OLake destinations, etc.).
-    # The Fusion init job will derive its own warehouse internally as:
-    #   s3://<bucket>/<catalogName>/
-    warehouse: ""
+    # Whether to use path-style access for S3.
     pathStyleAccess: true
+    # Name of the Iceberg catalog created by the Fusion init job.
     catalogName: "olake_iceberg"
 
-  # --- Iceberg catalog JDBC configuration used by Fusion init job
+  # --- Iceberg catalog JDBC configuration used by the Fusion init job
   catalog:
     # Optional explicit JDBC URI for the Iceberg catalog.
+    # If empty, it is constructed from the Postgres host/port and `fusion.database.db`.
     # Example: "jdbc:postgresql://my-postgres:5432/iceberg"
-    jdbcUri: "jdbc:postgresql://host.minikube.internal:5432/iceberg"
+    jdbcUri: ""
     # Optional explicit JDBC username for the catalog connection.
+    # Defaults to the Postgres user if left empty.
     jdbcUser: "iceberg"
     # Optional explicit JDBC password for the catalog connection.
+    # Defaults to the Postgres password if left empty.
     jdbcPassword: "password"
   
   # --- Optimizer configuration (Spark-on-Kubernetes)
   optimizer:
     spark:
+      # -- Enable the Spark-on-Kubernetes optimizer container integration.
       enabled: true
       # Spark installation home directory used by the Spark optimizer container.
       sparkHome: "/opt/spark/"
+      # Kubernetes master URL for submitting Spark jobs.
       master: "k8s://https://kubernetes.default.svc:443"
+      # Spark deploy mode for optimizer jobs.
       deployMode: "cluster"
+      # Location of the optimizer job JAR inside the Spark image.
       jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
+      # Spark driver and executor sizing.
       driverMemory: "1g"
       executorMemory: "1g"
       executorCores: 1
+      # Spark optimizer image repository and tag.
       image:
         repository: olakego/fusion-spark
         tag: latest
         pullPolicy: IfNotPresent
-      namespace: olake
 
       serviceAccount: 
+        # Service account used by Spark driver and executor pods.
         name: "spark"
         annotations: {}
 
-
-      # Extra Spark config entries (map of key->value)
+      # Extra Spark config entries (map of key->value).
+      # Example:
+      #   extraConfig:
+      #     spark.sql.shuffle.partitions: "200"
       extraConfig: {}
+
       # Additional container properties for the Spark optimizer container (map of key->value).
       # This can be used to set properties like:
       #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
+      # Example:
+      #   properties:
+      #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
       properties: {}

@@ -124,7 +124,8 @@ data:
       - name: localContainer
         container-impl: org.apache.amoro.server.manager.LocalOptimizerContainer
         properties: {}
-
+        
+      {{- if .Values.fusion.optimizer.spark.enabled }}
       - name: sparkContainer
         container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
         properties:
@@ -136,7 +137,7 @@ data:
           export.SPARK_CONF_DIR: /opt/spark/conf/
           spark-conf.spark.kubernetes.container.image: "{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
-          spark-conf.spark.kubernetes.namespace: "{{ if .Values.fusion.optimizer.spark.namespace }}{{ .Values.fusion.optimizer.spark.namespace }}{{ else }}{{ .Release.Namespace }}{{ end }}"
+          spark-conf.spark.kubernetes.namespace: "{{ .Release.Namespace }}"
           {{- if .Values.fusion.optimizer.spark.serviceAccount.name }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
           spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
@@ -157,5 +158,6 @@ data:
           {{- range $key, $value := .Values.fusion.optimizer.spark.properties }}
           {{ $key }}: "{{ $value }}"
           {{- end }}
+      {{- end }}
 
 {{- end }}
