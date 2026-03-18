@@ -447,6 +447,7 @@ postgresql:
       password: ""
       olake_database: ""
       temporal_database: ""
+      fusion_database: ""
       ssl_mode: "disable"
 
     # -- Map the keys from existing secret to the required fields
@@ -455,6 +456,7 @@ postgresql:
       port: "port"
       olake_database: "olake_database"
       temporal_database: "temporal_database"
+      fusion_database: "fusion_database"
       username: "username"
       password: "password"
       ssl_mode: "ssl_mode"
@@ -580,6 +582,16 @@ fusion:
   adminUser: admin
   adminPassword: password
 
+  # -- Service Account configuration
+  serviceAccount:
+    # -- Create a service account for Fusion.
+    create: true
+    # -- Service account name for Fusion.
+    # If not set and `create` is true, a name is generated using the fullname template.
+    name: ""
+    # -- Service account annotations for Fusion.
+    annotations: {}
+
   # --- Fusion (Amoro) container image
   image:
     repository: olakego/fusion
@@ -610,27 +622,13 @@ fusion:
   tolerations: []
   affinity: {}
 
-  # --- Fusion database connection
-  database:
-    type: postgres
-    # Optional override for JDBC URL.
-    # If empty, Fusion connects to the in-cluster PostgreSQL service configured by the chart.
-    # Example: "jdbc:postgresql://my-postgres:5432/postgres"
-    url: ""
-    # Name of the PostgreSQL database that Fusion (and the Iceberg catalog) will use.
-    # By default the internal Postgres instance is created with database "postgres".
-    db: postgres
-    # Optional database credentials. If empty, these default to the OLake Postgres
-    # credentials from `.Values.postgresql.auth`.
-    username: ""
-    password: ""
+  # -- Server bind and expose hosts
+  bindHost: "0.0.0.0"
+  exposeHost: "127.0.0.1"
+
 
   # --- Fusion service ports (used to expose REST / Thrift / optimizer services)
   server:
-    # -- Server bind and expose hosts
-    bindHost: "0.0.0.0"
-    exposeHost: "127.0.0.1"
-
     rest:
       # HTTP REST / UI endpoint
       enabled: true
@@ -670,11 +668,6 @@ fusion:
         repository: olakego/fusion-spark
         tag: latest
         pullPolicy: IfNotPresent
-
-      serviceAccount: 
-        # Service account used by Spark driver and executor pods.
-        name: "spark"
-        annotations: {}
 
       # Extra Spark config entries (map of key->value).
       # Example:

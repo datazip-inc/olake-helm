@@ -12,8 +12,8 @@ data:
     ams:
       admin-username: {{ .Values.fusion.adminUser }}
       admin-password: {{ .Values.fusion.adminPassword }}
-      server-bind-host: {{ .Values.fusion.server.bindHost | quote }}
-      server-expose-host: {{ .Values.fusion.server.exposeHost | quote }}
+      server-bind-host: {{ .Values.fusion.bindHost | quote }}
+      server-expose-host: {{ .Values.fusion.exposeHost | quote }}
 
       thrift-server:
         max-message-size: 100MB
@@ -100,9 +100,27 @@ data:
       database:
         type: postgres
         jdbc-driver-class: org.postgresql.Driver
-        url: {{ .Values.fusion.database.url | default (printf "jdbc:postgresql://postgresql:5432/%s" .Values.fusion.database.db) }}
-        username: {{ .Values.fusion.database.username | default .Values.postgresql.auth.postgresUser }}
-        password: {{ .Values.fusion.database.password | default .Values.postgresql.auth.postgresPassword }}
+        url: >-
+          {{- if .Values.postgresql.enabled }}
+            {{ printf "jdbc:postgresql://postgresql:5432/fusion" }}
+          {{- else }}
+            {{- $externalPg := .Values.postgresql.external.properties }}
+            {{ printf "jdbc:postgresql://%s:%s/%s" $externalPg.host $externalPg.port $externalPg.fusion_database }}
+          {{- end }}
+        username: >-
+          {{- if .Values.postgresql.enabled }}
+            {{ .Values.postgresql.auth.postgresUser }}
+          {{- else }}
+            {{- $externalPg := .Values.postgresql.external.properties }}
+            {{ $externalPg.username }}
+          {{- end }}
+        password: >-
+          {{- if .Values.postgresql.enabled }}
+            {{ .Values.postgresql.auth.postgresPassword }}
+          {{- else }}
+            {{- $externalPg := .Values.postgresql.external.properties }}
+            {{ $externalPg.password }}
+          {{- end }}
         connection-pool-max-total: 20
         connection-pool-max-idle: 16
         connection-pool-max-wait-millis: 30000
@@ -129,10 +147,8 @@ data:
           spark-conf.spark.kubernetes.container.image: "{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
-          {{- if .Values.fusion.optimizer.spark.serviceAccount.name }}
-          spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
-          spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
-          {{- end }}
+          spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
+          spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
           spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
           spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
           spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}

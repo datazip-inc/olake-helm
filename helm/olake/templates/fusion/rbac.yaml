@@ -59,6 +59,6 @@ roleRef:
   name: {{ include "olake.fullname" . }}-fusion-spark-role
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.fusion.optimizer.spark.serviceAccount.name }}
+    name: {{ include "olake.fusionServiceAccountName" . }}
     namespace: {{ include "olake.namespace" . }}
 {{- end }}

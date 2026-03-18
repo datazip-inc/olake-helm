@@ -27,7 +27,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: FUSION_HOST
-              value: "{{ include "olake.fullname" . }}-fusion.{{ include "olake.namespace" . }}.svc.cluster.local"
+              value: "{{ include "olake.fullname" . }}-fusion-rest.{{ include "olake.namespace" . }}.svc.cluster.local"
             - name: FUSION_PORT
               value: "{{ .Values.fusion.server.rest.port }}"
             - name: FUSION_ADMIN_USER
@@ -45,7 +45,14 @@ spec:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
             - name: PG_DB
-              value: "{{ .Values.fusion.database.db }}"
+              {{- if .Values.postgresql.enabled }}
+              value: "fusion"
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ .Values.postgresql.external.secretKeys.fusion_database }}
+              {{- end }}
             - name: PG_USER
               valueFrom:
                 secretKeyRef:
