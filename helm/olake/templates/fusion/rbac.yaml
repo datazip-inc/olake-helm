@@ -3,7 +3,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "olake.fullname" . }}-spark-role
+  name: {{ include "olake.fullname" . }}-fusion-spark-role
   labels:
     {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: fusion
@@ -48,7 +48,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "olake.fullname" . }}-spark-role-binding
+  name: {{ include "olake.fullname" . }}-fusion-spark-role-binding
   labels:
     {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: fusion
@@ -56,7 +56,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "olake.fullname" . }}-spark-role
+  name: {{ include "olake.fullname" . }}-fusion-spark-role
 subjects:
   - kind: ServiceAccount
     name: {{ .Values.fusion.optimizer.spark.serviceAccount.name }}

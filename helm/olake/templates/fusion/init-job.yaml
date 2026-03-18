@@ -107,12 +107,12 @@ spec:
               if echo "$OPTIMIZERS" | grep -q '"jobStatus":"RUNNING"'; then
                 echo "  Spark optimizer already running — skipping."
               else
-                echo "  Scaling out Spark optimizer (parallelism=1)..."
+                echo "  Scaling out Spark optimizer (parallelism={{ .Values.fusion.optimizer.spark.initialParallelism }})..."
                 curl -s -b /tmp/cookies.txt \
                   -X POST "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers" \
                   -H "Content-Type: application/json" \
                   -H "X-Request-Source: Web" \
-                  -d '{"parallelism":1}'
+                  -d '{"parallelism":{{ .Values.fusion.optimizer.spark.initialParallelism }}}'
                 echo ""
                 sleep 5
               fi

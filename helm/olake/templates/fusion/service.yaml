@@ -1,35 +1,32 @@
 {{- if .Values.fusion.enabled }}
+{{- range $name, $config := .Values.fusion.server }}
+{{- if $config.service.enabled }}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "olake.fullname" . }}-fusion
+  name: {{ include "olake.fullname" $ }}-fusion-{{ $name }}
   namespace: {{ include "olake.namespace" . }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: fusion
-spec:
-  type: {{ .Values.fusion.service.type }}
-  {{- with .Values.fusion.service.annotations }}
+    app.kubernetes.io/component: fusion-{{ $name }}
+  {{- with $config.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  type: {{ $config.service.type }}
   ports:
-    - name: rest
-      port: {{ .Values.fusion.server.rest.port }}
-      targetPort: {{ .Values.fusion.server.rest.port }}
+    - name: {{ $name }}
+      port: {{ $config.port }}
+      targetPort: {{ $config.port }}
       protocol: TCP
-      {{- if eq .Values.fusion.service.type "NodePort" }}
-      nodePort: {{ .Values.fusion.service.nodePort }}
+      {{- if eq $config.service.type "NodePort" }}
+      nodePort: {{ $config.service.nodePort }}
       {{- end }}
-    - name: table
-      port: {{ .Values.fusion.server.table.port }}
-      targetPort: {{ .Values.fusion.server.table.port }}
-      protocol: TCP
-    - name: optimizing
-      port: {{ .Values.fusion.server.optimizing.port }}
-      targetPort: {{ .Values.fusion.server.optimizing.port }}
-      protocol: TCP
   selector:
     app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
     app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+{{- end }}
 {{- end }}

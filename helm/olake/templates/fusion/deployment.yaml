@@ -38,10 +38,6 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.fusion.securityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       serviceAccountName: {{ .Values.fusion.optimizer.spark.serviceAccount.name }}
       initContainers:
       - name: wait-for-postgres

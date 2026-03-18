@@ -586,13 +586,6 @@ fusion:
     tag: dev-v3
     pullPolicy: IfNotPresent
 
-  # -- Service configuration for exposing (ClusterIP / NodePort / LoadBalancer)
-  service:
-    type: ClusterIP
-    annotations: {}
-    # Only used if type is NodePort
-    nodePort: ""
-
   # --- Fusion pod resource requirements (optional overrides)
   # Example:
   #   resources:
@@ -616,7 +609,6 @@ fusion:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  securityContext: {}
 
   # --- Fusion database connection
   database:
@@ -641,31 +633,38 @@ fusion:
 
     rest:
       # HTTP REST / UI endpoint
+      enabled: true
       port: 1630
+      service:
+        type: ClusterIP
+        nodePort: ""
+        annotations: {}
     table:
       # Thrift table service port
+      enabled: true
       port: 1260
+      service:
+        type: ClusterIP
+        nodePort: ""
+        annotations: {}
     optimizing:
       # Thrift optimizing service port
+      enabled: true
       port: 1261
+      service:
+        type: ClusterIP
+        nodePort: ""
+        annotations: {}
   
   # --- Optimizer configuration (Spark-on-Kubernetes)
   optimizer:
     spark:
       # -- Enable the Spark-on-Kubernetes optimizer container integration.
       enabled: true
-      # Spark installation home directory used by the Spark optimizer container.
-      sparkHome: "/opt/spark/"
-      # Kubernetes master URL for submitting Spark jobs.
-      master: "k8s://https://kubernetes.default.svc:443"
-      # Spark deploy mode for optimizer jobs.
-      deployMode: "cluster"
+      # Initial parallelism for the Spark optimizer.
+      initialParallelism: 1
       # Location of the optimizer job JAR inside the Spark image.
       jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
-      # Spark driver and executor sizing.
-      driverMemory: "1g"
-      executorMemory: "1g"
-      executorCores: 1
       # Spark optimizer image repository and tag.
       image:
         repository: olakego/fusion-spark
@@ -681,7 +680,13 @@ fusion:
       # Example:
       #   extraConfig:
       #     spark.sql.shuffle.partitions: "200"
-      extraConfig: {}
+      extraConfig: 
+        spark.dynamicAllocation.enabled: "true"
+        spark.shuffle.service.enabled: "false"
+        spark.dynamicAllocation.shuffleTracking.enabled: "true"
+        spark.driver.memory: "1g"
+        spark.executor.memory: "1g"
+        spark.executor.cores: "1"
 
       # Additional container properties for the Spark optimizer container (map of key->value).
       # This can be used to set properties like:
@@ -689,4 +694,9 @@ fusion:
       # Example:
       #   properties:
       #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
-      properties: {}
+      properties:
+        spark-home: "/opt/spark/"
+        master: "k8s://https://kubernetes.default.svc:443"
+        deploy-mode: "cluster"
+        export.HADOOP_USER_NAME: "spark"
+        export.SPARK_CONF_DIR: "/opt/spark/conf/"

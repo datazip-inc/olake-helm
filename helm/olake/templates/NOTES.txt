@@ -52,14 +52,6 @@
    - Temporal UI: http://localhost:8081
 {{- end }}
 
-{{- if .Values.fusion.enabled }}
-{{- $fusionPort := .Values.fusion.server.rest.port }}
-
-4. Forward Fusion UI (optional):
-   kubectl port-forward -n {{ include "olake.namespace" . }} svc/{{ include "olake.fullname" . }}-fusion {{ $fusionPort }}:{{ $fusionPort }}
-   - Fusion UI: http://localhost:{{ $fusionPort }}
-{{- end }}
-
 {{- end }}
 
 📚 NEXT STEPS:

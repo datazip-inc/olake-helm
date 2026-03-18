@@ -121,33 +121,18 @@ data:
           spark.sql.codegen.wholeStage: false
 
     containers:
-      - name: localContainer
-        container-impl: org.apache.amoro.server.manager.LocalOptimizerContainer
-        properties: {}
-        
       {{- if .Values.fusion.optimizer.spark.enabled }}
       - name: sparkContainer
         container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
         properties:
-          spark-home: {{ .Values.fusion.optimizer.spark.sparkHome | quote }}
-          master: {{ .Values.fusion.optimizer.spark.master }}
-          deploy-mode: {{ .Values.fusion.optimizer.spark.deployMode }}
-          job-uri: {{ .Values.fusion.optimizer.spark.jobUri }}
-          export.HADOOP_USER_NAME: spark
-          export.SPARK_CONF_DIR: /opt/spark/conf/
+          job-uri: {{ .Values.fusion.optimizer.spark.jobUri | quote }}
           spark-conf.spark.kubernetes.container.image: "{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
-          spark-conf.spark.kubernetes.namespace: "{{ .Release.Namespace }}"
+          spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
           {{- if .Values.fusion.optimizer.spark.serviceAccount.name }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
           spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ .Values.fusion.optimizer.spark.serviceAccount.name }}"
           {{- end }}
-          spark-conf.spark.dynamicAllocation.enabled: "true"
-          spark-conf.spark.shuffle.service.enabled: "false"
-          spark-conf.spark.dynamicAllocation.shuffleTracking.enabled: "true"
-          spark-conf.spark.driver.memory: {{ .Values.fusion.optimizer.spark.driverMemory | quote }}
-          spark-conf.spark.executor.memory: {{ .Values.fusion.optimizer.spark.executorMemory | quote }}
-          spark-conf.spark.executor.cores: {{ .Values.fusion.optimizer.spark.executorCores | quote }}
           spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
           spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
           spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
