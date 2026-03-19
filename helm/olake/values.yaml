@@ -622,11 +622,6 @@ fusion:
   tolerations: []
   affinity: {}
 
-  # -- Server bind and expose hosts
-  bindHost: "0.0.0.0"
-  exposeHost: "127.0.0.1"
-
-
   # --- Fusion service ports (used to expose REST / Thrift / optimizer services)
   server:
     rest:
@@ -654,6 +649,11 @@ fusion:
         nodePort: ""
         annotations: {}
   
+  # --- Amoro config shade properties
+  shade:
+    identifier: "default"
+    sensitiveKeywords: "admin-password;database.password"
+
   # --- Optimizer configuration (Spark-on-Kubernetes)
   optimizer:
     spark:

@@ -10,10 +10,7 @@ metadata:
 data:
   config.yaml: |
     ams:
-      admin-username: {{ .Values.fusion.adminUser }}
-      admin-password: {{ .Values.fusion.adminPassword }}
-      server-bind-host: {{ .Values.fusion.bindHost | quote }}
-      server-expose-host: {{ .Values.fusion.exposeHost | quote }}
+      server-bind-host: "0.0.0.0"
 
       thrift-server:
         max-message-size: 100MB
@@ -89,9 +86,15 @@ data:
       catalog-meta-cache:
         expiration-interval: 60s
 
+      {{- if or .Values.fusion.shade.identifier .Values.fusion.shade.sensitiveKeywords }}
       shade:
-        identifier: default
-        sensitive-keywords: admin-password;database.password
+        {{- if .Values.fusion.shade.identifier }}
+        identifier: {{ .Values.fusion.shade.identifier }}
+        {{- end }}
+        {{- if .Values.fusion.shade.sensitiveKeywords }}
+        sensitive-keywords: {{ .Values.fusion.shade.sensitiveKeywords }}
+        {{- end }}
+      {{- end }}
 
       overview-cache:
         refresh-interval: 3min
@@ -106,20 +109,6 @@ data:
           {{- else }}
             {{- $externalPg := .Values.postgresql.external.properties }}
             {{ printf "jdbc:postgresql://%s:%s/%s" $externalPg.host $externalPg.port $externalPg.fusion_database }}
-          {{- end }}
-        username: >-
-          {{- if .Values.postgresql.enabled }}
-            {{ .Values.postgresql.auth.postgresUser }}
-          {{- else }}
-            {{- $externalPg := .Values.postgresql.external.properties }}
-            {{ $externalPg.username }}
-          {{- end }}
-        password: >-
-          {{- if .Values.postgresql.enabled }}
-            {{ .Values.postgresql.auth.postgresPassword }}
-          {{- else }}
-            {{- $externalPg := .Values.postgresql.external.properties }}
-            {{ $externalPg.password }}
           {{- end }}
         connection-pool-max-total: 20
         connection-pool-max-idle: 16

@@ -111,16 +111,7 @@ spec:
         - name: fusion
           image: "{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
           imagePullPolicy: {{ .Values.fusion.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              DB_HOST="${POSTGRESQL_SERVICE_HOST:-$POSTGRES_SEEDS}"
-              DB_PORT="${POSTGRESQL_SERVICE_PORT:-$DB_PORT}"
-              DB_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DBNAME}"
-              echo "Using PostgreSQL URL: $DB_URL"
-              export AMS_DATABASE_URL="$DB_URL"
-              exec /entrypoint.sh ams
+          command: [ "/entrypoint.sh", "ams" ]
           ports:
             - name: rest
               containerPort: {{ .Values.fusion.server.rest.port }}
@@ -135,43 +126,12 @@ spec:
             - name: spark-binaries
               mountPath: /opt/spark
           env:
-            - name: AMS_CONFIG_PATH
-              value: "/usr/local/amoro/conf/config.yaml"
+            - name: AMORO_CONF_DIR
+              value: "/usr/local/amoro/conf"
             - name: AMS_SERVER__EXPOSE__HOST
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            - name: DB
-              value: "postgres12"
-            - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
-            - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
-            - name: POSTGRES_PWD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
-            - name: POSTGRES_SEEDS
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
-            - name: DBNAME
-              {{- if .Values.postgresql.enabled }}
-              value: "fusion"
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ .Values.postgresql.external.secretKeys.fusion_database }}
-              {{- end }}
             {{- range $key, $value := .Values.global.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
