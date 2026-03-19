@@ -45,14 +45,10 @@ spec:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
             - name: PG_DB
-              {{- if .Values.postgresql.enabled }}
-              value: "fusion"
-              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ .Values.postgresql.external.secretKeys.fusion_database }}
-              {{- end }}
+                  key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
             - name: PG_USER
               valueFrom:
                 secretKeyRef:

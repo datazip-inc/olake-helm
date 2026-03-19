@@ -100,7 +100,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}fusion{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
+                key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
       - name: install-spark
         image: olakego/fusion-spark:latest
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
