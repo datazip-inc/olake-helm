@@ -149,10 +149,6 @@ data:
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
           spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
-          spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
-          spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
-          spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_ACCESS_KEY_ID: {{ printf "%s-fusion:AdminUsername" (include "olake.fullname" .) | quote }}
-          spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_SECRET_ACCESS_KEY: {{ printf "%s-fusion:AdminPassword" (include "olake.fullname" .) | quote }}
           {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
           {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
           {{- end }}

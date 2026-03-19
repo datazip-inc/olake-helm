@@ -64,34 +64,43 @@ spec:
 
             export PGPASSWORD=${POSTGRES_PASSWORD}
             
+            {{- if .Values.postgresql.enabled }}
             echo "Attempting to create database 'fusion'..."
-            if ! psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -lqt | cut -d \| -f 1 | grep -qw fusion; then
-              psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE fusion"
-              echo "Database 'fusion' created."
+            if ! psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -lqt | cut -d \| -f 1 | grep -qw "${POSTGRES_DATABASE}"; then
+              psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE ${POSTGRES_DATABASE}"
+              echo "Database '${POSTGRES_DATABASE}' created."
             else
-              echo "Database 'fusion' already exists. Skipping creation."
+              echo "Database '${POSTGRES_DATABASE}' already exists. Skipping creation."
             fi
+            {{- else }}
+            echo "External PostgreSQL is enabled, skipping database creation for 'fusion'."
+            {{- end }}
         env:
           - name: POSTGRES_HOST
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: host
+                key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
           - name: POSTGRES_PORT
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: port
+                key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
           - name: POSTGRES_USER
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: username
+                key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: password
+                key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+          - name: POSTGRES_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "olake.postgresql.secretName" . }}
+                key: {{ if .Values.postgresql.enabled }}fusion{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
       - name: install-spark
         image: olakego/fusion-spark:latest
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]

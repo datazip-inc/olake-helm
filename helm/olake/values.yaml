@@ -578,7 +578,7 @@ fusion:
   # --- Fusion admin credentials
   # These credentials are used for:
   # - Logging into the Fusion UI
-  # - Running the Fusion init job that creates the optimizer group and Iceberg catalog
+  # - Running the Fusion init job that creates the optimizer group
   adminUser: admin
   adminPassword: password
 
@@ -617,7 +617,7 @@ fusion:
   #     FEATURE_FLAG: "true"
   env: {}
 
-  # --- Pod scheduling and security options for the Fusion pod
+  # --- Pod scheduling constraints for the Fusion pod
   nodeSelector: {}
   tolerations: []
   affinity: {}
