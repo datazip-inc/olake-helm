@@ -30,14 +30,16 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace         string
-	PVCName           string
-	ServiceAccount    string
-	JobServiceAccount string
-	SecretKey         string
-	BasePath          string
-	WorkerIdentity    string
-	SecurityContext   *corev1.PodSecurityContext
+	Namespace           string
+	PVCName             string
+	ServiceAccount      string
+	JobServiceAccount   string
+	SecretKey           string
+	BasePath            string
+	WorkerIdentity      string
+	SecurityContext     *corev1.PodSecurityContext
+	JobPodCPURequest    string
+	JobPodMemoryRequest string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -92,14 +94,16 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		namespace:     namespace,
 		configWatcher: watcher,
 		config: &KubernetesConfig{
-			Namespace:         namespace,
-			PVCName:           pvcName,
-			ServiceAccount:    serviceAccount,
-			JobServiceAccount: jobServiceAccount,
-			SecretKey:         secretKey,
-			BasePath:          basePath,
-			WorkerIdentity:    workerIdenttity,
-			SecurityContext:   securityContext,
+			Namespace:           namespace,
+			PVCName:             pvcName,
+			ServiceAccount:      serviceAccount,
+			JobServiceAccount:   jobServiceAccount,
+			SecretKey:           secretKey,
+			BasePath:            basePath,
+			WorkerIdentity:      workerIdenttity,
+			SecurityContext:     securityContext,
+			JobPodCPURequest:    jobPodCPURequest,
+			JobPodMemoryRequest: jobPodMemoryRequest,
 		},
 	}, nil
 }

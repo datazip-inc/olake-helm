@@ -51,3 +51,11 @@ data:
   {{- if .Values.olakeWorker.securityContext }}
   POD_SECURITY_CONTEXT: {{ .Values.olakeWorker.securityContext | toJson | quote }}
   {{- end }}
+
+  # =================================================================
+  # JOB POD RESOURCE CONFIGURATION
+  # =================================================================
+  {{- if .Values.olakeWorker.jobPodResources }}
+  JOB_POD_CPU_REQUEST: {{ .Values.olakeWorker.jobPodResources.cpu | default "100m" | quote }}
+  JOB_POD_MEMORY_REQUEST: {{ .Values.olakeWorker.jobPodResources.memory | default "256Mi" | quote }}
+  {{- end }}

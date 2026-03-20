@@ -184,8 +184,18 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
+							corev1.ResourceCPU: k.parseQuantity(func() string {
+                                if k.config.JobPodCPURequest != "" {
+                                    return k.config.JobPodCPURequest
+                                }
+                                return "100m"
+                            }()),
+                            corev1.ResourceMemory: k.parseQuantity(func() string {
+                                if k.config.JobPodMemoryRequest != "" {
+                                    return k.config.JobPodMemoryRequest
+                                }
+                                return "256Mi"
+                            }()),
 						},
 						// No limits for flexibility
 					},

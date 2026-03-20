@@ -287,6 +287,16 @@ olakeWorker:
 
     # -- Service account annotations
     annotations: {}
+  
+  # -- Resource requests for sync/discover/check job pods created by the worker
+  # These control the resources of the short-lived connector pods (e.g. sync-123),
+  # NOT the worker deployment itself (use `resources` above for that).
+  # Defaults: cpu=100m, memory=256Mi if not set.
+  # Example:
+  #   jobPodResources:
+  #     cpu: "500m"
+  #     memory: "1Gi"
+  jobPodResources: {}
 
   # -- OLake Worker application configuration
   config:

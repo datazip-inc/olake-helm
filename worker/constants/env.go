@@ -42,4 +42,8 @@ const (
 
 	// security context
 	EnvPodSecurityContext = "POD_SECURITY_CONTEXT"
+
+	// job pod resources
+	EnvJobPodCPURequest    = "JOB_POD_CPU_REQUEST"
+	EnvJobPodMemoryRequest = "JOB_POD_MEMORY_REQUEST"
 )
