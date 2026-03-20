@@ -41,7 +41,7 @@ spec:
       serviceAccountName: {{ include "olake.fusionServiceAccountName" . }}
       initContainers:
       - name: create-fusion-database
-        image: "postgres:14-alpine"
+        image: "{{ include "olake.registryBase" . }}/postgres:14-alpine"
         imagePullPolicy: IfNotPresent
         command: ["bash", "-c"]
         args:
@@ -102,14 +102,14 @@ spec:
                 name: {{ include "olake.postgresql.secretName" . }}
                 key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
       - name: install-spark
-        image: olakego/fusion-spark:latest
+        image: {{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
         volumeMounts:
           - name: spark-binaries
             mountPath: /target
       containers:
         - name: fusion
-          image: "{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
+          image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
           imagePullPolicy: {{ .Values.fusion.image.pullPolicy }}
           command: [ "/entrypoint.sh", "ams" ]
           ports:

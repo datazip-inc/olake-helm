@@ -133,7 +133,7 @@ data:
         container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
         properties:
           job-uri: {{ .Values.fusion.optimizer.spark.jobUri | quote }}
-          spark-conf.spark.kubernetes.container.image: "{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
+          spark-conf.spark.kubernetes.container.image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
