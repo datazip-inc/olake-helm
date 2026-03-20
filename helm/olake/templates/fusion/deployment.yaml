@@ -38,10 +38,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.fusion.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ include "olake.fusionServiceAccountName" . }}
       initContainers:
       - name: create-fusion-database
-        image: "{{ include "olake.registryBase" . }}/postgres:14-alpine"
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
         imagePullPolicy: IfNotPresent
         command: ["bash", "-c"]
         args:
@@ -160,10 +164,34 @@ spec:
                 secretKeyRef:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
-          {{- with .Values.fusion.resources }}
+          {{- $defaultResources := dict
+            "requests" (dict "memory" "512Mi" "cpu" "500m")
+          }}
+          {{- $resources := mergeOverwrite $defaultResources (.Values.fusion.resources | default dict) }}
           resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- toYaml $resources | nindent 12 }}
+          {{- $defaultLivenessProbe := dict
+            "initialDelaySeconds" 40
+            "periodSeconds" 10
+            "timeoutSeconds" 2
+            "failureThreshold" 10
+            "successThreshold" 1
+            "httpGet" (dict "path" "/api/ams/v1/health/status" "port" "rest")
+          }}
+          {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.fusion.livenessProbe | default dict) }}
+          livenessProbe:
+            {{- toYaml $livenessProbe | nindent 12 }}
+          {{- $defaultReadinessProbe := dict
+            "initialDelaySeconds" 30
+            "periodSeconds" 10
+            "timeoutSeconds" 2
+            "failureThreshold" 10
+            "successThreshold" 1
+            "httpGet" (dict "path" "/api/ams/v1/versionInfo" "port" "rest")
+          }}
+          {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.fusion.readinessProbe | default dict) }}
+          readinessProbe:
+            {{- toYaml $readinessProbe | nindent 12 }}
       volumes:
         - name: fusion-config
           configMap:

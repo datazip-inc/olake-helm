@@ -609,6 +609,15 @@ fusion:
   #       memory: "2Gi"
   resources: {}
 
+  # --- Fusion pod security context
+  # Example customizations for Fusion (Amoro):
+  # securityContext:
+  #   runAsNonRoot: false
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+
   # -- Environment variables for OLake Fusion
   # Add custom environment variables here
   # Example:
