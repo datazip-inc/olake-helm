@@ -48,7 +48,7 @@ data:
         task-ack-timeout: 30s
         task-execute-timeout: 1h
         polling-timeout: 3s
-        max-planning-parallelism: 1
+        max-planning-parallelism: {{ .Values.fusion.optimizer.spark.initialParallelism }}
 
       blocker:
         timeout: 1min

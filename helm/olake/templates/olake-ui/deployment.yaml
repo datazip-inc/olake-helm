@@ -86,6 +86,13 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        # Fusion configuration
+        {{- if .Values.fusion.enabled }}
+        - name: FUSION_ENABLED
+          value: {{.Values.fusion.enabled | quote }}
+        - name: FUSION_BASE_URL
+          value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
+        {{- end }}
         # Database configuration
         - name: OLAKE_POSTGRES_HOST
           valueFrom:
@@ -133,6 +140,7 @@ spec:
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
+        
         {{- $resources := mergeOverwrite $defaultResources (.Values.olakeUI.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}

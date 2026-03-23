@@ -82,6 +82,7 @@ spec:
                 -d "{\"user\":\"${FUSION_ADMIN_USER}\",\"password\":\"${FUSION_ADMIN_PASSWORD}\"}"
               echo ""
 
+              {{- if .Values.fusion.optimizer.spark.enabled }}
               # ---- Optimizer Group (Spark on Kubernetes) ----
               echo "Checking optimizer group 'spark-container'..."
               GROUPS=$(curl -s -b /tmp/cookies.txt \
@@ -119,6 +120,7 @@ spec:
                 echo ""
                 sleep 5
               fi
+              {{- end }}
 
               echo ""
               echo "============================================"

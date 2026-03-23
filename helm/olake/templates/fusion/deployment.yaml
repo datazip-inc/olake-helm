@@ -105,12 +105,14 @@ spec:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
                 key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
+      {{- if .Values.fusion.optimizer.spark.enabled }}
       - name: install-spark
         image: {{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
         volumeMounts:
           - name: spark-binaries
             mountPath: /target
+      {{- end }}
       containers:
         - name: fusion
           image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
@@ -127,8 +129,13 @@ spec:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/config.yaml
               subPath: config.yaml
+            {{- if .Values.fusion.optimizer.spark.enabled }}
             - name: spark-binaries
               mountPath: /opt/spark
+            {{- end }}
+            - name: shared-storage
+              mountPath: /data/fusion-logs
+              subPath: fusion-logs
           env:
             - name: AMORO_CONF_DIR
               value: "/usr/local/amoro/conf"
@@ -136,6 +143,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: FUSION_LOGS_DIRECTORY
+              value: "/data/fusion-logs"
             {{- range $key, $value := .Values.global.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -196,6 +205,11 @@ spec:
         - name: fusion-config
           configMap:
             name: {{ include "olake.fullname" . }}-fusion-config
+        {{- if .Values.fusion.optimizer.spark.enabled }}
         - name: spark-binaries
           emptyDir: {}
+        {{- end }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ include "olake.sharedStoragePVC" . }}
 {{- end }}
