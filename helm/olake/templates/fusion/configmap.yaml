@@ -11,6 +11,7 @@ data:
   config.yaml: |
     ams:
       server-bind-host: "0.0.0.0"
+      server-expose-host: "127.0.0.1"
 
       thrift-server:
         max-message-size: 100MB
@@ -133,6 +134,7 @@ data:
         container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
         properties:
           job-uri: {{ .Values.fusion.optimizer.spark.jobUri | quote }}
+          ams-optimizing-uri: thrift://{{ include "olake.fullname" . }}-fusion-optimizing.{{ include "olake.namespace" . }}.svc.cluster.local:{{ .Values.fusion.server.optimizing.port }}
           spark-conf.spark.kubernetes.container.image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}

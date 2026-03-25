@@ -29,7 +29,7 @@ rules:
 # ConfigMaps - required for Spark configuration
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "patch","deletecollection"]
 # PVCs - required if using dynamic volume provisioning
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]

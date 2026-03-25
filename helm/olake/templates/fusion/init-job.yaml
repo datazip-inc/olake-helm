@@ -34,31 +34,6 @@ spec:
               value: "{{ .Values.fusion.adminUser }}"
             - name: FUSION_ADMIN_PASSWORD
               value: "{{ .Values.fusion.adminPassword }}"
-            - name: PG_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
-            - name: PG_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
-            - name: PG_DB
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
-            - name: PG_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
-            - name: PG_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "olake.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
           command:
             - /bin/sh
             - -c
