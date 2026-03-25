@@ -668,8 +668,8 @@ fusion:
     spark:
       # -- Enable the Spark-on-Kubernetes optimizer container integration.
       enabled: true
-      # Initial parallelism for the Spark optimizer.
-      initialParallelism: 3
+      # Desired Spark optimizer parallelism.
+      desiredParallelism: 3
       # Location of the optimizer job JAR inside the Spark image.
       jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
       # Spark optimizer image repository and tag.

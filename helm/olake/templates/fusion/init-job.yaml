@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "olake.fullname" . }}-fusion-init
+  name: {{ include "olake.fullname" . }}-fusion-init-{{ include (print $.Template.BasePath "/fusion/configmap.yaml") . | sha256sum | trunc 8 }}
   namespace: {{ include "olake.namespace" . }}
   labels:
     {{- include "olake.labels" . | nindent 4 }}
@@ -83,18 +83,30 @@ spec:
                 -H "X-Request-Source: Web" \
                 "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=10")
 
-              if echo "$OPTIMIZERS" | grep -q '"jobStatus":"RUNNING"'; then
-                echo "  Spark optimizer already running — skipping."
+              # `scaleOutOptimizer` creates new optimizer resources; to avoid accumulating multiple optimizers
+              # across upgrades, release existing optimizers and then recreate with the desired parallelism.
+              JOB_IDS=$(echo "$OPTIMIZERS" | grep -oE '"jobId":"[^"]+"' | cut -d':' -f2 | tr -d '"')
+              if [ -n "$JOB_IDS" ]; then
+                echo "Releasing existing Spark optimizers..."
+                for jobId in $JOB_IDS; do
+                  echo "  Releasing jobId=${jobId}..."
+                  curl -s -b /tmp/cookies.txt \
+                    -X DELETE "${BASE_URL}/api/ams/v1/optimize/optimizers/${jobId}" \
+                    -H "X-Request-Source: Web" >/dev/null
+                  sleep 2
+                done
               else
-                echo "  Scaling out Spark optimizer (parallelism={{ .Values.fusion.optimizer.spark.initialParallelism }})..."
-                curl -s -b /tmp/cookies.txt \
-                  -X POST "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers" \
-                  -H "Content-Type: application/json" \
-                  -H "X-Request-Source: Web" \
-                  -d '{"parallelism":{{ .Values.fusion.optimizer.spark.initialParallelism }}}'
-                echo ""
-                sleep 5
+                echo "No existing Spark optimizers found."
               fi
+
+              echo "Creating Spark optimizer parallelism={{ .Values.fusion.optimizer.spark.desiredParallelism }}..."
+              curl -s -b /tmp/cookies.txt \
+                -X POST "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers" \
+                -H "Content-Type: application/json" \
+                -H "X-Request-Source: Web" \
+                -d '{"parallelism":{{ .Values.fusion.optimizer.spark.desiredParallelism }}}'
+              echo ""
+              sleep 5
               {{- end }}
 
               echo ""
