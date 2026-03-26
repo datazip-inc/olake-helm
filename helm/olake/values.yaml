@@ -595,7 +595,7 @@ fusion:
   # --- Fusion (Amoro) container image
   image:
     repository: olakego/fusion
-    tag: dev-v3
+    tag: dev-v4
     pullPolicy: IfNotPresent
 
   # --- Fusion pod resource requirements (optional overrides)
@@ -675,7 +675,7 @@ fusion:
       # Spark optimizer image repository and tag.
       image:
         repository: olakego/fusion-spark
-        tag: latest
+        tag: dev-v4
         pullPolicy: IfNotPresent
 
       # Extra Spark config entries (map of key->value).
