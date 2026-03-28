@@ -595,6 +595,7 @@ fusion:
   # --- Fusion (Amoro) container image
   image:
     repository: olakego/fusion
+    # TODO: update image tag
     tag: dev-v4
     pullPolicy: IfNotPresent
 
@@ -675,6 +676,7 @@ fusion:
       # Spark optimizer image repository and tag.
       image:
         repository: olakego/fusion-spark
+        # TODO: update image tag
         tag: dev-v4
         pullPolicy: IfNotPresent
 
