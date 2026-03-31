@@ -218,6 +218,9 @@ spec:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/config.yaml
               subPath: config.yaml
+            - name: fusion-config
+              mountPath: /usr/local/amoro/conf/pod-template.yaml
+              subPath: pod-template.yaml
             {{- if .Values.fusion.optimizer.spark.enabled }}
             - name: spark-binaries
               mountPath: /opt/spark

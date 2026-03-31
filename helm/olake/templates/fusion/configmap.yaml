@@ -140,12 +140,31 @@ data:
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
           spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
+          spark-conf.spark.kubernetes.driver.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
+          spark-conf.spark.kubernetes.executor.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
           {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
           {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
           {{- end }}
           {{- range $key, $value := .Values.fusion.optimizer.spark.properties }}
           {{ $key }}: "{{ $value }}"
           {{- end }}
+      {{- end }}
+
+  pod-template.yaml: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      {{- with .Values.fusion.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fusion.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fusion.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
 
 {{- end }}
