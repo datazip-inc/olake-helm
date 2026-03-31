@@ -140,6 +140,8 @@ data:
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
           spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
           spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
+          spark-conf.spark.kubernetes.driver.label.olake.io/workload: "fusion-master"
+          spark-conf.spark.kubernetes.executor.label.olake.io/workload: "fusion-executor"
           spark-conf.spark.kubernetes.driver.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
           spark-conf.spark.kubernetes.executor.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
           {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
