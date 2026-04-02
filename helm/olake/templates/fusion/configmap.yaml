@@ -155,6 +155,7 @@ data:
   pod-template.yaml: |
     apiVersion: v1
     kind: Pod
+    {{- if not (and (empty .Values.fusion.nodeSelector) (empty .Values.fusion.tolerations) (empty .Values.fusion.affinity)) }}
     spec:
       {{- with .Values.fusion.nodeSelector }}
       nodeSelector:
@@ -168,5 +169,8 @@ data:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- else }}
+    spec: {}
+    {{- end }}
 
 {{- end }}
