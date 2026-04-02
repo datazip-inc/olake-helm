@@ -82,22 +82,24 @@ data:
   pod-template.yaml: |
     apiVersion: v1
     kind: Pod
-    {{- if not (and (empty .Values.fusion.nodeSelector) (empty .Values.fusion.tolerations) (empty .Values.fusion.affinity)) }}
     spec:
-      {{- with .Values.fusion.nodeSelector }}
+      {{- if empty .Values.fusion.nodeSelector }}
+      nodeSelector: {}
+      {{- else }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.fusion.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- with .Values.fusion.tolerations }}
+      {{- if empty .Values.fusion.tolerations }}
+      tolerations: []
+      {{- else }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.fusion.tolerations | nindent 8 }}
       {{- end }}
-      {{- with .Values.fusion.affinity }}
+      {{- if empty .Values.fusion.affinity }}
+      affinity: {}
+      {{- else }}
       affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-    {{- else }}
-    spec: {}
+        {{- toYaml .Values.fusion.affinity | nindent 8 }}
       {{- end }}
 
 {{- end }}
