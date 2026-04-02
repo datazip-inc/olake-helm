@@ -110,20 +110,17 @@ spec:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
                 key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
-      {{- if .Values.fusion.optimizer.spark.enabled }}
       - name: install-spark
         image: {{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
         volumeMounts:
           - name: spark-binaries
             mountPath: /target
-      {{- end }}
       containers:
         - name: fusion
           image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.image.repository }}:{{ .Values.fusion.image.tag }}"
           imagePullPolicy: {{ .Values.fusion.image.pullPolicy }}
           command: [ "/entrypoint.sh", "ams" ]
-          {{- if .Values.fusion.optimizer.spark.enabled }}
           lifecycle:
             postStart:
               exec:
@@ -206,7 +203,6 @@ spec:
                     echo "  Fusion is ready!"
                     echo "  Login  : ${AMS_ADMIN__USERNAME} / ${AMS_ADMIN__PASSWORD}"
                     echo "============================================"
-          {{- end }}
           ports:
             - name: rest
               containerPort: {{ .Values.fusion.server.rest.port }}
@@ -221,10 +217,8 @@ spec:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/pod-template.yaml
               subPath: pod-template.yaml
-            {{- if .Values.fusion.optimizer.spark.enabled }}
             - name: spark-binaries
               mountPath: /opt/spark
-            {{- end }}
             - name: shared-storage
               mountPath: /data/fusion-logs
               subPath: fusion-logs
@@ -293,10 +287,8 @@ spec:
         - name: fusion-config
           configMap:
             name: {{ include "olake.fullname" . }}-fusion-config
-        {{- if .Values.fusion.optimizer.spark.enabled }}
         - name: spark-binaries
           emptyDir: {}
-        {{- end }}
         - name: shared-storage
           persistentVolumeClaim:
             claimName: {{ include "olake.sharedStoragePVC" . }}

@@ -667,8 +667,6 @@ fusion:
   # --- Optimizer configuration (Spark-on-Kubernetes)
   optimizer:
     spark:
-      # -- Enable the Spark-on-Kubernetes optimizer container integration.
-      enabled: true
       # Desired Spark optimizer parallelism.
       desiredParallelism: 3
       # Location of the optimizer job JAR inside the Spark image.
