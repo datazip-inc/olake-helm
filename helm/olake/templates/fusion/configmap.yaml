@@ -67,6 +67,11 @@ data:
           spark-conf.spark.kubernetes.executor.label.olake.io/workload: "fusion-executor"
           spark-conf.spark.kubernetes.driver.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
           spark-conf.spark.kubernetes.executor.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
+          # Configs to prevent spark context from getting failed on executor failures
+          # Number of retries by spark = spark-conf.spark.task.maxFailures - 1
+          spark-conf.spark.executor.maxNumFailures: "100"
+          spark-conf.spark.executor.failuresValidityInterval: "60s"
+          spark-conf.spark.task.maxFailures: "4"
           {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
           {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
           {{- end }}
