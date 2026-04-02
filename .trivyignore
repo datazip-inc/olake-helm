@@ -1,0 +1,7 @@
+# CVE-2026-34040: Moby AuthZ plugin bypass via oversized request bodies.
+# TODO: Upgrade testcontainers-go once this PR is merged and released:
+# https://github.com/testcontainers/testcontainers-go/pull/3617
+# This vulnerability only affects Docker AuthZ plugins (not used by Olake)
+# and is only present in test-time dependencies.
+# reference: https://github.com/datazip-inc/olake/pull/900/changes/367d286d5a85a3cc48ebea2379763b4d7efba9c3
+CVE-2026-34040
