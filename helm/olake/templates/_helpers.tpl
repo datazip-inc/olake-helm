@@ -53,7 +53,7 @@ Create the name of the service account to use for Fusion
 {{- if .Values.fusion.serviceAccount.create }}
 {{- default (printf "%s-fusion" (include "olake.fullname" .)) .Values.fusion.serviceAccount.name }}
 {{- else }}
-{{- default "default" .Values.fusion.serviceAccount.name }}
+{{- .Values.fusion.serviceAccount.name | default "default" }}
 {{- end }}
 {{- end }}
 
