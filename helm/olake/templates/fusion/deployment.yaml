@@ -225,7 +225,7 @@ spec:
           env:
             - name: AMORO_CONF_DIR
               value: "/usr/local/amoro/conf"
-            - name: FUSION_LOGS_DIRECTORY
+            - name: LOG_DIR
               value: "/data/fusion-logs"
             {{- range $key, $value := .Values.global.env }}
             - name: {{ $key }}

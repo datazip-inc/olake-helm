@@ -69,9 +69,23 @@ data:
           spark-conf.spark.kubernetes.executor.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
           # Configs to prevent spark context from getting failed on executor failures
           # Number of retries by spark = spark-conf.spark.task.maxFailures - 1
-          spark-conf.spark.executor.maxNumFailures: "100"
-          spark-conf.spark.executor.failuresValidityInterval: "60s"
+          spark-conf.spark.executor.maxNumFailures: "2147483647"
+          spark-conf.spark.executor.failuresValidityInterval: "10ms"
           spark-conf.spark.task.maxFailures: "4"
+          # Configurations for shared storage for logs
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.path: "/data/fusion-logs"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly: "false"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.subPath: "fusion-logs"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.options.claimName: {{ include "olake.sharedStoragePVC" . | quote }}
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.path: "/data/fusion-logs"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly: "false"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.subPath: "fusion-logs"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.options.claimName: {{ include "olake.sharedStoragePVC" . | quote }}
+          spark-conf.spark.kubernetes.driverEnv.LOG_DIR: "/data/fusion-logs"
+          spark-conf.spark.kubernetes.executorEnv.LOG_DIR: "/data/fusion-logs"
+          # Force Log4j2 to use the routing config (belt-and-suspenders with the Dockerfile COPY)
+          spark-conf.spark.driver.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
+          spark-conf.spark.executor.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
           {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
           {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
           {{- end }}
