@@ -88,10 +88,12 @@ spec:
         {{- end }}
         # Fusion configuration
         {{- if .Values.fusion.enabled }}
-        - name: FUSION_ENABLED
+        - name: ENABLE_OPTIMIZATION
           value: {{.Values.fusion.enabled | quote }}
-        - name: FUSION_BASE_URL
+        - name: OPTIMIZATION_BASE_URL
           value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
+        - name: OPTIMIZATION_GROUP
+          value: spark-container
         {{- end }}
         # Database configuration
         - name: OLAKE_POSTGRES_HOST
