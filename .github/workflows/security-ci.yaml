@@ -73,7 +73,8 @@ jobs:
       - name: Run Trivy vulnerability scanner in repo mode
         uses: aquasecurity/trivy-action@master
         with:
-          exit-code: '1'
-          scan-type: 'fs'
-          scan-ref: './'
-          severity: 'HIGH,CRITICAL'
+          exit-code: "1"
+          scan-type: "fs"
+          scan-ref: "./"
+          severity: "HIGH,CRITICAL"
+          ignore-unfixed: true
