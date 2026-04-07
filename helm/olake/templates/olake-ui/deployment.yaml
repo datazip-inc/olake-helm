@@ -87,9 +87,9 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         # Fusion configuration
-        {{- if .Values.fusion.enabled }}
+        {{- if eq (include "olake.fusion.enabled" .) "true" }}
         - name: FUSION_ENABLED
-          value: {{.Values.fusion.enabled | quote }}
+          value: "true"
         - name: FUSION_BASE_URL
           value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
         {{- end }}
