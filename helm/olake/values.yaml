@@ -571,9 +571,9 @@ elasticsearch:
 
 # Fusion configuration for Iceberg compaction and optimizer
 fusion:
-  # -- Enable Fusion (Amoro) components. 
-  # Enabled by default. Override if needed.
-  # enabled: true
+  # -- Enable Fusion (Amoro) components.
+  # Set to false to disable all Fusion resources.
+  enabled: false
 
   # --- Fusion admin credentials
   # These credentials are used for:

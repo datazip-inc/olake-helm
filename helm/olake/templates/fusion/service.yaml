@@ -1,4 +1,4 @@
-{{- if eq (include "olake.fusion.enabled" .) "true" }}
+{{- if .Values.fusion.enabled }}
 {{- range $name, $config := .Values.fusion.server }}
 {{- if $config.enabled }}
 ---
