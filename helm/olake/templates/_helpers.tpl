@@ -58,6 +58,31 @@ Create the name of the service account to use for Fusion
 {{- end }}
 
 {{/*
+Returns true if Fusion components should be deployed.
+Uses logic to enable by default for new installs, and disable for upgrades unless Fusion already exists.
+*/}}
+{{- define "olake.fusion.enabled" -}}
+  {{- $enabled := false -}}
+  {{- if hasKey .Values.fusion "enabled" -}}
+    {{- $enabled = .Values.fusion.enabled -}}
+  {{- else -}}
+    {{- if .Release.IsInstall -}}
+      {{- $enabled = true -}}
+    {{- else if .Release.IsUpgrade -}}
+      {{- $existingFusion := lookup "apps/v1" "Deployment" .Release.Namespace (printf "%s-fusion" (include "olake.fullname" .)) -}}
+      {{- if $existingFusion -}}
+        {{- $enabled = true -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $enabled -}}
+    true
+  {{- else -}}
+    false
+  {{- end -}}
+{{- end -}}
+
+{{/*
 Create the name of the service account to use for job pods
 */}}
 {{- define "olake.jobServiceAccountName" -}}
