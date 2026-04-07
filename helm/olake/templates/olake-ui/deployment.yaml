@@ -89,11 +89,15 @@ spec:
         # Fusion configuration
         {{- if .Values.fusion.enabled }}
         - name: ENABLE_OPTIMIZATION
-          value: {{.Values.fusion.enabled | quote }}
+          value: true
         - name: OPTIMIZATION_BASE_URL
           value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
         - name: OPTIMIZATION_GROUP
           value: spark-container
+        - name: USERNAME
+          value: {{ .Values.fusion.adminUser | quote }}
+        - name: PASSWORD
+          value: {{ .Values.fusion.adminPassword | quote }}
         {{- end }}
         # Database configuration
         - name: OLAKE_POSTGRES_HOST

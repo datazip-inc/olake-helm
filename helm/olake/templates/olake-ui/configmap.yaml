@@ -31,3 +31,8 @@ data:
     
     # Temporal Configuration
     TEMPORAL_ADDRESS = temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233
+
+    # Optimization Configuration
+    ENABLE_OPTIMIZATION = ${ENABLE_OPTIMIZATION||false}
+    OPTIMIZATION_BASE_URL = ${OPTIMIZATION_BASE_URL||""}
+    OPTIMIZATION_GROUP = ${OPTIMIZATION_GROUP||spark-container}
