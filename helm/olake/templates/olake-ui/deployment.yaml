@@ -89,7 +89,7 @@ spec:
         # Fusion configuration
         {{- if .Values.fusion.enabled }}
         - name: ENABLE_OPTIMIZATION
-          value: true
+          value: "true"
         - name: OPTIMIZATION_BASE_URL
           value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
         - name: OPTIMIZATION_GROUP
