@@ -1,4 +1,4 @@
-{{- if eq (include "olake.fusion.enabled" .) "true" }}
+{{- if .Values.fusion.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

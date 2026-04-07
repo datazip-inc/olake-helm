@@ -1,4 +1,4 @@
-{{- if eq (include "olake.fusion.enabled" .) "true" }}
+{{- if .Values.fusion.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
