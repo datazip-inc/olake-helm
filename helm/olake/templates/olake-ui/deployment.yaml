@@ -67,6 +67,21 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      {{- if .Values.fusion.enabled }}
+      - name: wait-for-fusion
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for Fusion REST service to be ready..."
+          until nc -z {{ include "olake.fullname" . }}-fusion-rest.{{ include "olake.namespace" . }}.svc.cluster.local {{ .Values.fusion.server.rest.port | int }}; do
+            echo "Fusion REST service is not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "Fusion REST service is ready!"
+      {{- end }}
       containers:
       - name: olake-ui
         image: "{{ include "olake.registryBase" . }}/{{ .Values.olakeUI.image.repository }}:{{ .Values.olakeUI.image.tag }}"
