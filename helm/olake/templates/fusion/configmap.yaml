@@ -82,7 +82,7 @@ data:
           spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.subPath: "fusion-logs"
           spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.options.claimName: {{ include "olake.sharedStoragePVC" . | quote }}
           spark-conf.spark.kubernetes.driverEnv.LOG_DIR: "/data/fusion-logs"
-          spark-conf.spark.kubernetes.executorEnv.LOG_DIR: "/data/fusion-logs"
+          spark-conf.spark.executorEnv.LOG_DIR: "/data/fusion-logs"
           # Force Log4j2 to use the routing config (belt-and-suspenders with the Dockerfile COPY)
           spark-conf.spark.driver.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
           spark-conf.spark.executor.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
