@@ -58,7 +58,7 @@ DevSpace provides a streamlined development workflow with live code sync, port f
 
 This will:
 - Deploy the OLake Helm chart to the cluster
-- Start a development container with Go 1.25.8
+- Start a development container with Go 1.25.9
 - Sync local code changes to the container in real-time
 - Forward port 8000 from olakeUI to `http://localhost:8000`
 - Open a terminal in the dev container
@@ -108,7 +108,7 @@ DevSpace is configured via `devspace.yaml` in this directory:
 - **Images**: Builds `olakego/k8s-worker` from local Dockerfile
 - **Deployments**: Uses the OLake Helm chart from `../../helm/olake`
 - **Dev Environment**: 
-  - Worker dev container with Go 1.25.8
+  - Worker dev container with Go 1.25.9
   - Live code sync from current directory
   - SSH access for IDE integration
 - **Port Forwarding**: 
