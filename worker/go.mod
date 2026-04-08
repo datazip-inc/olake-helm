@@ -1,6 +1,6 @@
 module github.com/datazip-inc/olake-helm/worker
 
-go 1.25.8
+go 1.25.9
 
 require (
 	github.com/apache/spark-connect-go/v35 v35.0.0-20250317154112-ffd832059443
