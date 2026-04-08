@@ -145,10 +145,18 @@ spec:
                       LOGIN_RC=$?
                       set -e
                       if [ "$LOGIN_RC" -eq 0 ]; then
+                        echo ""
+                        echo "----- Login response (${i}/60) -----"
                         echo "${LOGIN_RESP}"
+                        echo "------------------------------------"
+                        echo ""
                         break
                       fi
-                      echo "Login attempt ${i}/60 failed (rc=${LOGIN_RC}): ${LOGIN_RESP}"
+                      echo ""
+                      echo "----- Login response (${i}/60, failed rc=${LOGIN_RC}) -----"
+                      echo "${LOGIN_RESP}"
+                      echo "-----------------------------------------------------------"
+                      echo ""
                       sleep 1
                     done
                     if [ "$LOGIN_RC" -ne 0 ]; then
@@ -161,16 +169,26 @@ spec:
                     GROUPS=$(curl -s -b /tmp/cookies.txt \
                       -H "X-Request-Source: Web" \
                       "${BASE_URL}/api/ams/v1/optimize/resourceGroups")
+                    echo ""
+                    echo "----- Resource groups response -----"
+                    echo "$GROUPS"
+                    echo "-----------------------------------"
+                    echo ""
 
                     if echo "$GROUPS" | grep -q '"name":"spark-container"'; then
                       echo "Optimizer group 'spark-container' already exists."
                     else
                       echo "Creating optimizer group 'spark-container'..."
-                      curl -s -b /tmp/cookies.txt \
+                      CREATE_GROUP_RESP=$(curl -s -b /tmp/cookies.txt \
                         -X POST "${BASE_URL}/api/ams/v1/optimize/resourceGroups" \
                         -H "Content-Type: application/json" \
                         -H "X-Request-Source: Web" \
                         -d '{"name":"spark-container","container":"sparkContainer","properties":{}}'
+                      )
+                      echo ""
+                      echo "----- Create group response -----"
+                      echo "$CREATE_GROUP_RESP"
+                      echo "---------------------------------"
                       echo ""
                       sleep 5
                     fi
@@ -180,23 +198,39 @@ spec:
                     OPTIMIZERS=$(curl -s -b /tmp/cookies.txt \
                       -H "X-Request-Source: Web" \
                       "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=50")
+                    echo ""
+                    echo "----- Optimizers response -----"
+                    echo "$OPTIMIZERS"
+                    echo "-------------------------------"
+                    echo ""
 
                     JOB_IDS=$(echo "$OPTIMIZERS" | grep -oE '"jobId":"[^"]+"' | cut -d':' -f2 | tr -d '"')
+
                     if [ -n "$JOB_IDS" ]; then
                       echo "Releasing existing Spark optimizers..."
                       for jobId in $JOB_IDS; do
-                        curl -s -b /tmp/cookies.txt \
+                        DELETE_RESP=$(curl -s -b /tmp/cookies.txt \
                           -X DELETE "${BASE_URL}/api/ams/v1/optimize/optimizers/${jobId}" \
-                          -H "X-Request-Source: Web" >/dev/null
+                          -H "X-Request-Source: Web")
+                        echo ""
+                        echo "----- Delete optimizer ${jobId} response -----"
+                        echo "$DELETE_RESP"
+                        echo "-----------------------------------------------"
+                        echo ""
                       done
                     fi
 
                     echo "Creating Spark optimizer parallelism={{ .Values.fusion.optimizer.spark.desiredParallelism }}..."
-                    curl -s -b /tmp/cookies.txt \
+                    CREATE_OPT_RESP=$(curl -s -b /tmp/cookies.txt \
                       -X POST "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers" \
                       -H "Content-Type: application/json" \
                       -H "X-Request-Source: Web" \
-                      -d '{"parallelism":{{ .Values.fusion.optimizer.spark.desiredParallelism }}}'
+                      -d '{"parallelism":{{ .Values.fusion.optimizer.spark.desiredParallelism }}}')
+                    echo ""
+                    echo "----- Create optimizers response -----"
+                    echo "$CREATE_OPT_RESP"
+                    echo "--------------------------------------"
+                    echo ""
 
                     echo ""
                     echo "============================================"
