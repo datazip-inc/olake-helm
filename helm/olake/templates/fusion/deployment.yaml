@@ -122,6 +122,57 @@ spec:
           imagePullPolicy: {{ .Values.fusion.image.pullPolicy }}
           command: [ "/entrypoint.sh", "ams" ]
           lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    exec > /proc/1/fd/1 2>/proc/1/fd/2
+                    BASE_URL="http://127.0.0.1:{{ .Values.fusion.server.rest.port }}"
+                    echo "Running Fusion optimizer cleanup via preStop at ${BASE_URL}..."
+
+                    echo "Logging into Fusion..."
+                    LOGIN_RC=0
+                    for i in $(seq 1 10); do
+                      set +e
+                      LOGIN_RESP=$(curl -sS -f -c /tmp/prestop-cookies.txt \
+                        -X POST "${BASE_URL}/api/ams/v1/login" \
+                        -H "Content-Type: application/json" \
+                        -H "X-Request-Source: Web" \
+                        -d "{\"user\":\"${AMS_ADMIN__USERNAME}\",\"password\":\"${AMS_ADMIN__PASSWORD}\"}" 2>&1)
+                      LOGIN_RC=$?
+                      set -e
+                      if [ "$LOGIN_RC" -eq 0 ]; then
+                        echo "Login succeeded (${i}/10)"
+                        break
+                      fi
+                      echo "Login failed (${i}/10, rc=${LOGIN_RC}), retrying..."
+                      sleep 2
+                    done
+                    if [ "$LOGIN_RC" -ne 0 ]; then
+                      echo "Login failed after retries, skipping optimizer cleanup."
+                      exit 0
+                    fi
+
+                    echo "Releasing existing Spark optimizers..."
+                    OPTIMIZERS=$(curl -s -b /tmp/prestop-cookies.txt \
+                      -H "X-Request-Source: Web" \
+                      "${BASE_URL}/api/ams/v1/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=50")
+                    echo "Optimizers: ${OPTIMIZERS}"
+                    JOB_IDS=$(echo "$OPTIMIZERS" | grep -oE '"jobId":"[^"]+"' | cut -d':' -f2 | tr -d '"')
+                    if [ -n "$JOB_IDS" ]; then
+                      for jobId in $JOB_IDS; do
+                        DELETE_RESP=$(curl -s -b /tmp/prestop-cookies.txt \
+                          -X DELETE "${BASE_URL}/api/ams/v1/optimize/optimizers/${jobId}" \
+                          -H "X-Request-Source: Web")
+                        echo "Released optimizer ${jobId}: ${DELETE_RESP}"
+                      done
+                    else
+                      echo "No optimizers found to release."
+                    fi
+                    echo "Optimizer cleanup complete."
+
             postStart:
               exec:
                 command:
@@ -130,6 +181,18 @@ spec:
                   - |
                     exec > /proc/1/fd/1 2>/proc/1/fd/2
                     set -e
+
+                    echo "Deleting pods with labelSelector=olake.io/workload=fusion-master..."
+                    K8S_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                    K8S_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+                    set +e
+                    DELETE_PODS_RESP=$(curl -sS --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -X DELETE \
+                      -H "Authorization: Bearer ${K8S_TOKEN}" \
+                      "https://kubernetes.default.svc/api/v1/namespaces/${K8S_NAMESPACE}/pods?labelSelector=olake.io%2Fworkload%3Dfusion-master")
+                    # DELETE_PODS_RC=$?
+                    set -e
+                    # echo "Delete pods response (rc=${DELETE_PODS_RC}): ${DELETE_PODS_RESP}"
+
                     BASE_URL="http://127.0.0.1:{{ .Values.fusion.server.rest.port }}"
                     echo "Running Fusion optimizer bootstrap via postStart at ${BASE_URL}..."
 
@@ -327,3 +390,4 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "olake.sharedStoragePVC" . }}
 {{- end }}
+ 

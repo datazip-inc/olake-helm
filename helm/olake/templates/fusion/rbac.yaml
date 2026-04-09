@@ -12,7 +12,7 @@ rules:
 # Pod management - required for driver/executor pods
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "watch", "list", "create", "delete", "patch"]
+  verbs: ["get", "watch", "list", "create", "delete", "deletecollection", "patch"]
 - apiGroups: [""]
   resources: ["pods/exec"]
   verbs: ["create"]
