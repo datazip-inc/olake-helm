@@ -40,6 +40,9 @@ func setDefaults() {
 	viper.SetDefault("LOG_LEVEL", "info")
 	viper.SetDefault("LOG_FORMAT", "console")
 
+	// telemetry defaults
+	viper.SetDefault("TELEMETRY_DISABLED", false)
+
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 

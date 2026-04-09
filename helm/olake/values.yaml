@@ -447,6 +447,7 @@ postgresql:
       password: ""
       olake_database: ""
       temporal_database: ""
+      fusion_database: ""
       ssl_mode: "disable"
 
     # -- Map the keys from existing secret to the required fields
@@ -455,6 +456,7 @@ postgresql:
       port: "port"
       olake_database: "olake_database"
       temporal_database: "temporal_database"
+      fusion_database: "fusion_database"
       username: "username"
       password: "password"
       ssl_mode: "ssl_mode"
@@ -566,3 +568,108 @@ elasticsearch:
   persistence:
     # -- Size of persistent volume for Elasticsearch data
     size: 8Gi
+
+# Fusion configuration for Iceberg compaction and optimizer
+fusion:
+  # -- Enable Fusion (Amoro) components.
+  # Set to false to disable all Fusion resources.
+  enabled: false
+
+  # --- Fusion admin credentials
+  # These credentials are used for:
+  # - Logging into the Fusion UI
+  # - Running the Fusion init job that creates the optimizer group
+  adminUser: admin
+  adminPassword: password
+
+  # -- Service Account configuration
+  serviceAccount:
+    # -- Create a service account for Fusion.
+    create: true
+    # -- Service account name for Fusion.
+    # If not set and `create` is true, a name is generated using the fullname template.
+    name: ""
+    # -- Service account annotations for Fusion.
+    annotations: {}
+
+  # --- Fusion (Amoro) container image
+  image:
+    repository: olakego/fusion
+    tag: v0.1.0
+    pullPolicy: IfNotPresent
+
+  # --- Fusion pod resource requirements (optional overrides)
+  # Example:
+  #   resources:
+  #     requests:
+  #       cpu: "500m"
+  #       memory: "1Gi"
+  #     limits:
+  #       cpu: "1"
+  #       memory: "2Gi"
+  resources: {}
+
+  # --- Fusion pod security context
+  # Example customizations for Fusion (Amoro):
+  # securityContext:
+  #   runAsNonRoot: false
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+
+  # -- Environment variables for OLake Fusion
+  # Add custom environment variables here
+  # Example:
+  #   env:
+  #     CUSTOM_VAR: "value"
+  #     FEATURE_FLAG: "true"
+  env: {}
+
+  # --- Pod scheduling constraints for the Fusion pod
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+  # --- Amoro config shade properties
+  shade:
+    identifier: "default"
+    sensitiveKeywords: "admin-password;database.password"
+
+  # --- Optimizer configuration (Spark-on-Kubernetes)
+  optimizer:
+    spark:
+      # Desired Spark optimizer parallelism.
+      desiredParallelism: 3
+      # Location of the optimizer job JAR inside the Spark image.
+      jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
+      # Spark optimizer image repository and tag.
+      image:
+        repository: olakego/fusion-spark
+        tag: v0.1.0
+        pullPolicy: IfNotPresent
+
+      # Extra Spark config entries (map of key->value).
+      # Example:
+      #   extraConfig:
+      #     spark.sql.shuffle.partitions: "200"
+      extraConfig: 
+        spark.dynamicAllocation.enabled: "true"
+        spark.shuffle.service.enabled: "false"
+        spark.dynamicAllocation.shuffleTracking.enabled: "true"
+        spark.driver.memory: "1g"
+        spark.executor.memory: "4g"
+        spark.executor.cores: "1"
+
+      # Additional container properties for the Spark optimizer container (map of key->value).
+      # This can be used to set properties like:
+      #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
+      # Example:
+      #   properties:
+      #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
+      properties:
+        spark-home: "/opt/spark/"
+        master: "k8s://https://kubernetes.default.svc:443"
+        deploy-mode: "cluster"
+        export.HADOOP_USER_NAME: "spark"
+        export.SPARK_CONF_DIR: "/opt/spark/conf/"

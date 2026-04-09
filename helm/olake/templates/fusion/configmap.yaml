@@ -1,0 +1,119 @@
+{{- if .Values.fusion.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-config
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+data:
+  config.yaml: |
+    ams:
+      server-expose-host: "127.0.0.1"
+
+      thrift-server:
+        table-service:
+          bind-port: 1260
+        optimizing-service:
+          bind-port: 1261
+
+      http-server:
+        bind-port: 1630
+
+      optimizer:
+        task-execute-timeout: 1h
+        max-planning-parallelism: {{ .Values.fusion.optimizer.spark.desiredParallelism }}
+
+      {{- if or .Values.fusion.shade.identifier .Values.fusion.shade.sensitiveKeywords }}
+      shade:
+        {{- if .Values.fusion.shade.identifier }}
+        identifier: {{ .Values.fusion.shade.identifier }}
+        {{- end }}
+        {{- if .Values.fusion.shade.sensitiveKeywords }}
+        sensitive-keywords: {{ .Values.fusion.shade.sensitiveKeywords }}
+        {{- end }}
+      {{- end }}
+
+      database:
+        type: postgres
+        jdbc-driver-class: org.postgresql.Driver
+        url: >-
+          {{- if .Values.postgresql.enabled }}
+            {{ printf "jdbc:postgresql://postgresql:5432/fusion" }}
+          {{- else }}
+            {{- $externalPg := .Values.postgresql.external.properties }}
+            {{ printf "jdbc:postgresql://%s:%s/%s" $externalPg.host $externalPg.port $externalPg.fusion_database }}
+          {{- end }}
+
+      terminal:
+        local:
+          using-session-catalog-for-hive: false
+          spark.sql.iceberg.handle-timestamp-without-timezone: false
+          spark.sql.codegen.wholeStage: false
+
+    containers:
+      - name: sparkContainer
+        container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
+        properties:
+          job-uri: {{ .Values.fusion.optimizer.spark.jobUri | quote }}
+          ams-optimizing-uri: thrift://{{ include "olake.fullname" . }}-fusion-optimizing.{{ include "olake.namespace" . }}.svc.cluster.local:1261
+          spark-conf.spark.kubernetes.container.image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
+          spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
+          spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}
+          spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
+          spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: "{{ include "olake.fusionServiceAccountName" . }}"
+          spark-conf.spark.kubernetes.driver.label.olake.io/workload: "fusion-master"
+          spark-conf.spark.kubernetes.executor.label.olake.io/workload: "fusion-executor"
+          spark-conf.spark.kubernetes.driver.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
+          spark-conf.spark.kubernetes.executor.podTemplateFile: "/usr/local/amoro/conf/pod-template.yaml"
+          # Configs to prevent spark context from getting failed on executor failures
+          # Number of retries by spark = spark-conf.spark.task.maxFailures - 1
+          spark-conf.spark.executor.maxNumFailures: "2147483647"
+          spark-conf.spark.executor.failuresValidityInterval: "10ms"
+          spark-conf.spark.task.maxFailures: "4"
+          # Configurations for shared storage for logs
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.path: "/data/fusion-logs"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly: "false"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.mount.subPath: "fusion-logs"
+          spark-conf.spark.kubernetes.driver.volumes.persistentVolumeClaim.fusion-logs.options.claimName: {{ include "olake.sharedStoragePVC" . | quote }}
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.path: "/data/fusion-logs"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly: "false"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.subPath: "fusion-logs"
+          spark-conf.spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.options.claimName: {{ include "olake.sharedStoragePVC" . | quote }}
+          spark-conf.spark.kubernetes.driverEnv.LOG_DIR: "/data/fusion-logs"
+          spark-conf.spark.executorEnv.LOG_DIR: "/data/fusion-logs"
+          # Force Log4j2 to use the routing config (belt-and-suspenders with the Dockerfile COPY)
+          spark-conf.spark.driver.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
+          spark-conf.spark.executor.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
+          {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
+          {{ printf "spark-conf.%s" $key }}: "{{ $value }}"
+          {{- end }}
+          {{- range $key, $value := .Values.fusion.optimizer.spark.properties }}
+          {{ $key }}: "{{ $value }}"
+          {{- end }}
+
+  pod-template.yaml: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      {{- if empty .Values.fusion.nodeSelector }}
+      nodeSelector: {}
+      {{- else }}
+      nodeSelector:
+        {{- toYaml .Values.fusion.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if empty .Values.fusion.tolerations }}
+      tolerations: []
+      {{- else }}
+      tolerations:
+        {{- toYaml .Values.fusion.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if empty .Values.fusion.affinity }}
+      affinity: {}
+      {{- else }}
+      affinity:
+        {{- toYaml .Values.fusion.affinity | nindent 8 }}
+      {{- end }}
+
+{{- end }}
