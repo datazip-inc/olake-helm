@@ -76,7 +76,7 @@ spec:
         - -c
         - |
           echo "Waiting for Fusion REST service to be ready..."
-          until nc -z {{ include "olake.fullname" . }}-fusion-rest.{{ include "olake.namespace" . }}.svc.cluster.local {{ .Values.fusion.server.rest.port | int }}; do
+          until nc -z {{ include "olake.fullname" . }}-fusion-rest.{{ include "olake.namespace" . }}.svc.cluster.local 1630; do
             echo "Fusion REST service is not ready yet. Waiting..."
             sleep 5
           done
@@ -106,7 +106,7 @@ spec:
         - name: ENABLE_OPTIMIZATION
           value: "true"
         - name: OPTIMIZATION_BASE_URL
-          value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:%v" (include "olake.fullname" .) (include "olake.namespace" .) (.Values.fusion.server.rest.port | int) | quote }}
+          value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:1630" (include "olake.fullname" .) (include "olake.namespace" .) | quote }}
         - name: OPTIMIZATION_GROUP
           value: spark-container
         - name: USERNAME

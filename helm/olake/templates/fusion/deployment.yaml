@@ -129,7 +129,7 @@ spec:
                   - -c
                   - |
                     exec > /proc/1/fd/1 2>/proc/1/fd/2
-                    BASE_URL="http://127.0.0.1:{{ .Values.fusion.server.rest.port }}"
+                    BASE_URL="http://127.0.0.1:1630"
                     echo "Running Fusion optimizer cleanup via preStop at ${BASE_URL}..."
 
                     echo "Logging into Fusion..."
@@ -193,7 +193,7 @@ spec:
                     set -e
                     # echo "Delete pods response (rc=${DELETE_PODS_RC}): ${DELETE_PODS_RESP}"
 
-                    BASE_URL="http://127.0.0.1:{{ .Values.fusion.server.rest.port }}"
+                    BASE_URL="http://127.0.0.1:1630"
                     echo "Running Fusion optimizer bootstrap via postStart at ${BASE_URL}..."
 
                     echo "Logging into Fusion..."
@@ -302,11 +302,11 @@ spec:
                     echo "============================================"
           ports:
             - name: rest
-              containerPort: {{ .Values.fusion.server.rest.port }}
+              containerPort: 1630
             - name: table
-              containerPort: {{ .Values.fusion.server.table.port }}
+              containerPort: 1260
             - name: optimizing
-              containerPort: {{ .Values.fusion.server.optimizing.port }}
+              containerPort: 1261
           volumeMounts:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/config.yaml

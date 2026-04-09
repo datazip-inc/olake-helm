@@ -1,32 +1,61 @@
 {{- if .Values.fusion.enabled }}
-{{- range $name, $config := .Values.fusion.server }}
-{{- if $config.enabled }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "olake.fullname" $ }}-fusion-{{ $name }}
-  namespace: {{ include "olake.namespace" $ }}
+  name: {{ include "olake.fullname" . }}-fusion-rest
+  namespace: {{ include "olake.namespace" . }}
   labels:
-    {{- include "olake.labels" $ | nindent 4 }}
+    {{- include "olake.labels" . | nindent 4 }}
     app.kubernetes.io/component: fusion
-  {{- with $config.service.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
 spec:
-  type: {{ $config.service.type }}
+  type: ClusterIP
   ports:
-    - name: {{ $name }}
-      port: {{ $config.port }}
-      targetPort: {{ $config.port }}
+    - name: rest
+      port: 1630
+      targetPort: 1630
       protocol: TCP
-      {{- if eq $config.service.type "NodePort" }}
-      nodePort: {{ $config.service.nodePort }}
-      {{- end }}
   selector:
-    app.kubernetes.io/name: {{ include "olake.name" $ }}-fusion
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-{{- end }}
-{{- end }}
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-table
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+spec:
+  type: ClusterIP
+  ports:
+    - name: table
+      port: 1260
+      targetPort: 1260
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-optimizing
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+spec:
+  type: ClusterIP
+  ports:
+    - name: optimizing
+      port: 1261
+      targetPort: 1261
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

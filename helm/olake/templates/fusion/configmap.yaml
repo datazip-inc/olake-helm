@@ -14,12 +14,12 @@ data:
 
       thrift-server:
         table-service:
-          bind-port: {{ .Values.fusion.server.table.port }}
+          bind-port: 1260
         optimizing-service:
-          bind-port: {{ .Values.fusion.server.optimizing.port }}
+          bind-port: 1261
 
       http-server:
-        bind-port: {{ .Values.fusion.server.rest.port }}
+        bind-port: 1630
 
       optimizer:
         task-execute-timeout: 1h
@@ -57,7 +57,7 @@ data:
         container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
         properties:
           job-uri: {{ .Values.fusion.optimizer.spark.jobUri | quote }}
-          ams-optimizing-uri: thrift://{{ include "olake.fullname" . }}-fusion-optimizing.{{ include "olake.namespace" . }}.svc.cluster.local:{{ .Values.fusion.server.optimizing.port }}
+          ams-optimizing-uri: thrift://{{ include "olake.fullname" . }}-fusion-optimizing.{{ include "olake.namespace" . }}.svc.cluster.local:1261
           spark-conf.spark.kubernetes.container.image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
           spark-conf.spark.kubernetes.container.image.pullPolicy: "{{ .Values.fusion.optimizer.spark.image.pullPolicy }}"
           spark-conf.spark.kubernetes.namespace: {{ include "olake.namespace" . | quote }}

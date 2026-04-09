@@ -630,33 +630,6 @@ fusion:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-
-  # --- Fusion service ports (used to expose REST / Thrift / optimizer services)
-  server:
-    rest:
-      # HTTP REST / UI endpoint
-      enabled: true
-      port: 1630
-      service:
-        type: ClusterIP
-        nodePort: ""
-        annotations: {}
-    table:
-      # Thrift table service port
-      enabled: true
-      port: 1260
-      service:
-        type: ClusterIP
-        nodePort: ""
-        annotations: {}
-    optimizing:
-      # Thrift optimizing service port
-      enabled: true
-      port: 1261
-      service:
-        type: ClusterIP
-        nodePort: ""
-        annotations: {}
   
   # --- Amoro config shade properties
   shade:
