@@ -37,6 +37,9 @@ const (
 	EnvLogLevel  = "LOG_LEVEL"
 	EnvLogFormat = "LOG_FORMAT"
 
+	// telemetry
+	EnvTelemetryDisabled = "TELEMETRY_DISABLED"
+
 	// api
 	EnvCallbackURL = "OLAKE_CALLBACK_URL"
 

@@ -131,8 +131,9 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	addIfMissing := map[string]string{
-		"user_id.txt": GetTelemetryUserID(),
+	addIfMissing := make(map[string]string)
+	if !viper.GetBool(constants.EnvTelemetryDisabled) {
+		addIfMissing["user_id.txt"] = GetTelemetryUserID()
 	}
 
 	applyConfigUpdates(req, updates, addIfMissing)
