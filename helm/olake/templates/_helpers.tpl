@@ -47,6 +47,17 @@ Create the name of the service account to use for olake-workers
 {{- end }}
 
 {{/*
+Create the name of the service account to use for Fusion
+*/}}
+{{- define "olake.fusionServiceAccountName" -}}
+{{- if .Values.fusion.serviceAccount.create }}
+{{- default (printf "%s-fusion" (include "olake.fullname" .)) .Values.fusion.serviceAccount.name }}
+{{- else }}
+{{- .Values.fusion.serviceAccount.name | default "default" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create the name of the service account to use for job pods
 */}}
 {{- define "olake.jobServiceAccountName" -}}
