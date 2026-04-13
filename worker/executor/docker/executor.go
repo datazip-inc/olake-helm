@@ -21,7 +21,7 @@ type DockerExecutor struct {
 }
 
 func NewDockerExecutor() (*DockerExecutor, error) {
-	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	client, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
