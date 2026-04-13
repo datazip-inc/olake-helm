@@ -1,8 +1,7 @@
 # GO-2026-4887 (CVE-2026-34040): Moby AuthZ plugin bypass via oversized request bodies.
 # GO-2026-4883 (CVE-2026-33997): Moby off-by-one error in plugin privilege validation.
-# TODO: Upgrade testcontainers-go once this PR is merged and released:
-# https://github.com/testcontainers/testcontainers-go/pull/3617
-# Both vulnerabilities only affect Docker AuthZ plugins (not used by OLake Worker)
-# and are only present in test-time dependencies (transitive moby/docker stack).
+# govulncheck still reports these for github.com/docker/docker@v28.5.1+incompatible
+# (worker/executor/docker and testcontainers test helpers); database lists Fixed in N/A.
+# AuthZ plugins are not used by OLake Worker.
 GO-2026-4887
 GO-2026-4883
