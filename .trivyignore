@@ -1,4 +1,0 @@
-# CVE-2026-34040: Moby AuthZ plugin bypass via oversized request bodies.
-# Still flagged while github.com/docker/docker remains a direct dependency
-# (Docker executor); AuthZ plugins are not used by OLake Worker.
-CVE-2026-34040
