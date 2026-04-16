@@ -1,3 +1,4 @@
+{{- if .Values.temporal.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -174,3 +175,4 @@ spec:
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.temporal.server.livenessProbe | default dict) }}
         livenessProbe:
           {{- toYaml $livenessProbe | nindent 10 }}
+{{- end }}

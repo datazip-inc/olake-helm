@@ -120,3 +120,14 @@ Return the PostgreSQL secret name
 {{- printf "%s-external-postgresql" (include "olake.fullname" .) }}
 {{- end }}
 {{- end }}
+
+{{/*
+Return the Temporal secret name
+*/}}
+{{- define "olake.temporal.secretName" -}}
+{{- if .Values.temporal.external.existingSecret }}
+{{- .Values.temporal.external.existingSecret }}
+{{- else }}
+{{- printf "%s-external-temporal" (include "olake.fullname" .) }}
+{{- end }}
+{{- end }}
