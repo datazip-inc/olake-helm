@@ -11,8 +11,6 @@ data:
   # Temporal Configuration
   {{- if .Values.temporal.enabled }}
   TEMPORAL_ADDRESS: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
-  {{- else }}
-  TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
   {{- end }}
   
   # Kubernetes Configuration

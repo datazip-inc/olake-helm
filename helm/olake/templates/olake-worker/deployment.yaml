@@ -50,6 +50,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
+      {{- if .Values.temporal.enabled }}
       initContainers:
       - name: wait-for-temporal
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
@@ -59,24 +60,12 @@ spec:
         - -c
         - |
           echo "Waiting for Temporal to be ready..."
-          HOST="$(echo "$TEMPORAL_ADDRESS" | cut -d: -f1)"
-          PORT="$(echo "$TEMPORAL_ADDRESS" | cut -d: -f2)"
-          PORT="${PORT:-7233}"
-          until nc -z "$HOST" "$PORT"; do
+          until nc -z temporal.{{ include "olake.namespace" . }}.svc.cluster.local 7233; do
             echo "Temporal is not ready yet. Waiting..."
             sleep 5
           done
           echo "Temporal is ready!"
-        env:
-        - name: TEMPORAL_ADDRESS
-          {{- if .Values.temporal.enabled }}
-          value: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
-          {{- else }}
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "olake.temporal.secretName" . }}
-              key: {{ .Values.temporal.external.secretKeys.TEMPORAL_ADDRESS }}
-          {{- end }}
+      {{- end }}
       containers:
       - name: olake-workers
         image: "{{ include "olake.registryBase" . }}/{{ .Values.olakeWorker.image.repository }}:{{ .Values.olakeWorker.image.tag }}"
