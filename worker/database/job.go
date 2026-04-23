@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/lib/pq"
 )
@@ -13,6 +14,24 @@ import (
 const (
 	queryTimeout = 5 * time.Second
 )
+
+// decryptJobData decrypts the Source and Destination config fields of a JobData.
+// If OLAKE_SECRET_KEY is not configured, Decrypt returns the value unchanged.
+func decryptJobData(jobData *types.JobData) error {
+	decryptedSource, err := utils.Decrypt(jobData.Source)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt source config: %s", err)
+	}
+	jobData.Source = decryptedSource
+
+	decryptedDest, err := utils.Decrypt(jobData.Destination)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt destination config: %s", err)
+	}
+	jobData.Destination = decryptedDest
+
+	return nil
+}
 
 func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) {
 	log := logger.Log(ctx)
@@ -34,6 +53,12 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
+
+	if err := decryptJobData(&jobData); err != nil {
+		log.Error("failed to decrypt job data", "jobID", jobId, "error", err)
+		return types.JobData{}, fmt.Errorf("failed to decrypt job data job_id[%d]: %s", jobId, err)
+	}
+
 	return jobData, nil
 }
 
