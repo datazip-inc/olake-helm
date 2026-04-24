@@ -53,7 +53,9 @@ spec:
       {{- if (include "olake.jobServiceAccountName" .) }}
       serviceAccountName: {{ include "olake.jobServiceAccountName" . }}
       {{- end }}
+      {{- if or .Values.temporal.enabled .Values.fusion.enabled }}
       initContainers:
+      {{- if .Values.temporal.enabled }}
       - name: wait-for-temporal
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent
@@ -67,6 +69,7 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      {{- end }}
       {{- if .Values.fusion.enabled }}
       - name: wait-for-fusion
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
@@ -81,6 +84,7 @@ spec:
             sleep 5
           done
           echo "Fusion REST service is ready!"
+      {{- end }}
       {{- end }}
       containers:
       - name: olake-ui
@@ -149,6 +153,11 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
+        {{- if not .Values.temporal.enabled }}
+        envFrom:
+        - secretRef:
+            name: {{ include "olake.temporal.secretName" . }}
+        {{- end }}
         # - name: POSTGRES_DB
         #   value: "postgres://$(POSTGRES_DB_USER):$(POSTGRES_DB_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=$(POSTGRES_DB_SSLMODE)"
         volumeMounts:

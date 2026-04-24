@@ -369,6 +369,44 @@ nfsServer:
 
 # Temporal configuration for workflow orchestration
 temporal:
+  # -- Enable internal Temporal deployment
+  # Set to false to use an external Temporal Cloud/server
+  enabled: true
+
+  # -- External Temporal configuration (used when enabled: false)
+  # Provide Kubernetes secret containing Temporal credentials/configuration
+  external:
+    # -- Name of the Kubernetes secret containing external Temporal configuration
+    # The secret must contain keys:
+    # TEMPORAL_ADDRESS, TEMPORAL_API_KEY, TEMPORAL_ENABLE_TLS, TEMPORAL_EXTERNAL, TEMPORAL_NAMESPACE, TEMPORAL_TASK_QUEUE
+    # Example secret creation:
+    #   kubectl create secret generic my-temporal-secret \
+    #     --from-literal=TEMPORAL_ADDRESS=<region>.<cloud>.api.temporal.io:7233 \
+    #     --from-literal=TEMPORAL_API_KEY=ldjflskjdglsed.sidhfksdhf.sdlkjglksjdgljsd-sldjglksjdgljs-sd;kg;sldjg;ljsd-sdklhglksdhglskjd \
+    #     --from-literal=TEMPORAL_ENABLE_TLS=true \
+    #     --from-literal=TEMPORAL_EXTERNAL=true \
+    #     --from-literal=TEMPORAL_NAMESPACE=<namespace> \
+    #     --from-literal=TEMPORAL_TASK_QUEUE=<queue_name>
+    existingSecret: ""
+
+    # -- Explicit Temporal properties (used if existingSecret is not set)
+    properties:
+      TEMPORAL_ADDRESS: ""
+      TEMPORAL_API_KEY: ""
+      TEMPORAL_ENABLE_TLS: "true"
+      TEMPORAL_EXTERNAL: "true"
+      TEMPORAL_NAMESPACE: ""
+      TEMPORAL_TASK_QUEUE: ""
+
+    # -- Map the keys from existing secret to the required fields
+    secretKeys:
+      TEMPORAL_ADDRESS: "TEMPORAL_ADDRESS"
+      TEMPORAL_API_KEY: "TEMPORAL_API_KEY"
+      TEMPORAL_ENABLE_TLS: "TEMPORAL_ENABLE_TLS"
+      TEMPORAL_EXTERNAL: "TEMPORAL_EXTERNAL"
+      TEMPORAL_NAMESPACE: "TEMPORAL_NAMESPACE"
+      TEMPORAL_TASK_QUEUE: "TEMPORAL_TASK_QUEUE"
+
   # -- Temporal server configuration
   server:
     # -- Temporal server image configuration
