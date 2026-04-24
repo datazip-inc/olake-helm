@@ -309,10 +309,10 @@ spec:
               containerPort: 1261
           volumeMounts:
             - name: fusion-config
-              mountPath: /usr/local/amoro/conf/config.yaml
+              mountPath: /usr/local/fusion/conf/config.yaml
               subPath: config.yaml
             - name: fusion-config
-              mountPath: /usr/local/amoro/conf/pod-template.yaml
+              mountPath: /usr/local/fusion/conf/pod-template.yaml
               subPath: pod-template.yaml
             - name: spark-binaries
               mountPath: /opt/spark
@@ -320,8 +320,8 @@ spec:
               mountPath: /data/fusion-logs
               subPath: fusion-logs
           env:
-            - name: AMORO_CONF_DIR
-              value: "/usr/local/amoro/conf"
+            - name: FUSION_CONF_DIR
+              value: "/usr/local/fusion/conf"
             - name: LOG_DIR
               value: "/data/fusion-logs"
             {{- range $key, $value := .Values.global.env }}

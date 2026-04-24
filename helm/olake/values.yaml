@@ -571,7 +571,7 @@ elasticsearch:
 
 # Fusion configuration for Iceberg compaction and optimizer
 fusion:
-  # -- Enable Fusion (Amoro) components.
+  # -- Enable Fusion components.
   # Set to false to disable all Fusion resources.
   enabled: false
 
@@ -592,7 +592,7 @@ fusion:
     # -- Service account annotations for Fusion.
     annotations: {}
 
-  # --- Fusion (Amoro) container image
+  # --- Fusion container image
   image:
     repository: olakego/fusion
     tag: latest
@@ -610,7 +610,7 @@ fusion:
   resources: {}
 
   # --- Fusion pod security context
-  # Example customizations for Fusion (Amoro):
+  # Example customizations for Fusion:
   # securityContext:
   #   runAsNonRoot: false
   #   runAsUser: 1000
@@ -631,7 +631,7 @@ fusion:
   tolerations: []
   affinity: {}
   
-  # --- Amoro config shade properties
+  # --- AMS config shade properties
   shade:
     identifier: "default"
     sensitiveKeywords: "admin-password;database.password"
