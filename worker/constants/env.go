@@ -45,4 +45,7 @@ const (
 
 	// security context
 	EnvPodSecurityContext = "POD_SECURITY_CONTEXT"
+
+	// job pod resources (JSON-encoded corev1.ResourceRequirements)
+	EnvJobPodResources = "JOB_POD_RESOURCES"
 )

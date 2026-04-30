@@ -262,6 +262,21 @@ olakeWorker:
   #       cpu: "1000m"
   resources: {}
 
+  # -- Resource requirements for short-lived connector pods (sync, discover, check)
+  # spawned by the worker via the Kubernetes API. These are SEPARATE from the worker
+  # deployment's own `resources` above.
+  # Accepts a standard Kubernetes ResourceRequirements block.
+  # Defaults (when unset): requests cpu=100m, memory=256Mi, no limits.
+  # Example:
+  #   jobPodResources:
+  #     requests:
+  #       cpu: "500m"
+  #       memory: "1Gi"
+  #     limits:
+  #       cpu: "2"
+  #       memory: "4Gi"
+  jobPodResources: {}
+
   # -- Olake Worker security context
   # Example customizations:
   # securityContext:

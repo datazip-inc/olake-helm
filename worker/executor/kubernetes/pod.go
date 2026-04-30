@@ -131,6 +131,21 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 	return nil
 }
 
+// buildJobPodResources returns the ResourceRequirements for connector pods.
+// Operators can override via olakeWorker.jobPodResources (helm) -> JOB_POD_RESOURCES env (JSON).
+// When unset, falls back to the historical defaults: requests cpu=100m, memory=256Mi, no limits.
+func (k *KubernetesExecutor) buildJobPodResources() corev1.ResourceRequirements {
+	if k.config.JobPodResources != nil {
+		return *k.config.JobPodResources
+	}
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: k.parseQuantity("256Mi"),
+			corev1.ResourceCPU:    k.parseQuantity("100m"),
+		},
+	}
+}
+
 func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
@@ -182,13 +197,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							SubPath:   subDir,
 						},
 					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
-						},
-						// No limits for flexibility
-					},
+					Resources: k.buildJobPodResources(),
 					Env: []corev1.EnvVar{
 						{
 							Name:  "OLAKE_WORKFLOW_ID",
