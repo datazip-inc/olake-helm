@@ -31,10 +31,22 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Common labels
+Common labels.
+
+Note: `app.kubernetes.io/name` is intentionally NOT emitted here. Most
+templates in this chart hard-code a per-component `app.kubernetes.io/name`
+value (e.g. `temporal`, `elasticsearch`, `olake-ui`) directly in their
+labels block, and selectors elsewhere in the chart match on those values.
+If this helper also emitted `app.kubernetes.io/name: olake`, the rendered
+labels block would contain the same key twice — strict YAML parsers reject
+that as invalid, and lenient parsers silently last-write-wins which
+overwrites the component-specific name and breaks selectors.
+
+Templates that need `app.kubernetes.io/name` (e.g. ServiceAccounts that
+are referenced by `serviceAccountName: ` in a Deployment) should set it
+explicitly before including this helper.
 */}}
 {{- define "olake.labels" -}}
-app.kubernetes.io/name: {{ include "olake.name" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 olake.io/part-of: olake
 {{- end }}
