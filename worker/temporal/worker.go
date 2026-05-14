@@ -54,7 +54,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 		namespace = constants.DefaultTemporalNamespace
 	}
 
-	if viper.GetBool(constants.EnvTemporalExternal) {
+	if viper.GetBool(constants.EnvTemporalExternal) && viper.GetString(constants.EnvTemporalAPIKey) != "" {
 		externalClient, err := NewExternalClient()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create external Temporal client: %w", err)
