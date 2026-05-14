@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -24,12 +25,29 @@ type Temporal struct {
 func NewClient() (*Temporal, error) {
 	var temporalClient *Temporal
 
+	namespace := viper.GetString(constants.EnvTemporalNamespace)
+	if namespace == "" {
+		namespace = constants.DefaultTemporalNamespace
+	}
+
 	err := utils.RetryWithBackoff(func() error {
-		client, err := client.Dial(client.Options{
-			HostPort: viper.GetString(constants.EnvTemporalAddress),
-			Logger:   logger.Log(context.Background()),
-			Namespace: constants.DefaultTemporalNamespace,
-		})
+		opts := client.Options{
+			HostPort:  viper.GetString(constants.EnvTemporalAddress),
+			Logger:    logger.Log(context.Background()),
+			Namespace: namespace,
+		}
+
+		if viper.GetBool(constants.EnvTemporalEnableTLS) {
+			opts.ConnectionOptions = client.ConnectionOptions{
+				TLS: &tls.Config{},
+			}
+		}
+
+		if apiKey := viper.GetString(constants.EnvTemporalAPIKey); apiKey != "" {
+			opts.Credentials = client.NewAPIKeyStaticCredentials(apiKey)
+		}
+
+		client, err := client.Dial(opts)
 		if err != nil {
 			return err
 		}
@@ -55,7 +73,7 @@ func (t *Temporal) GetClient() client.Client {
 	return t.client
 }
 
-// SetWorkflowRetentionPeriod sets the workflow execution retention period for the default namespace.
+// SetWorkflowRetentionPeriod sets the workflow execution retention period for the namespace.
 // This ensures workflow history is available for debugging (defaults to 7 days).
 // Handles both fresh installs and upgrades from shorter retention periods.
 // Fatal: worker fails to start if this fails.
@@ -65,16 +83,35 @@ func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 		return fmt.Errorf("failed to parse retention string: %s", err)
 	}
 
+	namespace := viper.GetString(constants.EnvTemporalNamespace)
+	if namespace == "" {
+		namespace = constants.DefaultTemporalNamespace
+	}
+
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		externalClient, err := NewExternalClient()
+		if err != nil {
+			return fmt.Errorf("failed to create external Temporal client: %w", err)
+		}
+		defer externalClient.Close()
+
+		days := int32(retentionPeriod.Hours() / 24)
+		if days < 1 {
+			days = 1
+		}
+		return externalClient.SetNamespaceRetention(ctx, namespace, days)
+	}
+
 	_, err = t.client.WorkflowService().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: constants.DefaultTemporalNamespace,
+		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionTtl: durationpb.New(retentionPeriod),
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update namespace %s retention: %s", constants.DefaultTemporalNamespace, err)
+		return fmt.Errorf("failed to update namespace %s retention: %s", namespace, err)
 	}
 
-	logger.Infof("namespace %s retention set to %s", constants.DefaultTemporalNamespace, retentionPeriod)
+	logger.Infof("namespace %s retention set to %s", namespace, retentionPeriod)
 	return nil
 }

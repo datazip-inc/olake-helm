@@ -2,10 +2,12 @@ package temporal
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/spf13/viper"
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	enums "go.temporal.io/api/enums/v1"
@@ -45,17 +47,35 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	w.RegisterActivity(activitiesInstance.PostClearActivity)
 	w.RegisterActivity(activitiesInstance.SendWebhookNotificationActivity)
 
-	// Register search attributes
-	// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
-	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
-		Namespace:        constants.DefaultTemporalNamespace,
-	})
-	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
-		return nil, err
+	searchAttributes := map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD}
+
+	namespace := viper.GetString(constants.EnvTemporalNamespace)
+	if namespace == "" {
+		namespace = constants.DefaultTemporalNamespace
 	}
 
-	logger.Infof("worker client created successfully")	
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		externalClient, err := NewExternalClient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create external Temporal client: %w", err)
+		}
+		defer externalClient.Close()
+
+		if err := externalClient.AddSearchAttributes(ctx, namespace, searchAttributes); err != nil {
+			return nil, fmt.Errorf("failed to add search attributes: %w", err)
+		}
+	} else {
+		// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
+		_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+			SearchAttributes: searchAttributes,
+			Namespace:        namespace,
+		})
+		if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
+			return nil, err
+		}
+	}
+
+	logger.Infof("worker client created successfully")
 
 	return &Worker{
 		worker:   w,

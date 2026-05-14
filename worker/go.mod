@@ -14,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	go.temporal.io/api v1.51.0
+	go.temporal.io/cloud-sdk v0.8.0
 	go.temporal.io/sdk v1.36.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
