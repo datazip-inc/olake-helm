@@ -34,7 +34,6 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "olake.labels" -}}
-app.kubernetes.io/name: {{ include "olake.name" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 olake.io/part-of: olake
 {{- end }}
