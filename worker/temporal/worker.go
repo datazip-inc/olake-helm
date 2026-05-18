@@ -51,14 +51,8 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 
 	namespace := utils.GetTemporalNamespace()
 
-	if utils.IsTemporalCloud() {
-		externalClient, err := NewExternalClient()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create external Temporal client: %w", err)
-		}
-		defer externalClient.Close()
-
-		if err := externalClient.AddSearchAttributes(ctx, namespace, searchAttributes); err != nil {
+	if t.cloudClient != nil {
+		if err := t.cloudClient.AddSearchAttributes(ctx, namespace, searchAttributes); err != nil {
 			return nil, fmt.Errorf("failed to add search attributes: %w", err)
 		}
 	} else {
