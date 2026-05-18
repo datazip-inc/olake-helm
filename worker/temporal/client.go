@@ -25,7 +25,10 @@ type Temporal struct {
 func NewClient() (*Temporal, error) {
 	var temporalClient *Temporal
 
-	namespace := utils.GetTemporalNamespace()
+	namespace := constants.DefaultTemporalNamespace
+	if utils.IsTemporalCloud() {
+		namespace = utils.GetTemporalNamespace()
+	}
 
 	err := utils.RetryWithBackoff(func() error {
 		opts := client.Options{
