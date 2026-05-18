@@ -25,10 +25,7 @@ type Temporal struct {
 func NewClient() (*Temporal, error) {
 	var temporalClient *Temporal
 
-	namespace := constants.DefaultTemporalNamespace
-	if utils.IsTemporalCloud() {
-		namespace = utils.GetTemporalNamespace()
-	}
+	namespace := utils.GetTemporalNamespace()
 
 	err := utils.RetryWithBackoff(func() error {
 		opts := client.Options{
@@ -83,7 +80,7 @@ func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 		return fmt.Errorf("failed to parse retention string: %s", err)
 	}
 
-	namespace := constants.DefaultTemporalNamespace
+	namespace := utils.GetTemporalNamespace()
 
 	if utils.IsTemporalCloud() {
 		externalClient, err := NewExternalClient()
@@ -92,7 +89,6 @@ func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 		}
 		defer externalClient.Close()
 
-		namespace = utils.GetTemporalNamespace()
 		retentionDays := int32(retentionPeriod.Hours() / 24)
 		if retentionDays < 1 {
 			retentionDays = 1

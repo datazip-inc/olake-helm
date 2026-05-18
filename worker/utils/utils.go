@@ -84,6 +84,11 @@ func GetWorkerEnvVars() map[string]string {
 		"PERSISTENT_DIR":          nil,
 		"CONTAINER_REGISTRY_BASE": nil,
 		"TEMPORAL_ADDRESS":        nil,
+		"TEMPORAL_API_KEY":        nil,
+		"TEMPORAL_EXTERNAL":       nil,
+		"TEMPORAL_ENABLE_TLS":     nil,
+		"TEMPORAL_NAMESPACE":      nil,
+		"TEMPORAL_TASK_QUEUE":     nil,
 		"OLAKE_SECRET_KEY":        nil,
 		"_":                       nil,
 	}
@@ -239,16 +244,24 @@ func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
 
+// GetTemporalNamespace returns the configured namespace when TEMPORAL_EXTERNAL is true,
+// otherwise returns the default namespace.
 func GetTemporalNamespace() string {
-	if ns := viper.GetString(constants.EnvTemporalNamespace); ns != "" {
-		return ns
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		if ns := viper.GetString(constants.EnvTemporalNamespace); ns != "" {
+			return ns
+		}
 	}
 	return constants.DefaultTemporalNamespace
 }
 
+// GetTemporalTaskQueue returns the configured task queue when TEMPORAL_EXTERNAL is true,
+// otherwise returns the default task queue.
 func GetTemporalTaskQueue() string {
-	if queue := viper.GetString(constants.EnvTemporalTaskQueue); queue != "" {
-		return queue
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		if queue := viper.GetString(constants.EnvTemporalTaskQueue); queue != "" {
+			return queue
+		}
 	}
 	return constants.TaskQueue
 }
