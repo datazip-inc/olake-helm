@@ -46,8 +46,11 @@ func (c *ExternalClient) Close() {
 	}
 }
 
-// waitForAsyncOperation polls the async operation until it completes
+// waitForAsyncOperation polls the async operation until it completes or times out.
 func (c *ExternalClient) waitForAsyncOperation(ctx context.Context, opID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
 	service := c.client.CloudService()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
