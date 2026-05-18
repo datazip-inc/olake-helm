@@ -6,6 +6,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
 
@@ -32,7 +33,12 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 			NewLoggingInterceptor(),
 		},
 	}
-	w := worker.New(t.GetClient(), constants.TaskQueue, workerOptions)
+	var w worker.Worker
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		w = worker.New(t.GetClient(), utils.GetTemporalTaskQueue(), workerOptions)
+	} else {
+		w = worker.New(t.GetClient(), constants.TaskQueue, workerOptions)
+	}
 
 	// regsiter workflows
 	w.RegisterWorkflow(RunSyncWorkflow)
@@ -49,18 +55,16 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 
 	searchAttributes := map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD}
 
-	namespace := viper.GetString(constants.EnvTemporalNamespace)
-	if namespace == "" {
-		namespace = constants.DefaultTemporalNamespace
-	}
+	namespace := constants.DefaultTemporalNamespace
 
-	if viper.GetBool(constants.EnvTemporalExternal) && viper.GetString(constants.EnvTemporalAPIKey) != "" {
+	if utils.IsTemporalCloud() {
 		externalClient, err := NewExternalClient()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create external Temporal client: %w", err)
 		}
 		defer externalClient.Close()
 
+		namespace = utils.GetTemporalNamespace()
 		if err := externalClient.AddSearchAttributes(ctx, namespace, searchAttributes); err != nil {
 			return nil, fmt.Errorf("failed to add search attributes: %w", err)
 		}

@@ -21,6 +21,7 @@ const (
 	EnvTemporalAPIKey          = "TEMPORAL_API_KEY"
 	EnvTemporalNamespace       = "TEMPORAL_NAMESPACE"
 	EnvTemporalEnableTLS       = "TEMPORAL_ENABLE_TLS"
+	EnvTemporalTaskQueue       = "TEMPORAL_TASK_QUEUE"
 
 	// registry
 	ContainerRegistryBase = "CONTAINER_REGISTRY_BASE"

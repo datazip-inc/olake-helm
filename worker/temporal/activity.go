@@ -13,6 +13,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
+	"github.com/spf13/viper"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -155,13 +156,18 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
+	taskQueue := constants.TaskQueue
+	if viper.GetBool(constants.EnvTemporalExternal) {
+		taskQueue = utils.GetTemporalTaskQueue()
+	}
+
 	err := handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
 				ID:        workflowID,
 				Workflow:  RunSyncWorkflow,
 				Args:      []any{req},
-				TaskQueue: constants.TaskQueue,
+				TaskQueue: taskQueue,
 			}
 
 			if input.Description.Schedule.State != nil {

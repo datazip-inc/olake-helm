@@ -239,6 +239,24 @@ func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
 
+func GetTemporalNamespace() string {
+	if ns := viper.GetString(constants.EnvTemporalNamespace); ns != "" {
+		return ns
+	}
+	return constants.DefaultTemporalNamespace
+}
+
+func GetTemporalTaskQueue() string {
+	if queue := viper.GetString(constants.EnvTemporalTaskQueue); queue != "" {
+		return queue
+	}
+	return constants.TaskQueue
+}
+
+func IsTemporalCloud() bool {
+	return viper.GetBool(constants.EnvTemporalExternal) && viper.GetString(constants.EnvTemporalAPIKey) != ""
+}
+
 func GetExecutorEnvironment() string {
 	if viper.GetString(constants.EnvKubernetesServiceHost) != "" {
 		return string(types.Kubernetes)

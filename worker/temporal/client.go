@@ -25,10 +25,7 @@ type Temporal struct {
 func NewClient() (*Temporal, error) {
 	var temporalClient *Temporal
 
-	namespace := viper.GetString(constants.EnvTemporalNamespace)
-	if namespace == "" {
-		namespace = constants.DefaultTemporalNamespace
-	}
+	namespace := utils.GetTemporalNamespace()
 
 	err := utils.RetryWithBackoff(func() error {
 		opts := client.Options{
@@ -83,23 +80,21 @@ func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 		return fmt.Errorf("failed to parse retention string: %s", err)
 	}
 
-	namespace := viper.GetString(constants.EnvTemporalNamespace)
-	if namespace == "" {
-		namespace = constants.DefaultTemporalNamespace
-	}
+	namespace := constants.DefaultTemporalNamespace
 
-	if viper.GetBool(constants.EnvTemporalExternal) && viper.GetString(constants.EnvTemporalAPIKey) != "" {
+	if utils.IsTemporalCloud() {
 		externalClient, err := NewExternalClient()
 		if err != nil {
 			return fmt.Errorf("failed to create external Temporal client: %w", err)
 		}
 		defer externalClient.Close()
 
-		days := int32(retentionPeriod.Hours() / 24)
-		if days < 1 {
-			days = 1
+		namespace = utils.GetTemporalNamespace()
+		retentionDays := int32(retentionPeriod.Hours() / 24)
+		if retentionDays < 1 {
+			retentionDays = 1
 		}
-		return externalClient.SetNamespaceRetention(ctx, namespace, days)
+		return externalClient.SetNamespaceRetention(ctx, namespace, retentionDays)
 	}
 
 	_, err = t.client.WorkflowService().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{

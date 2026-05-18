@@ -79,19 +79,9 @@ func (c *ExternalClient) waitForAsyncOperation(ctx context.Context, opID string)
 
 // SetNamespaceRetention sets the workflow execution retention period via external Temporal API
 func (c *ExternalClient) SetNamespaceRetention(ctx context.Context, namespace string, retentionDays int32) error {
-	service := c.client.CloudService()
-
-	getResp, err := service.GetNamespace(ctx, &cloudservice.GetNamespaceRequest{
-		Namespace: namespace,
-	})
+	ns, spec, err := c.getNamespaceAndSpec(ctx, namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get namespace %s: %w", namespace, err)
-	}
-
-	ns := getResp.GetNamespace()
-	spec := ns.GetSpec()
-	if spec == nil {
-		return fmt.Errorf("namespace %s has no spec", namespace)
+		return err
 	}
 
 	if spec.GetRetentionDays() == retentionDays {
@@ -100,7 +90,7 @@ func (c *ExternalClient) SetNamespaceRetention(ctx context.Context, namespace st
 	}
 
 	spec.RetentionDays = retentionDays
-	updateResp, err := service.UpdateNamespace(ctx, &cloudservice.UpdateNamespaceRequest{
+	updateResp, err := c.client.CloudService().UpdateNamespace(ctx, &cloudservice.UpdateNamespaceRequest{
 		Namespace:       namespace,
 		Spec:            spec,
 		ResourceVersion: ns.GetResourceVersion(),
@@ -121,25 +111,15 @@ func (c *ExternalClient) SetNamespaceRetention(ctx context.Context, namespace st
 
 // AddSearchAttributes adds custom search attributes via external Temporal API
 func (c *ExternalClient) AddSearchAttributes(ctx context.Context, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
-	service := c.client.CloudService()
-
-	getResp, err := service.GetNamespace(ctx, &cloudservice.GetNamespaceRequest{
-		Namespace: namespace,
-	})
+	ns, spec, err := c.getNamespaceAndSpec(ctx, namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get namespace %s: %w", namespace, err)
+		return err
 	}
 
-	ns := getResp.GetNamespace()
-	spec := ns.GetSpec()
-	if spec == nil {
-		return fmt.Errorf("namespace %s has no spec", namespace)
+	if spec.SearchAttributes == nil {
+		spec.SearchAttributes = make(map[string]namespacepb.NamespaceSpec_SearchAttributeType)
 	}
-
-	existingAttributes := spec.GetSearchAttributes()
-	if existingAttributes == nil {
-		existingAttributes = make(map[string]namespacepb.NamespaceSpec_SearchAttributeType)
-	}
+	existingAttributes := spec.SearchAttributes
 
 	needsUpdate := false
 
@@ -174,7 +154,7 @@ func (c *ExternalClient) AddSearchAttributes(ctx context.Context, namespace stri
 		return nil
 	}
 
-	updateResp, err := service.UpdateNamespace(ctx, &cloudservice.UpdateNamespaceRequest{
+	updateResp, err := c.client.CloudService().UpdateNamespace(ctx, &cloudservice.UpdateNamespaceRequest{
 		Namespace:       namespace,
 		Spec:            spec,
 		ResourceVersion: ns.GetResourceVersion(),
@@ -191,4 +171,19 @@ func (c *ExternalClient) AddSearchAttributes(ctx context.Context, namespace stri
 
 	logger.Infof("custom search attributes successfully added to namespace %s in external Temporal", namespace)
 	return nil
+}
+
+func (c *ExternalClient) getNamespaceAndSpec(ctx context.Context, namespace string) (*namespacepb.Namespace, *namespacepb.NamespaceSpec, error) {
+	namespaceResp, err := c.client.CloudService().GetNamespace(ctx, &cloudservice.GetNamespaceRequest{
+		Namespace: namespace,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get namespace %s: %w", namespace, err)
+	}
+	ns := namespaceResp.GetNamespace()
+	spec := ns.GetSpec()
+	if spec == nil {
+		return nil, nil, fmt.Errorf("namespace %s has no spec", namespace)
+	}
+	return ns, spec, nil
 }
