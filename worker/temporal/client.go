@@ -18,17 +18,15 @@ import (
 
 // Temporal provides methods to interact with Temporal
 type Temporal struct {
-	client client.Client
+	client      client.Client
+	cloudClient *CloudClient // non-nil only when IsTemporalCloud() is true
 }
 
-// NewClient creates a new Temporal client
+// NewClient creates a new Temporal client.
 func NewClient() (*Temporal, error) {
 	var temporalClient *Temporal
 
-	namespace := constants.DefaultTemporalNamespace
-	if utils.IsTemporalCloud() {
-		namespace = utils.GetTemporalNamespace()
-	}
+	namespace := utils.GetTemporalNamespace()
 
 	err := utils.RetryWithBackoff(func() error {
 		opts := client.Options{
@@ -60,11 +58,23 @@ func NewClient() (*Temporal, error) {
 		return nil, fmt.Errorf("failed to create Temporal client: %s", err)
 	}
 
+	if utils.IsTemporalCloud() {
+		cloudClient, err := NewCloudClient()
+		if err != nil {
+			temporalClient.Close()
+			return nil, fmt.Errorf("failed to create Temporal Cloud client: %w", err)
+		}
+		temporalClient.cloudClient = cloudClient
+	}
+
 	return temporalClient, nil
 }
 
-// Close closes the Temporal client
+// Close closes the Temporal client and, if initialised, the cloud management client.
 func (t *Temporal) Close() {
+	if t.cloudClient != nil {
+		t.cloudClient.Close()
+	}
 	if t.client != nil {
 		t.client.Close()
 	}
@@ -83,21 +93,14 @@ func (t *Temporal) SetWorkflowRetentionPeriod(ctx context.Context) error {
 		return fmt.Errorf("failed to parse retention string: %s", err)
 	}
 
-	namespace := constants.DefaultTemporalNamespace
+	namespace := utils.GetTemporalNamespace()
 
-	if utils.IsTemporalCloud() {
-		externalClient, err := NewExternalClient()
-		if err != nil {
-			return fmt.Errorf("failed to create external Temporal client: %w", err)
-		}
-		defer externalClient.Close()
-
-		namespace = utils.GetTemporalNamespace()
+	if t.cloudClient != nil {
 		retentionDays := int32(retentionPeriod.Hours() / 24)
 		if retentionDays < 1 {
 			retentionDays = 1
 		}
-		return externalClient.SetNamespaceRetention(ctx, namespace, retentionDays)
+		return t.cloudClient.SetNamespaceRetention(ctx, namespace, retentionDays)
 	}
 
 	_, err = t.client.WorkflowService().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{

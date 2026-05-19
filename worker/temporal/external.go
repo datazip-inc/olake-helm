@@ -15,13 +15,13 @@ import (
 	"go.temporal.io/cloud-sdk/cloudclient"
 )
 
-// ExternalClient wraps the Temporal Cloud API client
-type ExternalClient struct {
+// CloudClient wraps the Temporal Cloud API client
+type CloudClient struct {
 	client *cloudclient.Client
 }
 
-// NewExternalClient creates a new Temporal Cloud API client
-func NewExternalClient() (*ExternalClient, error) {
+// NewCloudClient creates a new Temporal Cloud management API client
+func NewCloudClient() (*CloudClient, error) {
 	apiKey := viper.GetString(constants.EnvTemporalAPIKey)
 	if apiKey == "" {
 		return nil, fmt.Errorf("TEMPORAL_API_KEY is required for external Temporal")
@@ -31,23 +31,26 @@ func NewExternalClient() (*ExternalClient, error) {
 		APIKey: apiKey,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create external Temporal client: %w", err)
+		return nil, fmt.Errorf("failed to create Temporal Cloud client: %w", err)
 	}
 
-	return &ExternalClient{
+	return &CloudClient{
 		client: client,
 	}, nil
 }
 
-// Close closes the external Temporal API client
-func (c *ExternalClient) Close() {
+// Close closes the Temporal Cloud management API client
+func (c *CloudClient) Close() {
 	if c.client != nil {
 		c.client.Close()
 	}
 }
 
-// waitForAsyncOperation polls the async operation until it completes
-func (c *ExternalClient) waitForAsyncOperation(ctx context.Context, opID string) error {
+// waitForAsyncOperation polls the async operation until it completes or times out.
+func (c *CloudClient) waitForAsyncOperation(ctx context.Context, opID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
 	service := c.client.CloudService()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -78,7 +81,7 @@ func (c *ExternalClient) waitForAsyncOperation(ctx context.Context, opID string)
 }
 
 // SetNamespaceRetention sets the workflow execution retention period via external Temporal API
-func (c *ExternalClient) SetNamespaceRetention(ctx context.Context, namespace string, retentionDays int32) error {
+func (c *CloudClient) SetNamespaceRetention(ctx context.Context, namespace string, retentionDays int32) error {
 	ns, spec, err := c.getNamespaceAndSpec(ctx, namespace)
 	if err != nil {
 		return err
@@ -110,7 +113,7 @@ func (c *ExternalClient) SetNamespaceRetention(ctx context.Context, namespace st
 }
 
 // AddSearchAttributes adds custom search attributes via external Temporal API
-func (c *ExternalClient) AddSearchAttributes(ctx context.Context, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
+func (c *CloudClient) AddSearchAttributes(ctx context.Context, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
 	ns, spec, err := c.getNamespaceAndSpec(ctx, namespace)
 	if err != nil {
 		return err
@@ -173,7 +176,7 @@ func (c *ExternalClient) AddSearchAttributes(ctx context.Context, namespace stri
 	return nil
 }
 
-func (c *ExternalClient) getNamespaceAndSpec(ctx context.Context, namespace string) (*namespacepb.Namespace, *namespacepb.NamespaceSpec, error) {
+func (c *CloudClient) getNamespaceAndSpec(ctx context.Context, namespace string) (*namespacepb.Namespace, *namespacepb.NamespaceSpec, error) {
 	namespaceResp, err := c.client.CloudService().GetNamespace(ctx, &cloudservice.GetNamespaceRequest{
 		Namespace: namespace,
 	})
