@@ -2,9 +2,11 @@ package temporal
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 
 	"github.com/datazip-inc/olake-helm/worker/executor"
@@ -30,7 +32,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 			NewLoggingInterceptor(),
 		},
 	}
-	w := worker.New(t.GetClient(), constants.TaskQueue, workerOptions)
+	w := worker.New(t.GetClient(), utils.GetTemporalTaskQueue(), workerOptions)
 
 	// regsiter workflows
 	w.RegisterWorkflow(RunSyncWorkflow)
@@ -45,17 +47,26 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	w.RegisterActivity(activitiesInstance.PostClearActivity)
 	w.RegisterActivity(activitiesInstance.SendWebhookNotificationActivity)
 
-	// Register search attributes
-	// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
-	_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD},
-		Namespace:        constants.DefaultTemporalNamespace,
-	})
-	if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
-		return nil, err
+	searchAttributes := map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD}
+
+	namespace := utils.GetTemporalNamespace()
+
+	if t.cloudClient != nil {
+		if err := t.cloudClient.AddSearchAttributes(ctx, namespace, searchAttributes); err != nil {
+			return nil, fmt.Errorf("failed to add search attributes: %w", err)
+		}
+	} else {
+		// Namespace is required for SQL/Postgres visibility store, optional for Elasticsearch
+		_, err := t.GetClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+			SearchAttributes: searchAttributes,
+			Namespace:        namespace,
+		})
+		if err != nil && serviceerror.ToStatus(err).Code() != codes.AlreadyExists {
+			return nil, err
+		}
 	}
 
-	logger.Infof("worker client created successfully")	
+	logger.Infof("worker client created successfully")
 
 	return &Worker{
 		worker:   w,

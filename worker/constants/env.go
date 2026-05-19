@@ -17,6 +17,11 @@ const (
 	// temporal
 	EnvTemporalAddress         = "TEMPORAL_ADDRESS"
 	EnvTemporalRetentionPeriod = "TEMPORAL_RETENTION_PERIOD"
+	EnvTemporalExternal        = "TEMPORAL_EXTERNAL"
+	EnvTemporalAPIKey          = "TEMPORAL_API_KEY"
+	EnvTemporalNamespace       = "TEMPORAL_NAMESPACE"
+	EnvTemporalEnableTLS       = "TEMPORAL_ENABLE_TLS"
+	EnvTemporalTaskQueue       = "TEMPORAL_TASK_QUEUE"
 
 	// registry
 	ContainerRegistryBase = "CONTAINER_REGISTRY_BASE"

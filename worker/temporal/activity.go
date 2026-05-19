@@ -155,13 +155,15 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
+	taskQueue := utils.GetTemporalTaskQueue()
+
 	err := handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Action = &client.ScheduleWorkflowAction{
 				ID:        workflowID,
 				Workflow:  RunSyncWorkflow,
 				Args:      []any{req},
-				TaskQueue: constants.TaskQueue,
+				TaskQueue: taskQueue,
 			}
 
 			if input.Description.Schedule.State != nil {
