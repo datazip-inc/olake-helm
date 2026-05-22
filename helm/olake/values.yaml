@@ -157,6 +157,14 @@ olakeUI:
   #   env:
   #     CUSTOM_VAR: "value"
   #     FEATURE_FLAG: "true"
+  #
+  # Fusion-only / air-gapped deployments: disable upstream container registry
+  # queries used to enumerate CDC connector versions. With discovery off, the
+  # /versions and /spec endpoints return DEFAULT_CONNECTOR_VERSION directly
+  # without contacting Docker Hub / ECR / GCR.
+  #   env:
+  #     CONNECTOR_DISCOVERY_ENABLED: "false"
+  #     DEFAULT_CONNECTOR_VERSION: "v0.3.18"
   env: {}
 
   # -- Ingress configuration for external access

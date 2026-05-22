@@ -321,6 +321,21 @@ When set, **all** container images are automatically prefixed with this registry
 > - Pass registry credentials as environment variables under `olakeUI.env` (e.g., `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` for ECR), or
 > - Attach the required read-only registry permissions to the IAM role referenced by `global.jobServiceAccount`.
 
+### Disabling Connector Discovery (Fusion-only / Air-gapped)
+
+By default the `olake-ui` server queries the upstream container registry on every `/versions`, `/spec`, and `/test-connection` call to enumerate available CDC connector image tags. In Fusion-only deployments (Iceberg maintenance against an existing catalog, no CDC connectors used) this generates avoidable outbound traffic, log noise, and — when the registry rate-limits or 504s — user-facing slowness in the UI.
+
+Set `CONNECTOR_DISCOVERY_ENABLED: "false"` to skip those registry queries entirely. When discovery is disabled, `DEFAULT_CONNECTOR_VERSION` must be set; it's returned as the single available version for any connector type.
+
+```yaml
+olakeUI:
+  env:
+    CONNECTOR_DISCOVERY_ENABLED: "false"
+    DEFAULT_CONNECTOR_VERSION: "v0.3.18"
+```
+
+This is also useful in air-gapped clusters where the chart's private-registry mirror does not expose a Docker Registry HTTP API v2 (or where the listing API is intentionally locked down).
+
 ## Monitoring and Troubleshooting
 
 ### View Logs
