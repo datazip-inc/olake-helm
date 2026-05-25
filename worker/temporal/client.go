@@ -37,7 +37,9 @@ func NewClient() (*Temporal, error) {
 
 		if viper.GetBool(constants.EnvTemporalEnableTLS) {
 			opts.ConnectionOptions = client.ConnectionOptions{
-				TLS: &tls.Config{}, // #nosec G402 -- Temporal SDK handles TLS negotiation internally
+				TLS: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
 			}
 		}
 
