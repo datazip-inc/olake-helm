@@ -14,9 +14,9 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 )
 
 const (
@@ -38,7 +38,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
-		reader, err := d.client.ImagePull(pullCtx, imageName, image.PullOptions{})
+		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 				log.Error("image pull timed out", "image", imageName)
@@ -66,7 +66,11 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 // getOrCreateContainer creates a container or returns the ID of an existing one
 func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, error) {
 	log := logger.Log(ctx)
-	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
+	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config:     containerConfig,
+		HostConfig: hostConfig,
+		Name:       containerName,
+	})
 	if err != nil {
 		if errdefs.IsAlreadyExists(err) || errdefs.IsConflict(err) {
 			log.Info("container already exists, resuming", "containerName", containerName)
@@ -83,7 +87,7 @@ func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 
 // getContainerLogs retrieves and properly parses logs from a container using stdcopy
 func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID string) ([]byte, error) {
-	reader, err := d.client.ContainerLogs(ctx, containerID, container.LogsOptions{
+	reader, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	})
@@ -110,16 +114,16 @@ func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID strin
 // getContainerState inspects a container and returns its state
 func (d *DockerExecutor) getContainerState(ctx context.Context, name, workflowID string) ContainerState {
 	log := logger.Log(ctx)
-	inspect, err := d.client.ContainerInspect(ctx, name)
-	if err != nil || inspect.ContainerJSONBase == nil || inspect.State == nil {
+	inspect, err := d.client.ContainerInspect(ctx, name, client.ContainerInspectOptions{})
+	if err != nil || inspect.Container.State == nil {
 		log.Debug("container inspect failed or state missing", "workflowID", workflowID, "containerName", name, "error", err)
 		return ContainerState{Exists: false}
 	}
 
-	running := inspect.State.Running
+	running := inspect.Container.State.Running
 	var ec *int
-	if !running && inspect.State.ExitCode != 0 {
-		code := inspect.State.ExitCode
+	if !running && inspect.Container.State.ExitCode != 0 {
+		code := inspect.Container.State.ExitCode
 		ec = &code
 	}
 	return ContainerState{Exists: true, Running: running, ExitCode: ec}
@@ -138,16 +142,16 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 
 	// Graceful stop with timeout
 	timeout := constants.ContainerStopTimeout
-	if err := d.client.ContainerStop(ctx, containerName, container.StopOptions{Timeout: &timeout}); err != nil {
+	if _, err := d.client.ContainerStop(ctx, containerName, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
 		log.Warn("docker stop failed, attempting kill", "workflowID", workflowID, "containerName", containerName, "error", err)
-		if kerr := d.client.ContainerKill(ctx, containerName, "SIGKILL"); kerr != nil {
+		if _, kerr := d.client.ContainerKill(ctx, containerName, client.ContainerKillOptions{Signal: "SIGKILL"}); kerr != nil {
 			log.Error("docker kill failed", "workflowID", workflowID, "containerName", containerName, "error", kerr)
 			return fmt.Errorf("docker kill failed: %s", kerr)
 		}
 	}
 
 	// Remove container
-	if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+	if _, err := d.client.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true}); err != nil {
 		log.Error("docker rm failed", "workflowID", workflowID, "containerName", containerName, "error", err)
 		return fmt.Errorf("workflowID %s: docker rm failed for %s: %s", workflowID, containerName, err)
 	}
@@ -158,7 +162,7 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 
 func (d *DockerExecutor) startContainer(ctx context.Context, containerID string) error {
 	log := logger.Log(ctx)
-	err := d.client.ContainerStart(ctx, containerID, container.StartOptions{})
+	_, err := d.client.ContainerStart(ctx, containerID, client.ContainerStartOptions{})
 	if err != nil && !errdefs.IsAlreadyExists(err) {
 		log.Error("failed to start container", "containerID", containerID, "error", err)
 		return fmt.Errorf("failed to start container %s: %s", containerID, err)
@@ -169,7 +173,8 @@ func (d *DockerExecutor) startContainer(ctx context.Context, containerID string)
 
 func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, containerID string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
-	statusCh, errCh := d.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+	waitResult := d.client.ContainerWait(ctx, containerID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+	statusCh, errCh := waitResult.Result, waitResult.Error
 
 	for {
 		if heartbeatFunc != nil {
@@ -235,7 +240,7 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 
 		if req.Command == types.ClearDestination {
 			log.Info("removing old container for clear-destination", "workflowID", req.WorkflowID, "containerName", containerName)
-			if err := d.client.ContainerRemove(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+			if _, err := d.client.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true}); err != nil {
 				log.Error("failed to remove old container", "containerName", containerName, "error", err)
 				return nil, fmt.Errorf("failed to remove old container: %w", err)
 			}
