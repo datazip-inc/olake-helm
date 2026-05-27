@@ -24,8 +24,14 @@ spec:
         app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: fusion
+        {{- with .Values.fusion.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       annotations:
         checksum/fusion-config: {{ include (print $.Template.BasePath "/fusion/configmap.yaml") . | sha256sum }}
+        {{- with .Values.fusion.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.fusion.nodeSelector }}
       nodeSelector:
