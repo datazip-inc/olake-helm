@@ -13,8 +13,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: shared-storage
     {{- include "olake.labels" . | nindent 4 }}
+  {{- if or .Values.nfsServer.enabled (not (.Values.nfsServer.external.deletePVCOnUninstall | default false)) }}
   annotations:
     "helm.sh/resource-policy": keep
+  {{- end }}
 spec:
   accessModes:
     - ReadWriteMany

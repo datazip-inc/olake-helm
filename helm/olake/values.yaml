@@ -330,6 +330,12 @@ nfsServer:
     # -- Size for the dynamically created external PVC
     size: "20Gi"
 
+    # -- Delete the external PVC on helm uninstall (opt-in; default false for backward compatibility)
+    # When false, the PVC keeps helm.sh/resource-policy: keep and persists after uninstall.
+    # When true and nfsServer.enabled is false, the keep policy is omitted so Helm deletes the PVC.
+    # Does not affect built-in NFS server PVCs.
+    deletePVCOnUninstall: false
+
   # -- Pod scheduling constraints
   nodeSelector: {}
 
