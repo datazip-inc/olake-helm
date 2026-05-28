@@ -114,9 +114,15 @@ spec:
         - name: OPTIMIZATION_GROUP
           value: spark-container
         - name: USERNAME
-          value: {{ .Values.fusion.adminUser | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+              key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A username key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.username }}{{ else }}AdminUsername{{ end }}
         - name: PASSWORD
-          value: {{ .Values.fusion.adminPassword | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+              key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A password key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.password }}{{ else }}AdminPassword{{ end }}
         {{- end }}
         # Database configuration
         - name: OLAKE_POSTGRES_HOST

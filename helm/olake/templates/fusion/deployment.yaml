@@ -335,13 +335,13 @@ spec:
             - name: "AMS_ADMIN__USERNAME"
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "olake.fullname" . }}-fusion
-                  key: AdminUsername
+                  name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+                  key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A username key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.username }}{{ else }}AdminUsername{{ end }}
             - name: "AMS_ADMIN__PASSWORD"
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "olake.fullname" . }}-fusion
-                  key: AdminPassword
+                  name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+                  key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A password key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.password }}{{ else }}AdminPassword{{ end }}
             - name: AMS_DATABASE_USERNAME
               valueFrom:
                 secretKeyRef:
