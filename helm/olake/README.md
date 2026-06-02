@@ -296,11 +296,11 @@ Reference a pre-existing Kubernetes Secret containing the Temporal credentials. 
 ```bash
 kubectl create secret generic my-temporal-secret \
   --from-literal=TEMPORAL_ADDRESS=<region>.<cloud>.api.temporal.io:7233 \
-  --from-literal=TEMPORAL_API_KEY=<your-api-key> \
+  --from-literal=TEMPORAL_API_KEY=<temporal-api-key> \
   --from-literal=TEMPORAL_ENABLE_TLS=true \
   --from-literal=TEMPORAL_EXTERNAL=true \
-  --from-literal=TEMPORAL_NAMESPACE=<your-namespace> \
-  --from-literal=TEMPORAL_TASK_QUEUE=<your-task-queue>
+  --from-literal=TEMPORAL_NAMESPACE=<temporal-namespace> \
+  --from-literal=TEMPORAL_TASK_QUEUE=<temporal-task-queue>
 ```
 
 **2. Configure `values.yaml`:**
