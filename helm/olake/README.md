@@ -284,6 +284,63 @@ postgresql:
       ssl_mode: "require"
 ```
 
+### External Temporal Configuration
+
+By default, OLake deploys an internal Temporal instance. To use [Temporal Cloud](https://temporal.io/cloud) or a self-hosted external Temporal server, disable the built-in deployment and supply connection credentials.
+
+Set `temporal.enabled: false` and configure credentials using one of the two options below.
+
+**Key environment variables:**
+
+| Variable | Description |
+|---|---|
+| `TEMPORAL_ADDRESS` | Temporal server address, e.g. `<region>.<cloud>.api.temporal.io:7233` |
+| `TEMPORAL_API_KEY` | API key for Temporal Cloud authentication |
+| `TEMPORAL_ENABLE_TLS` | Enable TLS for the connection (`true` / `false`) |
+| `TEMPORAL_EXTERNAL` | Set to `true` to use Temporal Cloud Control Plane API instead of standard `OperatorService` |
+| `TEMPORAL_NAMESPACE` | Temporal namespace (falls back to `default` if unset) |
+| `TEMPORAL_TASK_QUEUE` | Task queue name used by OLake workers |
+
+#### Option 1: Using `existingSecret`
+
+Reference a pre-existing Kubernetes Secret containing the Temporal credentials. The secret must be created before installing the chart.
+
+**1. Create the secret:**
+```bash
+kubectl create secret generic my-temporal-secret \
+  --from-literal=TEMPORAL_ADDRESS=<region>.<cloud>.api.temporal.io:7233 \
+  --from-literal=TEMPORAL_API_KEY=<your-api-key> \
+  --from-literal=TEMPORAL_ENABLE_TLS=true \
+  --from-literal=TEMPORAL_EXTERNAL=true \
+  --from-literal=TEMPORAL_NAMESPACE=<your-namespace> \
+  --from-literal=TEMPORAL_TASK_QUEUE=<your-task-queue>
+```
+
+**2. Configure `values.yaml`:**
+```yaml
+temporal:
+  enabled: false
+  external:
+    existingSecret: "my-temporal-secret"
+```
+
+#### Option 2: Using `properties`
+
+Specify connection details directly in `values.yaml`. The chart creates the Kubernetes Secret automatically at template time.
+
+```yaml
+temporal:
+  enabled: false
+  external:
+    properties:
+      TEMPORAL_ADDRESS: "<region>.<cloud>.api.temporal.io:7233"
+      TEMPORAL_API_KEY: "<your-api-key>"
+      TEMPORAL_ENABLE_TLS: "true"
+      TEMPORAL_EXTERNAL: "true"
+      TEMPORAL_NAMESPACE: "<your-namespace>"
+      TEMPORAL_TASK_QUEUE: "<your-task-queue>"
+```
+
 ### Global Environment Variables
 
 Environment variables defined in `global.env` are automatically propagated to OLake UI, OLake Workers, and Activity Pods:
