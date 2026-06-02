@@ -1,4 +1,4 @@
-{{- if .Values.temporal.ui.enabled }}
+{{- if and .Values.temporal.enabled .Values.temporal.ui.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
