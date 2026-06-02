@@ -308,7 +308,7 @@ kubectl create secret generic external-temporal-secret \
 temporal:
   enabled: false
   external:
-    existingSecret: "my-temporal-secret"
+    existingSecret: "external-temporal-secret"
 ```
 
 #### Option 2: Using `properties` (Recommended for ArgoCD/GitOps)
