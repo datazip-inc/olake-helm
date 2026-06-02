@@ -152,10 +152,6 @@ spec:
         # - name: POSTGRES_DB
         #   value: "postgres://$(POSTGRES_DB_USER):$(POSTGRES_DB_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=$(POSTGRES_DB_SSLMODE)"
         volumeMounts:
-        - name: olake-config
-          mountPath: /opt/backend/conf
-        - name: olake-config
-          mountPath: /app/olake-ui/conf
         - name: shared-storage
           mountPath: /tmp/olake-config
         {{- $defaultResources := dict 
@@ -188,9 +184,6 @@ spec:
         livenessProbe:
           {{- toYaml $livenessProbe | nindent 10 }}
       volumes:
-      - name: olake-config
-        configMap:
-          name: olake-ui-config
       - name: shared-storage
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
