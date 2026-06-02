@@ -294,7 +294,7 @@ Reference a pre-existing Kubernetes Secret containing the Temporal credentials. 
 
 **1. Create the secret:**
 ```bash
-kubectl create secret generic my-temporal-secret \
+kubectl create secret generic external-temporal-secret \
   --from-literal=TEMPORAL_ADDRESS=<region>.<cloud>.api.temporal.io:7233 \
   --from-literal=TEMPORAL_API_KEY=<temporal-api-key> \
   --from-literal=TEMPORAL_ENABLE_TLS=true \
@@ -321,11 +321,11 @@ temporal:
   external:
     properties:
       TEMPORAL_ADDRESS: "<region>.<cloud>.api.temporal.io:7233"
-      TEMPORAL_API_KEY: "<your-api-key>"
+      TEMPORAL_API_KEY: "<temporal-api-key>"
       TEMPORAL_ENABLE_TLS: "true"
       TEMPORAL_EXTERNAL: "true"
-      TEMPORAL_NAMESPACE: "<your-namespace>"
-      TEMPORAL_TASK_QUEUE: "<your-task-queue>"
+      TEMPORAL_NAMESPACE: "<temporal-namespace>"
+      TEMPORAL_TASK_QUEUE: "<temporal-task-queue>"
 ```
 
 ### Global Environment Variables
