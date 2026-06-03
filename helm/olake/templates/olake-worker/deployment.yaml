@@ -50,6 +50,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
+      {{- if .Values.temporal.enabled }}
       initContainers:
       - name: wait-for-temporal
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
@@ -64,6 +65,7 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      {{- end }}
       containers:
       - name: olake-workers
         image: "{{ include "olake.registryBase" . }}/{{ .Values.olakeWorker.image.repository }}:{{ .Values.olakeWorker.image.tag }}"
@@ -129,6 +131,10 @@ spec:
         envFrom:
         - configMapRef:
             name: olake-workers-config
+        {{- if not .Values.temporal.enabled }}
+        - secretRef:
+            name: {{ include "olake.temporal.secretName" . }}
+        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "256Mi" "cpu" "250m")
         }}
