@@ -1,0 +1,11 @@
+# TODO: Remove all entries below once Go 1.25.11 is available from Google's
+#       download servers. 
+#       Go 1.25.11 fixes these stdlib issues but was released before the toolchain was
+#       published to https://go.dev/dl
+#
+# GO-2026-5037: Inefficient candidate hostname parsing in crypto/x509
+GO-2026-5037
+# GO-2026-5038: Quadratic complexity in WordDecoder.DecodeHeader in mime
+GO-2026-5038
+# GO-2026-5039: Arbitrary inputs are included in errors without any escaping in net/textproto
+GO-2026-5039
