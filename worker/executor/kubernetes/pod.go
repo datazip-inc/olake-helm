@@ -66,6 +66,10 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
 				}
 			}
+			// Fall back to pod-level reason/message for evictions and other pod-level failures
+			if containerInfo == "" {
+				containerInfo = fmt.Sprintf("reason: %s, message: %s", pod.Status.Reason, pod.Status.Message)
+			}
 			log.Error("pod failed", "podName", podName, "containerInfo", containerInfo)
 			return fmt.Errorf("%w: pod %s failed (%s)", constants.ErrExecutionFailed, podName, containerInfo)
 		}
