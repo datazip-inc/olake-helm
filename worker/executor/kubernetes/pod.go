@@ -64,7 +64,14 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 				if status.State.Terminated != nil {
 					term := status.State.Terminated
 					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
+				} else {
+					// The only other two ContainerState options are Waiting and Running, so if it's not Terminated, it must be one of those
+					// refer: https://pkg.go.dev/k8s.io/api/core/v1#ContainerState
+					// Not expected as the pod is in Failed state with only one container, the container shouldnot be in Waiting or Running state, but logging for debugging purposes
+					containerInfo = fmt.Sprintf("container not terminated; reason: %s, message: %s", pod.Status.Reason, pod.Status.Message)
 				}
+			} else {
+				containerInfo = fmt.Sprintf("containerStatus not found; reason: %s, message: %s", pod.Status.Reason, pod.Status.Message)
 			}
 			log.Error("pod failed", "podName", podName, "containerInfo", containerInfo)
 			return fmt.Errorf("%w: pod %s failed (%s)", constants.ErrExecutionFailed, podName, containerInfo)
