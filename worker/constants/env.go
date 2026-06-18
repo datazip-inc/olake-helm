@@ -25,6 +25,11 @@ const (
 
 	// registry
 	ContainerRegistryBase = "CONTAINER_REGISTRY_BASE"
+	// Optional credentials for a generic private registry (Harbor, Nexus, Quay, GitLab,
+	// registry:2). Used to authenticate Docker-mode image pulls without `docker login`.
+	// Left empty for Docker Hub or for ECR/GCR (which authenticate via cloud IAM / host creds).
+	EnvRegistryUsername = "CONTAINER_REGISTRY_USERNAME"
+	EnvRegistryPassword = "CONTAINER_REGISTRY_PASSWORD"
 
 	// worker
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"

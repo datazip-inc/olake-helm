@@ -19,7 +19,11 @@ global:
   storageClass: ""
 
   # -- Global image pull secrets for private container registries
-  # List of Kubernetes secret names containing registry credentials
+  # List of Kubernetes secret names containing registry credentials.
+  # Applied to all long-running Deployments AND to the connector job pods spawned
+  # by olake-workers (via the job ServiceAccount), so private connector images
+  # (Harbor, Nexus, Quay, etc.) can be pulled during test/discover/sync.
+  # To cover connector job pods, also set `global.jobServiceAccount.create: true`.
   # NOTE: Secrets must be created separately using kubectl or other means
   # Examples:
   #   Create secret: kubectl create secret docker-registry my-registry-secret \
