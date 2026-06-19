@@ -4,6 +4,34 @@ entries:
   - annotations:
       helm.sh/schema-validation: "true"
     apiVersion: v2
+    appVersion: 0.3.9
+    created: "2026-06-19T15:56:25.102699429Z"
+    description: A Helm chart for OLake UI - Fastest open-source tool for replicating
+      Databases to Apache Iceberg or Data Lakehouse
+    digest: f6edafcee08ebfbb99b06937b9431a3ba3c0c6808647f46e8fe824ab065e3678
+    home: https://github.com/datazip-inc/olake-helm
+    keywords:
+    - data-pipeline
+    - elt
+    - kubernetes
+    - apache
+    - iceberg
+    - data-lakehouse
+    - workflow
+    - olake
+    maintainers:
+    - email: hello@olake.io
+      name: Team OLake
+    name: olake
+    sources:
+    - https://github.com/datazip-inc/olake-helm
+    type: application
+    urls:
+    - olake-0.0.21.tgz
+    version: 0.0.21
+  - annotations:
+      helm.sh/schema-validation: "true"
+    apiVersion: v2
     appVersion: 0.3.8
     created: "2026-06-11T13:25:22.343258573Z"
     description: A Helm chart for OLake UI - Fastest open-source tool for replicating
@@ -561,4 +589,4 @@ entries:
     urls:
     - https://github.com/datazip-inc/olake-helm/releases/download/olake-0.0.1/olake-0.0.1.tgz
     version: 0.0.1
-generated: "2026-06-11T13:25:22.34339011Z"
+generated: "2026-06-19T15:56:25.102853135Z"
