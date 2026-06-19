@@ -55,6 +55,7 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "olake.fusionServiceAccountName" . }}
       initContainers:
+      {{- if .Values.postgresql.enabled }}
       - name: create-fusion-database
         image: "{{ include "olake.registryBase" . }}/{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
         imagePullPolicy: IfNotPresent
@@ -69,7 +70,6 @@ spec:
             done
             echo "PostgreSQL service is resolvable!"
 
-            # Wait for PostgreSQL to be ready (port check)
             echo "Waiting for PostgreSQL to be ready (port check)..."
             until nc -z "${POSTGRES_HOST}" "${POSTGRES_PORT}"; do
               echo "PostgreSQL port not ready yet. Waiting..."
@@ -78,8 +78,6 @@ spec:
             echo "PostgreSQL port is ready!"
 
             export PGPASSWORD=${POSTGRES_PASSWORD}
-            
-            {{- if .Values.postgresql.enabled }}
             echo "Attempting to create database 'fusion'..."
             if ! psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -lqt | cut -d \| -f 1 | grep -qw "${POSTGRES_DATABASE}"; then
               psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE ${POSTGRES_DATABASE}"
@@ -87,35 +85,33 @@ spec:
             else
               echo "Database '${POSTGRES_DATABASE}' already exists. Skipping creation."
             fi
-            {{- else }}
-            echo "External PostgreSQL is enabled, skipping database creation for 'fusion'."
-            {{- end }}
         env:
           - name: POSTGRES_HOST
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+                key: host
           - name: POSTGRES_PORT
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+                key: port
           - name: POSTGRES_USER
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+                key: username
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+                key: password
           - name: POSTGRES_DATABASE
             valueFrom:
               secretKeyRef:
                 name: {{ include "olake.postgresql.secretName" . }}
-                key: {{ if .Values.postgresql.enabled }}"fusion_database"{{ else }}{{ .Values.postgresql.external.secretKeys.fusion_database }}{{ end }}
+                key: fusion_database
+      {{- end }}
       - name: install-spark
         image: {{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}
         command: ["sh", "-c", "cp -r /opt/spark/* /target/"]
@@ -341,13 +337,13 @@ spec:
             - name: "AMS_ADMIN__USERNAME"
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "olake.fullname" . }}-fusion
-                  key: AdminUsername
+                  name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+                  key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A username key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.username }}{{ else }}AdminUsername{{ end }}
             - name: "AMS_ADMIN__PASSWORD"
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "olake.fullname" . }}-fusion
-                  key: AdminPassword
+                  name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
+                  key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A password key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.password }}{{ else }}AdminPassword{{ end }}
             - name: AMS_DATABASE_USERNAME
               valueFrom:
                 secretKeyRef:

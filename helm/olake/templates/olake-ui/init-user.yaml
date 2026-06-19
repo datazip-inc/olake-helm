@@ -25,6 +25,10 @@ spec:
         app.kubernetes.io/component: init
     spec:
       restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
       - name: wait-for-olake-ui
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"

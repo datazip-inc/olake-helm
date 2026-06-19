@@ -43,7 +43,7 @@ data:
             {{ printf "jdbc:postgresql://postgresql:5432/fusion" }}
           {{- else }}
             {{- $externalPg := .Values.postgresql.external.properties }}
-            {{ printf "jdbc:postgresql://%s:%s/%s" $externalPg.host $externalPg.port $externalPg.fusion_database }}
+            {{ printf "jdbc:postgresql://%s:%s/%s" $externalPg.host ($externalPg.port | toString) $externalPg.fusion_database }}
           {{- end }}
 
       terminal:
