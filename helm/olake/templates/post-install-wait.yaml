@@ -21,6 +21,10 @@ spec:
         app.kubernetes.io/component: post-install-wait
     spec:
       restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: wait-for-stack
         image: "{{ include "olake.registryBase" . }}/curlimages/curl:8.1.2"
