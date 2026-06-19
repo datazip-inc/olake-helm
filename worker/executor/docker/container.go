@@ -3,6 +3,8 @@ package docker
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +18,9 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -38,7 +42,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
-		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{})
+		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{RegistryAuth: registryAuth()})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 				log.Error("image pull timed out", "image", imageName)
@@ -158,6 +162,29 @@ func (d *DockerExecutor) StopContainer(ctx context.Context, workflowID string) e
 
 	log.Info("container removed successfully", "workflowID", workflowID, "containerName", containerName)
 	return nil
+}
+
+// registryAuth returns the base64url-encoded registry credentials for image pulls,
+// built from CONTAINER_REGISTRY_USERNAME/PASSWORD. When unset it returns "", so the
+// Docker daemon falls back to its own credential store (host `docker login` / IAM) -
+// preserving existing behavior for Docker Hub, ECR, and GCR.
+func registryAuth() string {
+	username := strings.TrimSpace(viper.GetString(constants.EnvRegistryUsername))
+	password := strings.TrimSpace(viper.GetString(constants.EnvRegistryPassword))
+	if username == "" && password == "" {
+		return ""
+	}
+
+	authConfig := registry.AuthConfig{
+		Username:      username,
+		Password:      password,
+		ServerAddress: strings.TrimSpace(viper.GetString(constants.ContainerRegistryBase)),
+	}
+	encoded, err := json.Marshal(authConfig)
+	if err != nil {
+		return ""
+	}
+	return base64.URLEncoding.EncodeToString(encoded)
 }
 
 func (d *DockerExecutor) startContainer(ctx context.Context, containerID string) error {

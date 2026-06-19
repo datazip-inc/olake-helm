@@ -97,6 +97,10 @@ spec:
         env:
         - name: PERSISTENT_DIR
           value: "/tmp/olake-config"
+        {{- with index .Values.global.imagePullSecrets 0 }}
+        - name: DOCKER_CONFIG
+          value: /etc/olake/registry
+        {{- end }}
         {{- range $key, $value := .Values.global.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
@@ -173,6 +177,11 @@ spec:
           mountPath: /app/olake-ui/conf
         - name: shared-storage
           mountPath: /tmp/olake-config
+        {{- with index .Values.global.imagePullSecrets 0 }}
+        - name: registry-creds
+          mountPath: /etc/olake/registry
+          readOnly: true
+        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
@@ -209,3 +218,11 @@ spec:
       - name: shared-storage
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
+      {{- with index .Values.global.imagePullSecrets 0 }}
+      - name: registry-creds
+        secret:
+          secretName: {{ .name }}
+          items:
+            - key: .dockerconfigjson
+              path: config.json
+      {{- end }}
