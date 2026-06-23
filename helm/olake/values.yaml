@@ -670,7 +670,13 @@ fusion:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  
+
+  # -- Additional pod annotations
+  podAnnotations: {}
+
+  # -- Additional pod labels
+  podLabels: {}
+
   # --- Amoro config shade properties
   shade:
     identifier: "default"
