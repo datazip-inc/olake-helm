@@ -97,7 +97,7 @@ spec:
         env:
         - name: PERSISTENT_DIR
           value: "/tmp/olake-config"
-        {{- with index .Values.global.imagePullSecrets 0 }}
+        {{- with first .Values.global.imagePullSecrets }}
         - name: DOCKER_CONFIG
           value: /etc/olake/registry
         {{- end }}
@@ -177,7 +177,7 @@ spec:
           mountPath: /app/olake-ui/conf
         - name: shared-storage
           mountPath: /tmp/olake-config
-        {{- with index .Values.global.imagePullSecrets 0 }}
+        {{- with first .Values.global.imagePullSecrets }}
         - name: registry-creds
           mountPath: /etc/olake/registry
           readOnly: true
@@ -218,7 +218,7 @@ spec:
       - name: shared-storage
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
-      {{- with index .Values.global.imagePullSecrets 0 }}
+      {{- with first .Values.global.imagePullSecrets }}
       - name: registry-creds
         secret:
           secretName: {{ .name }}
