@@ -29,6 +29,9 @@ spec:
         {{- end }}
       annotations:
         checksum/fusion-config: {{ include (print $.Template.BasePath "/fusion/configmap.yaml") . | sha256sum }}
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.fusion.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

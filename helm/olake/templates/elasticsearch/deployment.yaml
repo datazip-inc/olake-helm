@@ -21,6 +21,9 @@ spec:
   template:
     metadata:
       annotations:
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.elasticsearch.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

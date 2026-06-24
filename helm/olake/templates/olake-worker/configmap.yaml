@@ -53,3 +53,10 @@ data:
   {{- if .Values.olakeWorker.securityContext }}
   POD_SECURITY_CONTEXT: {{ .Values.olakeWorker.securityContext | toJson | quote }}
   {{- end }}
+
+  # =================================================================
+  # ACTIVITY POD ANNOTATIONS CONFIGURATION
+  # =================================================================
+  {{- if .Values.global.podAnnotations }}
+  OLAKE_JOB_POD_ANNOTATIONS: {{ .Values.global.podAnnotations | toJson | quote }}
+  {{- end }}
