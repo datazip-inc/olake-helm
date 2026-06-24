@@ -96,6 +96,11 @@ data:
   pod-template.yaml: |
     apiVersion: v1
     kind: Pod
+    metadata:
+      {{- with .Values.global.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- if empty .Values.fusion.nodeSelector }}
       nodeSelector: {}
