@@ -340,6 +340,21 @@ global:
     # Add any custom environment variables here
 ```
 
+### Global Pod Annotations
+
+Annotations defined in `global.podAnnotations` are applied to every pod managed by this chart — all Deployment pods (OLake UI, OLake Workers, PostgreSQL, Temporal, Elasticsearch, Fusion), Fusion Spark optimizer pods, and connector activity pods (sync, discover, check) spawned by olake-workers.
+
+This is useful for service mesh sidecar injection (Istio, Linkerd) or any admission-webhook-based tooling that requires pod-level annotations.
+
+```yaml
+global:
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
+    linkerd.io/inject: enabled
+```
+
+**Activity pods:** annotations are read by olake-workers from the `OLAKE_JOB_POD_ANNOTATIONS` configmap key and merged into the connector Job pod spec at runtime. Internal `olake.io/*` annotations always take precedence over user-supplied ones.
+
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.
