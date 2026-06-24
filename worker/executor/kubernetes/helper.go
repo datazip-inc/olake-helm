@@ -104,6 +104,19 @@ func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
 	return q
 }
 
+// buildPodAnnotations merges global job pod annotations with olake-internal ones.
+// Global annotations are applied first so internal olake.io/* keys always win on conflict.
+func (k *KubernetesExecutor) buildPodAnnotations(internal map[string]string) map[string]string {
+	annotations := make(map[string]string, len(k.config.JobPodAnnotations)+len(internal))
+	for key, val := range k.config.JobPodAnnotations {
+		annotations[key] = val
+	}
+	for key, val := range internal {
+		annotations[key] = val
+	}
+	return annotations
+}
+
 // BuildAffinityForJob returns NodeAffinity rules to prevent unmapped jobs from scheduling on nodes reserved for mapped jobs.
 // Uses NotIn operator to exclude nodes with label key-value pairs used by any mapped job.
 // Reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity

@@ -160,15 +160,17 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 				"olake.io/workflow-id":    k.sanitizeName(req.WorkflowID), // Sanitized workflow ID
 			},
 
-			// Annotations store metadata that doesn't affect pod selection/scheduling
-			Annotations: map[string]string{
-				"olake.io/created-by-pod": k.config.WorkerIdentity,         // Which worker pod created this
-				"olake.io/created-at":     time.Now().Format(time.RFC3339), // Creation timestamp
-				"olake.io/workflow-id":    req.WorkflowID,                  // Original unsanitized workflow ID
-				"olake.io/operation-type": string(req.Command),             // Operation type for reference
-				"olake.io/connector-type": req.ConnectorType,               // Connector type for reference
-				"olake.io/job-id":         fmt.Sprintf("%d", req.JobID),    // Job ID for reference
-			},
+			// Annotations store metadata that doesn't affect pod selection/scheduling.
+			// Global job pod annotations (global.podAnnotations) are merged via buildPodAnnotations;
+			// olake.io/* internal keys always take precedence over user-supplied ones.
+			Annotations: k.buildPodAnnotations(map[string]string{
+				"olake.io/created-by-pod": k.config.WorkerIdentity,
+				"olake.io/created-at":     time.Now().Format(time.RFC3339),
+				"olake.io/workflow-id":    req.WorkflowID,
+				"olake.io/operation-type": string(req.Command),
+				"olake.io/connector-type": req.ConnectorType,
+				"olake.io/job-id":         fmt.Sprintf("%d", req.JobID),
+			}),
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy:   corev1.RestartPolicyNever,

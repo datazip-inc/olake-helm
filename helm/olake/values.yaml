@@ -34,6 +34,15 @@ global:
   #     - name: "docker-hub-secret"
   imagePullSecrets: []
 
+  # -- Global pod annotations applied to all Deployment pods and to activity pods
+  # (connector Job pods spawned by olake-workers) and Fusion Spark pods.
+  # Useful for service mesh sidecar injection (Istio, Linkerd) or other admission webhooks.
+  # Examples:
+  #   podAnnotations:
+  #     sidecar.istio.io/inject: "true"
+  #     linkerd.io/inject: enabled
+  podAnnotations: {}
+
   # -- [DEPRECATED] JobID-based node mapping configuration
   # Use `global.jobProfiles` instead. This field will be removed in a future release.
   # Maps JobID (integer) to specific node labels for pod scheduling (NodeSelector only).

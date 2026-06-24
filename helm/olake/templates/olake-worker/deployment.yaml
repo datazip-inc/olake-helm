@@ -18,6 +18,9 @@ spec:
   template:
     metadata:
       annotations:
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.olakeWorker.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

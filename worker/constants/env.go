@@ -55,4 +55,7 @@ const (
 
 	// security context
 	EnvPodSecurityContext = "POD_SECURITY_CONTEXT"
+
+	// activity pod annotations
+	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 )
