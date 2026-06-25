@@ -78,7 +78,7 @@ global:
   # -- Service account configuration for job pods created by olake-workers
   # Used for cloud provider IAM integration (AWS IRSA, GCP Workload Identity, Azure Workload Identity)
   jobServiceAccount:
-    create: false
+    create: true
     name: ""
 
     # Used for cloud provider IAM role association
