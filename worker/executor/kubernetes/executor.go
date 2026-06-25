@@ -30,15 +30,16 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace            string
+	PVCName              string
+	ServiceAccount       string
+	JobServiceAccount    string
+	SecretKey            string
+	BasePath             string
+	WorkerIdentity       string
+	SecurityContext      *corev1.PodSecurityContext
+	JobPodAnnotations    map[string]string
+	JobImagePullSecrets  []corev1.LocalObjectReference
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -89,6 +90,16 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
+	// Parse job image pull secrets JSON if available
+	var jobImagePullSecrets []corev1.LocalObjectReference
+	jobImagePullSecretsJSON := viper.GetString(constants.EnvJobImagePullSecrets)
+	if jobImagePullSecretsJSON != "" {
+		if err := json.Unmarshal([]byte(jobImagePullSecretsJSON), &jobImagePullSecrets); err != nil {
+			logger.Errorf("failed to unmarshal job image pull secrets: %s. using default.", err)
+			jobImagePullSecrets = nil
+		}
+	}
+
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -110,8 +121,9 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			SecretKey:         secretKey,
 			BasePath:          basePath,
 			WorkerIdentity:    workerIdenttity,
-			SecurityContext:   securityContext,
-			JobPodAnnotations: jobPodAnnotations,
+			SecurityContext:     securityContext,
+			JobPodAnnotations:   jobPodAnnotations,
+			JobImagePullSecrets: jobImagePullSecrets,
 		},
 	}, nil
 }

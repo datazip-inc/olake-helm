@@ -58,4 +58,7 @@ const (
 
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
+
+	// activity pod image pull secrets
+	EnvJobImagePullSecrets = "OLAKE_JOB_IMAGE_PULL_SECRETS"
 )

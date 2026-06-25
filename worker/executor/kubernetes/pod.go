@@ -239,6 +239,10 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
 
+	if len(k.config.JobImagePullSecrets) > 0 {
+		pod.Spec.ImagePullSecrets = k.config.JobImagePullSecrets
+	}
+
 	// Add liveness probe for long-running sync operations
 	if slices.Contains(constants.AsyncCommands, req.Command) {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{

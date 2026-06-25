@@ -60,3 +60,10 @@ data:
   {{- if .Values.global.podAnnotations }}
   OLAKE_JOB_POD_ANNOTATIONS: {{ .Values.global.podAnnotations | toJson | quote }}
   {{- end }}
+
+  # =================================================================
+  # ACTIVITY POD IMAGE PULL SECRETS CONFIGURATION
+  # =================================================================
+  {{- if .Values.global.imagePullSecrets }}
+  OLAKE_JOB_IMAGE_PULL_SECRETS: {{ .Values.global.imagePullSecrets | toJson | quote }}
+  {{- end }}
