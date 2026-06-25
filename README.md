@@ -35,5 +35,5 @@ We ❤️ contributions! Check our [Bounty Program](https://olake.io/docs/commun
 ## Support
 
 - [GitHub Issues](https://github.com/datazip-inc/olake-helm/issues)
-- [Slack Community](https://join.slack.com/t/getolake/shared_invite/zt-2utw44do6-g4XuKKeqBghBMy2~LcJ4ag)
+- [Slack Community](https://olake.io/slack/)
 - [Documentation](https://olake.io/docs)

@@ -286,6 +286,6 @@ If you kept PVCs during uninstall, the new installation will try to use them.
 
 For issues or questions:
 - [GitHub Issues](https://github.com/datazip-inc/olake-ui/issues)
-- [Slack Community](https://join.slack.com/t/getolake/shared_invite/zt-2utw44do6-g4XuKKeqBghBMy2~LcJ4ag)
+- [Slack Community](https://olake.io/slack/)
 - [Documentation](https://olake.io/docs)
 
