@@ -357,6 +357,25 @@ spec:
                 secretKeyRef:
                   name: {{ include "olake.postgresql.secretName" . }}
                   key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+            {{- if and (not .Values.postgresql.enabled) .Values.postgresql.external.existingSecret }}
+            - name: _AMS_PG_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ .Values.postgresql.external.secretKeys.host }}
+            - name: _AMS_PG_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ .Values.postgresql.external.secretKeys.port }}
+            - name: _AMS_PG_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "olake.postgresql.secretName" . }}
+                  key: {{ .Values.postgresql.external.secretKeys.fusion_database }}
+            - name: AMS_DATABASE_URL
+              value: "jdbc:postgresql://$(_AMS_PG_HOST):$(_AMS_PG_PORT)/$(_AMS_PG_DB)"
+            {{- end }}
           {{- $defaultResources := dict
             "requests" (dict "memory" "512Mi" "cpu" "500m")
           }}
