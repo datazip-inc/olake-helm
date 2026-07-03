@@ -645,7 +645,7 @@ fusion:
   image:
     repository: olakego/fusion
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   # --- Fusion pod resource requirements (optional overrides)
   # Example:
@@ -702,7 +702,7 @@ fusion:
       image:
         repository: olakego/fusion-spark
         tag: latest
-        pullPolicy: IfNotPresent
+        pullPolicy: Always
 
       # Extra Spark config entries (map of key->value).
       # Example:
