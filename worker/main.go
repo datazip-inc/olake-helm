@@ -106,5 +106,3 @@ func main() {
 	worker.Stop()
 	logger.Info("worker stopped!")
 }
-
-// trigger IT test
