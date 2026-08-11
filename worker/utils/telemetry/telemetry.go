@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -18,15 +19,36 @@ const (
 	TelemetryEventStarted   TelemetryEvent = "started"
 	TelemetryEventCompleted TelemetryEvent = "completed"
 	TelemetryEventFailed    TelemetryEvent = "failed"
+	TelemetryEventCancelled TelemetryEvent = "cancelled"
 )
 
-// event = "started" | "completed" | "failed"
-func SendEvent(jobId int, executionEnvironment, workflowId string, event TelemetryEvent) {
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+// EventPayload is the sync-telemetry callback payload sent to olake-ui.
+// SyncRunCount is omitted from the JSON body when zero.
+type EventPayload struct {
+	JobID                int
+	ExecutionEnvironment string
+	WorkflowID           string
+	SyncRunCount         int
+	Event                TelemetryEvent
+}
+
+// SendEvent sends a sync-telemetry event to olake-ui.
+func SendEvent(buildPayload func() EventPayload) {
 	go func() {
-		switch event {
-		case TelemetryEventStarted, TelemetryEventCompleted, TelemetryEventFailed:
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Warnf("recovered panic in telemetry SendEvent: %v", r)
+			}
+		}()
+
+		payload := buildPayload()
+
+		switch payload.Event {
+		case TelemetryEventStarted, TelemetryEventCompleted, TelemetryEventFailed, TelemetryEventCancelled:
 		default:
-			logger.Warnf("invalid telemetry event: %s", event)
+			logger.Warnf("invalid telemetry event: %s", payload.Event)
 			return
 		}
 
@@ -34,20 +56,23 @@ func SendEvent(jobId int, executionEnvironment, workflowId string, event Telemet
 			viper.GetString(constants.EnvCallbackURL),
 		)
 
-		payload := map[string]interface{}{
-			"job_id":      jobId,
-			"workflow_id": workflowId,
-			"environment": executionEnvironment,
-			"event":       event,
+		body := map[string]interface{}{
+			"job_id":      payload.JobID,
+			"workflow_id": payload.WorkflowID,
+			"environment": payload.ExecutionEnvironment,
+			"event":       payload.Event,
+		}
+		if payload.SyncRunCount > 0 {
+			body["sync_run_count"] = payload.SyncRunCount
 		}
 
-		jsonData, err := json.Marshal(payload)
+		jsonData, err := json.Marshal(body)
 		if err != nil {
 			logger.Warnf("failed to marshal request: %s", err)
 			return
 		}
 
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			logger.Warnf("failed to update sync telemetry: %s", err)
 			return

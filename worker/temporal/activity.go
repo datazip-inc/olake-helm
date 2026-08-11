@@ -62,9 +62,13 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
 	req.HeartbeatFunc = activity.RecordHeartbeat
 
+	environment := utils.GetExecutorEnvironment()
+	attempt := int(activity.GetInfo(ctx).Attempt)
+
 	// Update the configs with latest
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
+		telemetry.TrackSyncFailed(req, environment)
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
@@ -84,7 +88,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	}
 
 	// Send telemetry event - "sync started"
-	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventStarted)
+	telemetry.TrackSyncStarted(a.tempClient, req, environment, attempt)
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
@@ -95,19 +99,19 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		}
 
 		if errors.Is(err, constants.ErrExecutionFailed) {
-			telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
+			telemetry.TrackSyncFailed(req, environment)
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
 		log.Error("sync command failed", "error", err)
-		telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventFailed)
+		telemetry.TrackSyncFailed(req, environment)
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
 	return result, nil
 }
 
-func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest) error {
+func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest, status syncStatus) error {
 	log := logger.Log(ctx)
 	log.Info("cleaning up sync for job", "jobID", req.JobID)
 
@@ -124,7 +128,16 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventCompleted)
+	environment := utils.GetExecutorEnvironment()
+
+	switch status {
+	case syncStatusSuccess:
+		telemetry.TrackSyncCompleted(req, environment)
+	case syncStatusCancelled:
+		telemetry.TrackSyncCancelled(req, environment)
+	case syncStatusFailed:
+		// SyncActivity already sent "failed".
+	}
 	return nil
 }
 
@@ -151,8 +164,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 	utils.RevertUpdatesInSchedule(req)
 
 	// update the schedule
-	workflowID := fmt.Sprintf("sync-%s-%d", req.ProjectID, req.JobID)
-	scheduleID := fmt.Sprintf("schedule-%s", workflowID)
+	workflowID, scheduleID := utils.SyncWorkflowAndScheduleID(req.ProjectID, req.JobID)
 	handle := a.tempClient.ScheduleClient().GetHandle(ctx, scheduleID)
 
 	taskQueue := utils.GetTemporalTaskQueue()

@@ -244,6 +244,13 @@ func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
 }
 
+// SyncWorkflowAndScheduleID returns a job's base sync workflow ID and its
+// schedule ID
+func SyncWorkflowAndScheduleID(projectID string, jobID int) (string, string) {
+	workflowID := fmt.Sprintf("sync-%s-%d", projectID, jobID)
+	return workflowID, fmt.Sprintf("schedule-%s", workflowID)
+}
+
 // GetTemporalNamespace returns the configured namespace when TEMPORAL_EXTERNAL is true,
 // otherwise returns the default namespace.
 func GetTemporalNamespace() string {
