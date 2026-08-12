@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -126,7 +128,7 @@ func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, 
 	}
 }
 
-func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
+func UpdateConfigWithJobDetails(ctx context.Context, jobData types.JobData, req *types.ExecutionRequest) {
 	req.Version = jobData.Version
 
 	updates := map[string]string{
@@ -138,17 +140,26 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 
 	addIfMissing := make(map[string]string)
 	if !viper.GetBool(constants.EnvTelemetryDisabled) {
-		addIfMissing["user_id.txt"] = GetTelemetryUserID()
+		addIfMissing["user_id.txt"] = GetTelemetryUserID(ctx)
 	}
 
 	applyConfigUpdates(req, updates, addIfMissing)
 }
 
-func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
+func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
 
 	if req.TempPath != "" {
-		data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.TempPath))
+		var data string
+		var err error
+		switch GetStorageMode() {
+		case constants.StorageModeS3:
+			data, err = readFileFromS3(ctx, "", req.TempPath, true)
+		case constants.StorageModeNFS:
+			data, err = readFileFromNFS(GetConfigDir(), req.TempPath)
+		default:
+			return fmt.Errorf("unsupported storage mode: %s", GetStorageMode())
+		}
 		if err != nil {
 			return fmt.Errorf("failed to read streams file: %s", err)
 		}
@@ -156,7 +167,7 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 		updates := map[string]string{
 			"destination.json": jobDetails.Destination,
 			"state.json":       jobDetails.State,
-			"streams.json":     string(data),
+			"streams.json":     data,
 		}
 
 		applyConfigUpdates(req, updates, nil)
@@ -174,9 +185,19 @@ func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) st
 	}
 }
 
-func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, error) {
-	stateFilePath := filepath.Join(GetConfigDir(), GetWorkflowDirectory(command, workflowID), "state.json")
-	stateFile, err := ReadFile(stateFilePath)
+func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command types.Command) (string, error) {
+	_, workDir := GetWorkflowDirAndSubDir(workflowID, command)
+
+	var stateFile string
+	var err error
+	switch GetStorageMode() {
+	case constants.StorageModeS3:
+		stateFile, err = readFileFromS3(ctx, workDir, "state.json", true)
+	case constants.StorageModeNFS:
+		stateFile, err = readFileFromNFS(workDir, "state.json")
+	default:
+		return "", fmt.Errorf("unsupported storage mode: %s", GetStorageMode())
+	}
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
 	}
@@ -194,16 +215,29 @@ func GetConfigDir() string {
 	}
 }
 
-func GetTelemetryUserID() string {
-	root := GetConfigDir()
-	telemetryPath := filepath.Join(root, "telemetry", "user_id")
+// GetTelemetryUserID reads the telemetry user ID from the appropriate storage mode.
+func GetTelemetryUserID(ctx context.Context) string {
+	switch GetStorageMode() {
+	case constants.StorageModeS3:
+		data, err := readFileFromS3(ctx, "", constants.TelemetryUserIDPath, false)
+		if err != nil {
+			logger.Errorf("failed to read telemetry user ID: %s", err)
+			return ""
+		}
+		return data
+	case constants.StorageModeNFS:
+		telemetryPath := filepath.Join(GetConfigDir(), constants.TelemetryUserIDPath)
 
-	userID, err := os.ReadFile(telemetryPath)
-	if err != nil {
-		logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
+		userID, err := os.ReadFile(telemetryPath)
+		if err != nil {
+			logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
+			return ""
+		}
+		return string(userID)
+	default:
+		logger.Errorf("unsupported storage mode for telemetry user ID: %s", GetStorageMode())
 		return ""
 	}
-	return string(userID)
 }
 
 // getHostOutputDir returns the host output directory
@@ -217,26 +251,31 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-// WorkflowAlreadyLaunched checks for olake.log file in the workdir/logs
-//
-// workdir/logs/sync_<timestamp>/olake.log - present -> workflow has started already
-// not present -> workflow is running for the first time
-func WorkflowAlreadyLaunched(workdir string) bool {
-	logDir := filepath.Join(workdir, "logs")
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return false
-	}
+// WorkflowAlreadyLaunched reports whether this workflow has already started a connector run.
+// Config files alone do not count — they are written before the container/pod is launched.
+func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
+	switch GetStorageMode() {
+	case constants.StorageModeS3:
+		return workflowConnectorLogsExistInS3(ctx, workdir)
+	case constants.StorageModeNFS:
+		logDir := filepath.Join(workdir, "logs")
+		entries, err := os.ReadDir(logDir)
+		if err != nil {
+			return false
+		}
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
-			if _, err := os.Stat(olakeLogPath); err == nil {
-				return true
+		for _, entry := range entries {
+			if entry.IsDir() {
+				olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
+				if _, err := os.Stat(olakeLogPath); err == nil {
+					return true
+				}
 			}
 		}
+		return false
+	default:
+		return false
 	}
-	return false
 }
 
 // WorkflowHash returns a deterministic hash string for a given workflowID
@@ -283,18 +322,56 @@ func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, 
 	return subdir, workdir
 }
 
-// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
-func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
-	args := []string{
-		"sync",
-		"--config", "/mnt/config/source.json",
-		"--destination", "/mnt/config/destination.json",
-		"--catalog", "/mnt/config/streams.json",
-		"--state", "/mnt/config/state.json",
+// connectorConfigPath returns the path the connector binary should read for a config file.
+// NFS mounts the workflow dir at /mnt/config; S3 uses s3://bucket/[prefix/]{workflow-dir}/file.
+func connectorConfigPath(command types.Command, workflowID, filename string) string {
+	switch GetStorageMode() {
+	case constants.StorageModeS3:
+		bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
+		jobDir := GetWorkflowDirectory(command, workflowID)
+		key := path.Join(jobDir, filename)
+		if prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/"); prefix != "" {
+			key = path.Join(prefix, key)
+		}
+		return fmt.Sprintf("s3://%s/%s", bucket, key)
+	case constants.StorageModeNFS:
+		// Workflow dir is mounted at /mnt/config (K8s subPath or Docker bind mount).
+		return path.Join(constants.ContainerMountDir, filename)
+	default:
+		return path.Join(constants.ContainerMountDir, filename)
+	}
+}
+
+// RefreshConnectorArgs rebuilds CLI args from the execution WorkflowID.
+// Schedule metadata is baked with the stable schedule ID (e.g. sync-123-1), but Temporal
+// runs each fire under a unique ID (sync-123-1-<timestamp>). Configs are written under the
+// execution ID hash, so Args must match that path — not the schedule-time hash.
+// When revertToSync is true, Command is reset to Sync first (used after clear-destination).
+func RefreshConnectorArgs(req *types.ExecutionRequest, revertToSync bool) {
+	if req == nil || req.WorkflowID == "" {
+		return
+	}
+	if revertToSync {
+		req.Command = types.Sync
 	}
 
-	req.Command = types.Sync
-	req.Args = args
+	switch req.Command {
+	case types.Sync:
+		req.Args = []string{
+			"sync",
+			"--config", connectorConfigPath(types.Sync, req.WorkflowID, "source.json"),
+			"--destination", connectorConfigPath(types.Sync, req.WorkflowID, "destination.json"),
+			"--catalog", connectorConfigPath(types.Sync, req.WorkflowID, "streams.json"),
+			"--state", connectorConfigPath(types.Sync, req.WorkflowID, "state.json"),
+		}
+	case types.ClearDestination:
+		req.Args = []string{
+			"clear-destination",
+			"--streams", connectorConfigPath(types.ClearDestination, req.WorkflowID, "streams.json"),
+			"--state", connectorConfigPath(types.ClearDestination, req.WorkflowID, "state.json"),
+			"--destination", connectorConfigPath(types.ClearDestination, req.WorkflowID, "destination.json"),
+		}
+	}
 }
 
 // ExtractJSONAndMarshal extracts and returns the last valid JSON block from output
@@ -321,24 +398,25 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
 				continue // Skip invalid JSON
 			}
-			return json.Marshal(result)
+			return json.Marshal(unwrapZerologProtocolMessage(result))
 		}
 	}
 
 	return nil, fmt.Errorf("no valid JSON block found in output")
 }
 
-// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
-// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
-func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
-	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
-	workflowLogPath := filepath.Join(workdirPath, "logs")
-	if err := SetupWorkDirectory(workflowLogPath); err != nil {
-		return ctx, nil, err
+// unwrapZerologProtocolMessage returns the inner OLake protocol object when stdout is
+// S3-mode zerolog JSON: {"level":"info","message":{"type":"CONNECTION_STATUS",...}}.
+// NFS console output already yields the inner object, so it is returned unchanged.
+func unwrapZerologProtocolMessage(result map[string]interface{}) map[string]interface{} {
+	if _, ok := result["level"].(string); !ok {
+		return result
 	}
-
-	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workflowLogPath)
-	return ctxWithLogger, logFile, err
+	message, ok := result["message"].(map[string]interface{})
+	if !ok || message == nil {
+		return result
+	}
+	return message
 }
 
 // IsStateEmpty returns true if the state is empty or an empty JSON object
@@ -361,4 +439,31 @@ func RemoveFlagFromArgs(arguments []string, flagName string) []string {
 	}
 
 	return result
+}
+
+// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
+// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
+func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command, newWorkerLogCollector func(ctx context.Context, workflowID, workDir string) (*RuntimeLogCollector, error)) (context.Context, *logger.WorkflowLogFile, error) {
+	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
+	workflowLogPath := filepath.Join(workdirPath, "logs")
+	if err := SetupWorkDirectory(workflowLogPath); err != nil {
+		return ctx, nil, err
+	}
+
+	switch GetStorageMode() {
+	case constants.StorageModeS3:
+		collector, err := newWorkerLogCollector(ctx, workflowID, workdirPath)
+		if err != nil {
+			return ctx, nil, err
+		}
+		collector.Start(ctx)
+		return logger.InitWorkflowLogger(ctx, workflowID, string(command), io.Discard, func() error {
+			collector.Stop(ctx)
+			return nil
+		})
+	case constants.StorageModeNFS:
+		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
+	default:
+		return ctx, nil, nil
+	}
 }

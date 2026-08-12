@@ -312,7 +312,26 @@ olakeWorker:
       level: info
       format: console
 
-# Storage configuration for shared data exchange between pods
+# Shared storage: S3 wins when s3.bucket and s3.region are both set; otherwise storage.mode (default nfs).
+storage:
+  mode: nfs
+
+s3:
+  bucket: ""
+  region: ""
+  prefix: ""
+  auth:
+    useIRSA: false
+    roleArn: ""
+    existingSecret: ""
+    credentials:
+      accessKeyId: ""
+      secretAccessKey: ""
+    secretKeys:
+      accessKeyId: "AWS_ACCESS_KEY_ID"
+      secretAccessKey: "AWS_SECRET_ACCESS_KEY"
+
+# NFS / PVC (used when S3 is not active)
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.

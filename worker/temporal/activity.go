@@ -46,7 +46,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 			return nil, err
 		}
 
-		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
+		if err := utils.UpdateConfigForClearDestination(ctx, jobDetails, req); err != nil {
 			return nil, err
 		}
 	}
@@ -76,7 +76,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	}
 
 	// update the configs with latest job details
-	utils.UpdateConfigWithJobDetails(jobDetails, req)
+	utils.UpdateConfigWithJobDetails(ctx, jobDetails, req)
 
 	// Remove --state flag if state is empty
 	if utils.IsStateEmpty(jobDetails.State) {
@@ -148,7 +148,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		return err
 	}
 
-	utils.RevertUpdatesInSchedule(req)
+	utils.RefreshConnectorArgs(req, true)
 
 	// update the schedule
 	workflowID := fmt.Sprintf("sync-%s-%d", req.ProjectID, req.JobID)

@@ -166,10 +166,16 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
-        {{- if not .Values.temporal.enabled }}
         envFrom:
+        - configMapRef:
+            name: olake-global-env
+        {{- if not .Values.temporal.enabled }}
         - secretRef:
             name: {{ include "olake.temporal.secretName" . }}
+        {{- end }}
+        {{- if and (eq (include "olake.storageMode" .) "s3") (not .Values.s3.auth.useIRSA) (or .Values.s3.auth.existingSecret .Values.s3.auth.credentials.accessKeyId) }}
+        - secretRef:
+            name: {{ include "olake.s3.secretName" . }}
         {{- end }}
         # - name: POSTGRES_DB
         #   value: "postgres://$(POSTGRES_DB_USER):$(POSTGRES_DB_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=$(POSTGRES_DB_SSLMODE)"
@@ -198,7 +204,7 @@ spec:
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" (printf "echo ok > /tmp/olake-config/.healthcheck-ui && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.uiProbeShell" .)))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeUI.readinessProbe | default dict) }}
         readinessProbe:
@@ -209,7 +215,7 @@ spec:
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" (printf "echo ok > /tmp/olake-config/.healthcheck-ui && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.uiProbeShell" .)))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeUI.livenessProbe | default dict) }}
         livenessProbe:
@@ -219,8 +225,12 @@ spec:
         configMap:
           name: olake-ui-config
       - name: shared-storage
+        {{- if eq (include "olake.storageMode" .) "nfs" }}
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
       {{- with first .Values.global.imagePullSecrets }}
       - name: registry-creds
         secret:

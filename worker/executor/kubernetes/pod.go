@@ -17,6 +17,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -141,6 +142,48 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
+	jobStorageVolume := corev1.Volume{Name: "job-storage"}
+	switch utils.GetStorageMode() {
+	case constants.StorageModeNFS:
+		jobStorageVolume.VolumeSource = corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: k.config.PVCName,
+			},
+		}
+	case constants.StorageModeS3:
+		jobStorageVolume.VolumeSource = corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+	}
+
+	envFrom := []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: constants.GlobalEnvConfigMap,
+				},
+				Optional: ptr.To(true),
+			},
+		},
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: constants.WorkersConfigMap,
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+	if utils.GetStorageMode() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
+		envFrom = append(envFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: k.config.S3CredentialsSecret,
+				},
+			},
+		})
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      k.sanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
@@ -204,31 +247,15 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							Value: req.WorkflowID,
 						},
 						{
-							Name:  "OLAKE_SECRET_KEY",
+							Name:  constants.EnvSecretKey,
 							Value: k.config.SecretKey,
 						},
 					},
-					EnvFrom: []corev1.EnvFromSource{
-						{
-							ConfigMapRef: &corev1.ConfigMapEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "olake-global-env",
-								},
-								Optional: ptr.To(true),
-							},
-						},
-					},
+					EnvFrom: envFrom,
 				},
 			},
 			Volumes: []corev1.Volume{
-				{
-					Name: "job-storage",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: k.config.PVCName,
-						},
-					},
-				},
+				jobStorageVolume,
 			},
 		},
 	}
@@ -239,8 +266,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
 
-	// Add liveness probe for long-running sync operations
-	if slices.Contains(constants.AsyncCommands, req.Command) {
+	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
+	if slices.Contains(constants.AsyncCommands, req.Command) && utils.GetStorageMode() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

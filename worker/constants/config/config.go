@@ -61,6 +61,7 @@ func requiredEnvVars() error {
 	// Common required env vars
 	requiredEnv := []string{
 		constants.EnvCallbackURL,
+		constants.EnvStorageMode,
 	}
 
 	if viper.IsSet(constants.EnvDatabaseURL) && viper.GetString(constants.EnvDatabaseURL) != "" {
@@ -77,21 +78,24 @@ func requiredEnvVars() error {
 	// k8s required
 	k8sRequiredEnv := []string{
 		constants.EnvNamespace,
-		constants.EnvStoragePVCName,
 		constants.EnvPodName,
 		constants.EnvKubernetesServiceHost,
 	}
 
-	// Docker required
-	dockerRequiredEnv := []string{
-		constants.EnvHostPersistentDir,
+	execEnv := utils.GetExecutorEnvironment()
+	if execEnv == string(types.Kubernetes) {
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
 	}
 
-	execEnv := utils.GetExecutorEnvironment()
-	if execEnv == string(types.Docker) {
-		requiredEnv = append(requiredEnv, dockerRequiredEnv...)
-	} else {
-		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+	switch utils.GetStorageMode() {
+	case constants.StorageModeS3:
+		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
+	case constants.StorageModeNFS:
+		if execEnv == string(types.Docker) {
+			requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
+		} else {
+			requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
+		}
 	}
 
 	var missing []string

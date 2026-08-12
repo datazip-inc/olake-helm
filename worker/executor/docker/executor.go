@@ -13,6 +13,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
@@ -65,13 +66,31 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
-		hostOutputDir := utils.GetHostOutputDir(workdir)
-		hostConfig.Mounts = []mount.Mount{
-			{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+		switch utils.GetStorageMode() {
+		case constants.StorageModeNFS:
+			hostOutputDir := utils.GetHostOutputDir(workdir)
+			hostConfig.Mounts = []mount.Mount{
+				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+			}
+		case constants.StorageModeS3:
+			// Connector must reach MinIO/S3 on the same Docker network as the worker.
+			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
+		default:
+			return "", fmt.Errorf("unsupported storage mode: %s", utils.GetStorageMode())
 		}
 	}
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
+
+	if slices.Contains(constants.AsyncCommands, req.Command) && utils.GetStorageMode() == constants.StorageModeS3 {
+		logCollector, err := NewContainerLogCollector(ctx, d, containerName, workdir)
+		if err != nil {
+			log.Warn("failed to start container log collector", "containerName", containerName, "error", err)
+		} else {
+			logCollector.Start(ctx)
+			defer logCollector.Stop(ctx)
+		}
+	}
 
 	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {

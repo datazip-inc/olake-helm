@@ -70,6 +70,55 @@ Create the name of the service account to use for job pods
 {{- end }}
 
 {{/*
+Shared storage mode: s3 when bucket+region are set, otherwise storage.mode (default nfs).
+*/}}
+{{- define "olake.storageMode" -}}
+{{- if and .Values.s3.bucket .Values.s3.region -}}s3{{- else -}}{{- .Values.storage.mode | default "nfs" -}}{{- end -}}
+{{- end -}}
+
+{{/*
+Worker/UI probe shell: include shared-storage write only in NFS mode.
+*/}}
+{{- define "olake.workerReadinessProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /data/olake-jobs/.healthcheck && {{ end }}wget -q --spider --timeout=2 http://localhost:8090/ready
+{{- end -}}
+
+{{- define "olake.workerLivenessProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /data/olake-jobs/.healthcheck && {{ end }}wget -q --spider --timeout=2 http://localhost:8090/health
+{{- end -}}
+
+{{- define "olake.uiProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /tmp/olake-config/.healthcheck-ui && {{ end }}nc -z localhost {{ .Values.olakeUI.env.HTTP_PORT | default "8000" }}
+{{- end -}}
+
+{{/*
+S3 storage environment variables for olake-global-env (NFS uses olake-workers-config).
+*/}}
+{{- define "olake.storageEnv" -}}
+{{- if eq (include "olake.storageMode" .) "s3" }}
+OLAKE_S3_BUCKET: {{ required "s3.bucket is required when S3 storage is active" .Values.s3.bucket | quote }}
+OLAKE_S3_REGION: {{ required "s3.region is required when S3 storage is active" .Values.s3.region | quote }}
+{{- if .Values.s3.prefix }}
+OLAKE_S3_PREFIX: {{ .Values.s3.prefix | quote }}
+{{- end }}
+{{- if and (not .Values.s3.auth.useIRSA) (or .Values.s3.auth.existingSecret .Values.s3.auth.credentials.accessKeyId) }}
+OLAKE_S3_CREDENTIALS_SECRET: {{ include "olake.s3.secretName" . | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+S3 credentials secret name
+*/}}
+{{- define "olake.s3.secretName" -}}
+{{- if .Values.s3.auth.existingSecret }}
+{{- .Values.s3.auth.existingSecret }}
+{{- else }}
+{{- printf "%s-s3-credentials" (include "olake.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
 Shared storage PVC name
 */}}
 {{- define "olake.sharedStoragePVC" -}}

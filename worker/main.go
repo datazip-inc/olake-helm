@@ -11,8 +11,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants/config"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
-	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
-	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -37,6 +35,11 @@ func main() {
 	logger.Infof("starting OLake worker")
 	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
+	// Initialize s3 client for S3 storage mode
+	if err := utils.InitStorage(ctx); err != nil {
+		logger.Fatalf("failed to initialize storage: %s", err)
+	}
+
 	// Initialize database
 	db, err := database.Init(ctx)
 	if err != nil {
@@ -51,6 +54,10 @@ func main() {
 		logger.Fatalf("failed to create executor: %s", err)
 	}
 	defer exec.Close()
+
+	if err := exec.RecoverWorkerLogs(ctx); err != nil {
+		logger.Warnf("failed to recover worker logs: %s", err)
+	}
 
 	tClient, err := temporal.NewClient()
 	if err != nil {

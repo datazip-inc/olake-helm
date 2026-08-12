@@ -1,3 +1,4 @@
+{{- if eq (include "olake.storageMode" .) "nfs" }}
 {{- if not .Values.nfsServer.enabled }}
 {{- if not .Values.nfsServer.external.storageClass }}
 {{- fail "nfsServer.external.storageClass is required when nfsServer.enabled is false" }}
@@ -24,3 +25,4 @@ spec:
     requests:
       storage: {{- if .Values.nfsServer.enabled }} {{ include "olake.sharedStorageSize" . }}{{- else }} {{ .Values.nfsServer.external.size }}{{- end }}
   storageClassName: {{- if .Values.nfsServer.enabled }} {{ .Values.nfsServer.storageClass.name | default "nfs-server" }}{{- else }} {{ .Values.nfsServer.external.storageClass }}{{- end }}
+{{- end }}

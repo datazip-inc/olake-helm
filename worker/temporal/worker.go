@@ -29,7 +29,7 @@ type Worker struct {
 func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, db *database.DB) (*Worker, error) {
 	workerOptions := worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
-			NewLoggingInterceptor(),
+			NewLoggingInterceptor(e),
 		},
 	}
 	w := worker.New(t.GetClient(), utils.GetTemporalTaskQueue(), workerOptions)

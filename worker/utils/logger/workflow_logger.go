@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -13,23 +14,45 @@ import (
 // ctxKey is the key type for the logger in the context.
 type ctxKey struct{}
 
-// WorkflowLogFile holds the file handle for a workflow's log file.
+// WorkflowLogFile holds the log sink for a workflow and must be closed when the workflow finishes.
 type WorkflowLogFile struct {
-	file *os.File
+	file    *os.File
+	onClose func() error
 }
 
 // Close must be called when the workflow finishes.
 func (wf *WorkflowLogFile) Close() error {
-	if wf == nil || wf.file == nil {
+	if wf == nil {
 		return nil
 	}
-	return wf.file.Close()
+	var err error
+	switch {
+	case wf.file != nil:
+		err = wf.file.Close()
+	case wf.onClose != nil:
+		err = wf.onClose()
+	}
+	return err
 }
 
-// InitWorkflowLogger creates a zerolog.Logger instance that writes to both stdout and <workflowDir>/worker.log.
-// Returns the logger instance and a file handle that must be closed when the workflow finishes.
+// InitWorkflowLogger creates a zerolog.Logger that writes to stdout and the given writer.
+// workflowID and command are attached to every log line for S3 worker log routing.
+func InitWorkflowLogger(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error) (context.Context, *WorkflowLogFile, error) {
+	stdoutWriter := createStdoutWriter()
+	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, fileWriter)
+	log := zerolog.New(multiWriter).With().Timestamp().Logger()
+	if workflowID != "" {
+		log = log.With().Str("workflowID", workflowID).Logger()
+	}
+	if command != "" {
+		log = log.With().Str("command", command).Logger()
+	}
+
+	return CtxWithLogger(ctx, log), &WorkflowLogFile{onClose: onClose}, nil
+}
+
 // Note: workflowDir must already exist before calling this function.
-func InitWorkflowLogger(ctx context.Context, workflowLogsDir string) (context.Context, *WorkflowLogFile, error) {
+func InitWorkflowLoggerForNFS(ctx context.Context, workflowLogsDir string) (context.Context, *WorkflowLogFile, error) {
 	logFilePath := filepath.Join(workflowLogsDir, "worker.log")
 	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
 	if err != nil {

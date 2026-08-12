@@ -133,7 +133,13 @@ spec:
         {{- end }}
         envFrom:
         - configMapRef:
+            name: olake-global-env
+        - configMapRef:
             name: olake-workers-config
+        {{- if and (eq (include "olake.storageMode" .) "s3") (not .Values.s3.auth.useIRSA) (or .Values.s3.auth.existingSecret .Values.s3.auth.credentials.accessKeyId) }}
+        - secretRef:
+            name: {{ include "olake.s3.secretName" . }}
+        {{- end }}
         {{- if not .Values.temporal.enabled }}
         - secretRef:
             name: {{ include "olake.temporal.secretName" . }}
@@ -150,7 +156,7 @@ spec:
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" "echo ok > /data/olake-jobs/.healthcheck && wget -q --spider --timeout=2 http://localhost:8090/ready"))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.workerReadinessProbeShell" .)))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeWorker.readinessProbe | default dict) }}
         readinessProbe:
@@ -161,7 +167,7 @@ spec:
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" "echo ok > /data/olake-jobs/.healthcheck && wget -q --spider --timeout=2 http://localhost:8090/health"))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.workerLivenessProbeShell" .)))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeWorker.livenessProbe | default dict) }}
         livenessProbe:
@@ -171,5 +177,9 @@ spec:
           mountPath: /data/olake-jobs
       volumes:
       - name: shared-storage
+        {{- if eq (include "olake.storageMode" .) "nfs" }}
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
