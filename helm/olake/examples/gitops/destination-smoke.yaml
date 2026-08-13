@@ -1,0 +1,15 @@
+apiVersion: olake.io/v1
+kind: Destination
+metadata:
+  name: smoke-dest
+spec:
+  # Must match a real project id from the UI
+  projectId: "123"
+  userId: 1
+  config: |
+    {
+      "name": "smoke-dest",
+      "type": "iceberg",
+      "version": "latest",
+      "config": "{\"catalog_type\":\"REST\",\"uri\":\"http://iceberg-rest:8181\",\"warehouse\":\"s3://warehouse/smoke\"}"
+    }
