@@ -1,0 +1,18 @@
+apiVersion: olake.io/v1
+kind: Streams
+metadata:
+  name: smoke-streams
+spec:
+  projectId: "123"
+  job: smoke-job
+  config: |
+    {
+      "selected_streams": {
+        "public": {
+          "users": {
+            "sync_mode": "incremental",
+            "cursor_field": ["updated_at"]
+          }
+        }
+      }
+    }

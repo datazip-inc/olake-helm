@@ -1,0 +1,35 @@
+{{- if and .Values.gitops.enabled .Values.gitops.rbac.create (include "olake.uiServiceAccountName" .) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "olake.fullname" . }}-gitops
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: olake-ui
+rules:
+- apiGroups: ["olake.io"]
+  resources: ["sources", "destinations", "jobs", "streams"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["olake.io"]
+  resources: ["sources/status", "destinations/status", "jobs/status", "streams/status"]
+  verbs: ["get", "patch", "update"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "olake.fullname" . }}-gitops
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: olake-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "olake.fullname" . }}-gitops
+subjects:
+- kind: ServiceAccount
+  name: {{ include "olake.uiServiceAccountName" . }}
+  namespace: {{ include "olake.namespace" . }}
+{{- end }}

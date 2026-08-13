@@ -28,6 +28,17 @@
 -   Kubernetes 1.19+
 -   Helm 3.2.0+
 
+## GitOps
+
+Manage OLake resources as Kubernetes CRs (`olake.io/v1`) with the embedded reconciler in olake-ui. See **[docs/gitops.md](docs/gitops.md)** for Helm values, CRDs, RBAC, Argo CD health, and example manifests.
+
+```yaml
+gitops:
+  enabled: true
+olakeUI:
+  replicaCount: 1
+```
+
 ## Installation
 
 ### Step 1: Add the OLake Helm Repository

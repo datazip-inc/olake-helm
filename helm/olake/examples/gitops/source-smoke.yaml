@@ -1,0 +1,15 @@
+apiVersion: olake.io/v1
+kind: Source
+metadata:
+  name: smoke-source
+spec:
+  # Must match a real project id from the UI (API paths use /api/v1/project/<id>/...)
+  projectId: "123"
+  userId: 1
+  config: |
+    {
+      "name": "smoke-source-test_1",
+      "type": "postgres",
+      "version": "latest",
+      "config": "{\"host\":\"pg.example\",\"port\":5432,\"database\":\"smoke\",\"username\":\"smoke\",\"password\":\"smoke\"}"
+    }

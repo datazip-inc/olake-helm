@@ -1,0 +1,50 @@
+# Merge into argocd-cm (namespace argocd) once per cluster.
+# See helm/olake/docs/gitops.md
+
+resource.customizations.health.olake.io_Source: |
+  hs = {}
+  if obj.status ~= nil and obj.status.phase == "Ready" then
+    hs.status = "Healthy"
+  elseif obj.status ~= nil and obj.status.phase == "Failed" then
+    hs.status = "Degraded"
+    hs.message = obj.status.message
+  else
+    hs.status = "Progressing"
+  end
+  return hs
+
+resource.customizations.health.olake.io_Destination: |
+  hs = {}
+  if obj.status ~= nil and obj.status.phase == "Ready" then
+    hs.status = "Healthy"
+  elseif obj.status ~= nil and obj.status.phase == "Failed" then
+    hs.status = "Degraded"
+    hs.message = obj.status.message
+  else
+    hs.status = "Progressing"
+  end
+  return hs
+
+resource.customizations.health.olake.io_Job: |
+  hs = {}
+  if obj.status ~= nil and obj.status.phase == "Ready" then
+    hs.status = "Healthy"
+  elseif obj.status ~= nil and obj.status.phase == "Failed" then
+    hs.status = "Degraded"
+    hs.message = obj.status.message
+  else
+    hs.status = "Progressing"
+  end
+  return hs
+
+resource.customizations.health.olake.io_Streams: |
+  hs = {}
+  if obj.status ~= nil and obj.status.phase == "Ready" then
+    hs.status = "Healthy"
+  elseif obj.status ~= nil and obj.status.phase == "Failed" then
+    hs.status = "Degraded"
+    hs.message = obj.status.message
+  else
+    hs.status = "Progressing"
+  end
+  return hs

@@ -1,0 +1,15 @@
+apiVersion: olake.io/v1
+kind: Job
+metadata:
+  name: smoke-job
+spec:
+  projectId: "123"
+  userId: 1
+  config: |
+    {
+      "name": "smoke-job",
+      "source": "smoke-source-test_1",
+      "destination": "smoke-dest",
+      "frequency": "0 */6 * * *",
+      "activate": true
+    }

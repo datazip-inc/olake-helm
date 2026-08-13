@@ -109,6 +109,21 @@ global:
   #     RUN_MODE: "production"
   env: {}
 
+# GitOps — embedded olake.io CRD reconciler in olake-ui
+# Requires olake-ui image with GitOps support. CRDs ship in chart crds/ (installed on helm install).
+# Helm does not upgrade CRDs on upgrade; re-apply crds/ manually when schemas change.
+gitops:
+  # -- Enable the embedded GitOps reconciler in olake-ui (sets GITOPS_ENABLED=true)
+  enabled: false
+  rbac:
+    # -- Create ClusterRole/ClusterRoleBinding for olake.io resources cluster-wide
+    create: true
+  serviceAccount:
+    # -- Create a dedicated olake-ui ServiceAccount when global.jobServiceAccount.create is false
+    create: true
+    name: ""
+    annotations: {}
+
 # OLake UI - Main application
 olakeUI:
   # -- Number of OLake UI replicas
