@@ -23,9 +23,10 @@ func Init() {
 }
 
 // createStdoutWriter creates a writer for stdout based on the configured log format.
+// S3 log collection requires JSON lines with workflowID; console format is skipped there.
 func createStdoutWriter() io.Writer {
 	format := viper.GetString(constants.EnvLogFormat)
-	if strings.EqualFold(format, "console") {
+	if strings.EqualFold(format, "console") && constants.GetStorageMode() != constants.StorageModeS3 {
 		return zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339,

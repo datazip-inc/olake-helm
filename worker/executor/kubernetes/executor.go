@@ -125,16 +125,6 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	podSpec := k.CreatePodSpec(req, workdir, imageName)
 	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
 
-	if slices.Contains(constants.AsyncCommands, req.Command) && utils.GetStorageMode() == constants.StorageModeS3 {
-		logCollector, err := NewPodLogCollector(ctx, k, podSpec.Name, workdir)
-		if err != nil {
-			log.Warn("failed to start pod log collector", "podName", podSpec.Name, "error", err)
-		} else {
-			logCollector.Start(ctx)
-			defer logCollector.Stop(ctx)
-		}
-	}
-
 	if _, err := k.createPod(ctx, podSpec); err != nil {
 		log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
 		return "", err

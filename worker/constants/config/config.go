@@ -87,7 +87,7 @@ func requiredEnvVars() error {
 		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
 	}
 
-	switch utils.GetStorageMode() {
+	switch constants.GetStorageMode() {
 	case constants.StorageModeS3:
 		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
 	case constants.StorageModeNFS:

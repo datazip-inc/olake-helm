@@ -66,7 +66,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
-		switch utils.GetStorageMode() {
+		switch constants.GetStorageMode() {
 		case constants.StorageModeNFS:
 			hostOutputDir := utils.GetHostOutputDir(workdir)
 			hostConfig.Mounts = []mount.Mount{
@@ -76,21 +76,11 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 			// Connector must reach MinIO/S3 on the same Docker network as the worker.
 			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
 		default:
-			return "", fmt.Errorf("unsupported storage mode: %s", utils.GetStorageMode())
+			return "", fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
 		}
 	}
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
-
-	if slices.Contains(constants.AsyncCommands, req.Command) && utils.GetStorageMode() == constants.StorageModeS3 {
-		logCollector, err := NewContainerLogCollector(ctx, d, containerName, workdir)
-		if err != nil {
-			log.Warn("failed to start container log collector", "containerName", containerName, "error", err)
-		} else {
-			logCollector.Start(ctx)
-			defer logCollector.Stop(ctx)
-		}
-	}
 
 	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -50,6 +51,9 @@ const (
 var (
 	// PodLogChunkThresholds are the first S3 upload sizes; subsequent chunks use PodLogChunkMaxBytes.
 	PodLogChunkThresholds = []int{
+		1 << 10,   // 1 KiB
+		2 << 10,   // 2 KiB
+		5 << 10,   // 5 KiB
 		10 << 10,  // 10 KiB
 		20 << 10,  // 20 KiB
 		50 << 10,  // 50 KiB
@@ -60,3 +64,12 @@ var (
 	}
 	AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
 )
+
+// GetStorageMode returns the storage mode from the environment variable.
+func GetStorageMode() string {
+	mode := viper.GetString(EnvStorageMode)
+	if mode == "" {
+		return StorageModeNFS
+	}
+	return mode
+}

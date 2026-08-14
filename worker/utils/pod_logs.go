@@ -40,8 +40,13 @@ func NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix string, counte
 	if err != nil {
 		return nil, err
 	}
+	// clear stale local pod log buffer so that we don't have to worry about deduplication
+	path := filepath.Join(localDir, "buffer-"+strings.TrimSuffix(filenamePrefix, "-")+".log")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to clear stale local pod log buffer %s: %s", path, err)
+	}
 	return &PodLogBuffer{
-		path:           filepath.Join(localDir, "buffer-"+strings.TrimSuffix(filenamePrefix, "-")+".log"),
+		path:           path,
 		s3LogDir:       s3LogDir,
 		filenamePrefix: filenamePrefix,
 		counter:        counter,
@@ -85,9 +90,6 @@ func parseLogChunkCounter(name, filenamePrefix string) (int, bool) {
 	}
 	return counter, true
 }
-
-
-// to be resolved 
 
 // NewWorkerPodLogBuffer creates a new PodLogBuffer for the worker pod logs.
 func newWorkerPodLogBufferForWorkDir(ctx context.Context, workDir string) (*PodLogBuffer, time.Time, error) {
@@ -320,7 +322,13 @@ func (b *PodLogBuffer) appendLine(lastPodLogTimestamp time.Time, lineBytes []byt
 	if err != nil {
 		return false, err
 	}
-	threshold := Ternary(b.counter < len(constants.PodLogChunkThresholds),constants.PodLogChunkThresholds[b.counter],constants.PodLogChunkMaxBytes).(int)
+
+	var threshold int
+	if b.counter < len(constants.PodLogChunkThresholds) {
+		threshold = constants.PodLogChunkThresholds[b.counter]
+	} else {
+		threshold = constants.PodLogChunkMaxBytes
+	}
 	return size >= int64(threshold), nil
 }
 

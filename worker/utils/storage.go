@@ -24,18 +24,9 @@ var (
 	s3Bucket string
 )
 
-// GetStorageMode returns the storage mode from the environment variable.
-func GetStorageMode() string {
-	mode := viper.GetString(constants.EnvStorageMode)
-	if mode == "" {
-		return constants.StorageModeNFS
-	}
-	return mode
-}
-
 // InitStorage initializes the shared S3 client when storage mode is S3. No-op for NFS.
 func InitStorage(ctx context.Context) error {
-	if GetStorageMode() != constants.StorageModeS3 {
+	if constants.GetStorageMode() != constants.StorageModeS3 {
 		return nil
 	}
 
@@ -96,13 +87,13 @@ func WriteConfigFiles(ctx context.Context, workDir string, configs []types.JobCo
 		return nil
 	}
 
-	switch GetStorageMode() {
+	switch constants.GetStorageMode() {
 	case constants.StorageModeS3:
 		return WriteFilesToS3(ctx, workDir, configs)
 	case constants.StorageModeNFS:
 		return WriteFilesToNFS(workDir, configs)
 	default:
-		return fmt.Errorf("unsupported storage mode: %s", GetStorageMode())
+		return fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
 	}
 }
 

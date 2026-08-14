@@ -17,7 +17,6 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -143,7 +142,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	subDir := filepath.Base(workDir)
 
 	jobStorageVolume := corev1.Volume{Name: "job-storage"}
-	switch utils.GetStorageMode() {
+	switch constants.GetStorageMode() {
 	case constants.StorageModeNFS:
 		jobStorageVolume.VolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
@@ -174,7 +173,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		},
 	}
-	if utils.GetStorageMode() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
+	if constants.GetStorageMode() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
 		envFrom = append(envFrom, corev1.EnvFromSource{
 			SecretRef: &corev1.SecretEnvSource{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -267,7 +266,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	}
 
 	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
-	if slices.Contains(constants.AsyncCommands, req.Command) && utils.GetStorageMode() == constants.StorageModeNFS {
+	if slices.Contains(constants.AsyncCommands, req.Command) && constants.GetStorageMode() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

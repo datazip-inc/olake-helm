@@ -44,7 +44,7 @@ func (a *loggingActivityInterceptor) ExecuteActivity(
 		return a.Next.ExecuteActivity(ctx, in)
 	}
 
-	ctxWithLogger, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command, a.exec.NewWorkerLogCollector)
+	ctxWithLogger, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command, a.exec.NewWorkerLogCollector, a.exec.NewConnectorLogCollector)
 	if err != nil {
 		logger.Warnf("failed to prepare workflow logger for workflowID=%s: %s", req.WorkflowID, err)
 		return a.Next.ExecuteActivity(ctx, in)
