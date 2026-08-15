@@ -23,6 +23,7 @@ import (
 
 const (
 	chunkTimestampLayout = "2006-01-02T150405.999999999Z"
+	logChunkSeqMarker    = "-seq"
 )
 
 type PodLogBuffer struct {
@@ -31,7 +32,24 @@ type PodLogBuffer struct {
 	filenamePrefix        string // chunk filename prefix, e.g. connector- or worker-
 	counter               int
 	lastLocalLogTimestamp time.Time // k8s/docker line timestamp for chunk naming
+	lastLocalLogSeq       uint64    // last seq in the buffered chunk
 	mu                    sync.Mutex
+}
+
+// logChunkMetadata holds resume fields parsed from a chunked log filename.
+type logChunkMetadata struct {
+	counter   int
+	timestamp time.Time
+	seq       uint64
+}
+
+// podLogLineEntry is a parsed pod log line: JSON fields, k8s/docker timestamp, and normalized line text.
+type podLogLineEntry struct {
+	WorkflowID        string `json:"workflowID"`
+	Command           string `json:"command"`
+	Seq               uint64 `json:"seq"`
+	PodLogTimestamp   time.Time
+	normalizedLogLine string
 }
 
 // NewPodLogBuffer creates a new PodLogBuffer
@@ -77,86 +95,111 @@ func listS3ObjectKeys(ctx context.Context, prefix string) ([]string, error) {
 	return s3ObjectKeys, nil
 }
 
-// parseLogChunkCounter parses the counter from a log chunk name.
-func parseLogChunkCounter(name, filenamePrefix string) (int, bool) {
-	raw := strings.TrimSuffix(strings.TrimPrefix(name, filenamePrefix), ".log")
-	dash := strings.Index(raw, "-")
+// parseLogChunkMetadata parses counter, timestamp, and seq from a chunk filename.
+func parseLogChunkMetadata(name, filenamePrefix string) (logChunkMetadata, bool) {
+	if !strings.HasPrefix(name, filenamePrefix) || !strings.HasSuffix(name, ".log") {
+		return logChunkMetadata{}, false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(name, filenamePrefix), ".log")
+
+	dash := strings.Index(body, "-")
 	if dash <= 0 {
-		return 0, false
+		return logChunkMetadata{}, false
 	}
-	counter, err := strconv.Atoi(raw[:dash])
+
+	counter, err := strconv.Atoi(body[:dash])
 	if err != nil {
-		return 0, false
+		return logChunkMetadata{}, false
 	}
-	return counter, true
+
+	timestampBody := body[dash+1:]
+	idx := strings.LastIndex(timestampBody, logChunkSeqMarker)
+	if idx < 0 {
+		return logChunkMetadata{}, false
+	}
+
+	seq, err := strconv.ParseUint(timestampBody[idx+len(logChunkSeqMarker):], 10, 64)
+	if err != nil {
+		return logChunkMetadata{}, false
+	}
+
+	chunkTimestamp, err := time.Parse(chunkTimestampLayout, timestampBody[:idx])
+	if err != nil {
+		return logChunkMetadata{}, false
+	}
+
+	return logChunkMetadata{
+		counter:   counter,
+		timestamp: chunkTimestamp,
+		seq:       seq,
+	}, true
 }
 
-// NewWorkerPodLogBuffer creates a new PodLogBuffer for the worker pod logs.
-func newWorkerPodLogBufferForWorkDir(ctx context.Context, workDir string) (*PodLogBuffer, time.Time, error) {
+// newWorkerPodLogBufferForWorkDir creates a PodLogBuffer for worker logs.
+func newWorkerPodLogBufferForWorkDir(ctx context.Context, workDir string) (*PodLogBuffer, time.Time, uint64, error) {
 	localDir := PodLogLocalDir(workDir)
 	if err := CreateDirectory(localDir); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
 
-	lastLogTimestamp, chunkCounter, err := resolveLogChunkState(ctx, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref)
+	lastLogTimestamp, lastLogSeq, chunkCounter, err := resolveLogChunkResumeState(ctx, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
 
 	buffer, err := NewPodLogBuffer(localDir, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref, chunkCounter)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
-	return buffer, lastLogTimestamp, nil
+	return buffer, lastLogTimestamp, lastLogSeq, nil
 }
 
 // NewConnectorPodLogBuffer creates a new PodLogBuffer for the connector pod logs.
-func newConnectorPodLogBufferForWorkDir(ctx context.Context, workDir, filenamePrefix string) (*PodLogBuffer, time.Time, error) {
+func newConnectorPodLogBufferForWorkDir(ctx context.Context, workDir, filenamePrefix string) (*PodLogBuffer, time.Time, uint64, error) {
 	localDir := PodLogLocalDir(workDir)
 	if err := CreateDirectory(localDir); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
 
-	logRelDir, lastLogTimestamp, chunkCounter, err := resolveLogDirState(ctx, workDir, filenamePrefix)
+	logRelDir, lastLogTimestamp, lastLogSeq, chunkCounter, err := resolveLogDirState(ctx, workDir, filenamePrefix)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
 
 	buffer, err := NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix, chunkCounter)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, 0, err
 	}
-	return buffer, lastLogTimestamp, nil
+	return buffer, lastLogTimestamp, lastLogSeq, nil
 }
 
 // resolveLogDirState lists log chunks for the current sync_* directory and returns the
-// S3-relative log path, latest chunk timestamp for resume/dedup, and highest chunk counter.
-func resolveLogDirState(ctx context.Context, workDir, filenamePrefix string) (logRelDir string, lastLogTimestamp time.Time, chunkCounter int, err error) {
+// S3-relative log path, latest chunk timestamp/seq for resume, and highest chunk counter.
+func resolveLogDirState(ctx context.Context, workDir, filenamePrefix string) (logRelDir string, lastLogTimestamp time.Time, lastLogSeq uint64, chunkCounter int, err error) {
 	currentLogDir, err := resolveCurrentLogDir(ctx, workDir)
 	if err != nil {
-		return "", time.Time{}, 0, err
+		return "", time.Time{}, 0, 0, err
 	}
 	logRelDir = path.Join("logs", currentLogDir)
 
-	lastLogTimestamp, chunkCounter, err = resolveLogChunkState(ctx, workDir, logRelDir, filenamePrefix)
+	lastLogTimestamp, lastLogSeq, chunkCounter, err = resolveLogChunkResumeState(ctx, workDir, logRelDir, filenamePrefix)
 	if err != nil {
-		return "", time.Time{}, 0, err
+		return "", time.Time{}, 0, 0, err
 	}
 
-	return logRelDir, lastLogTimestamp, chunkCounter, nil
+	return logRelDir, lastLogTimestamp, lastLogSeq, chunkCounter, nil
 }
 
-// resolveLogChunkState lists log chunks under logRelDir and returns the latest chunk
-// timestamp for resume/dedup and the highest chunk counter.
-func resolveLogChunkState(ctx context.Context, workDir, logRelDir, filenamePrefix string) (lastLogTimestamp time.Time, chunkCounter int, err error) {
+// resolveLogChunkResumeState lists log chunks under logRelDir and returns resume metadata from the latest chunk.
+func resolveLogChunkResumeState(ctx context.Context, workDir, logRelDir, filenamePrefix string) (lastLogTimestamp time.Time, lastLogSeq uint64, chunkCounter int, err error) {
 	s3LogDir, err := configStorageKey(workDir, logRelDir, true)
 	if err != nil {
-		return time.Time{}, 0, err
+		return time.Time{}, 0, 0, err
 	}
 
 	keys, err := listS3ObjectKeys(ctx, s3LogDir)
 	if err != nil {
-		return time.Time{}, 0, err
+		return time.Time{}, 0, 0, err
 	}
 
 	for _, key := range keys {
@@ -164,15 +207,16 @@ func resolveLogChunkState(ctx context.Context, workDir, logRelDir, filenamePrefi
 		if keySuffix == "" {
 			continue
 		}
-		if counter, ok := parseLogChunkCounter(keySuffix, filenamePrefix); ok && counter > chunkCounter {
-			chunkCounter = counter
+		meta, ok := parseLogChunkMetadata(keySuffix, filenamePrefix)
+		if !ok || meta.counter <= chunkCounter {
+			continue
 		}
-		if chunkTimestamp, ok := parseLogChunkTimestamp(keySuffix, filenamePrefix); ok && chunkTimestamp.After(lastLogTimestamp) {
-			lastLogTimestamp = chunkTimestamp
-		}
+		chunkCounter = meta.counter
+		lastLogTimestamp = meta.timestamp
+		lastLogSeq = meta.seq
 	}
 
-	return lastLogTimestamp, chunkCounter, nil
+	return lastLogTimestamp, lastLogSeq, chunkCounter, nil
 }
 
 // resolveCurrentLogDir returns the connector log session directory name (sync_*)
@@ -212,22 +256,18 @@ func resolveCurrentLogDir(ctx context.Context, workDir string) (string, error) {
 	return currentLogDir, nil
 }
 
-// parseLogChunkTimestamp parses the timestamp suffix from a chunked log filename.
-func parseLogChunkTimestamp(name, filenamePrefix string) (time.Time, bool) {
-	if !strings.HasPrefix(name, filenamePrefix) || !strings.HasSuffix(name, ".log") {
-		return time.Time{}, false
+func parsePodLogLine(rawLogLine string) (podLogLineEntry, bool) {
+	normalizedLine, podLogTimestamp, ok := NormalizePodLogLine(rawLogLine)
+	if !ok {
+		return podLogLineEntry{}, false
 	}
-	raw := strings.TrimSuffix(strings.TrimPrefix(name, filenamePrefix), ".log")
-	dash := strings.Index(raw, "-")
-	if dash <= 0 {
-		return time.Time{}, false
+	var normalizedLogLine podLogLineEntry
+	if err := json.Unmarshal([]byte(strings.TrimSpace(normalizedLine)), &normalizedLogLine); err != nil {
+		return podLogLineEntry{}, false
 	}
-	chunkTimestampStr := raw[dash+1:]
-	chunkTimestamp, err := time.Parse(chunkTimestampLayout, chunkTimestampStr)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return chunkTimestamp, true
+	normalizedLogLine.PodLogTimestamp = podLogTimestamp
+	normalizedLogLine.normalizedLogLine = normalizedLine
+	return normalizedLogLine, true
 }
 
 // PodLogLocalDir returns a local staging directory for log chunk buffering before S3 upload.
@@ -248,59 +288,25 @@ func (b *PodLogBuffer) Flush(ctx context.Context) error {
 		return err
 	}
 
-	lastTS := b.lastLocalLogTimestamp
-	if lastTS.IsZero() {
-		lastTS, _ = lastLogChunkTimestamp(data)
-	}
-	if err := b.uploadTolockeds3(ctx, lastTS, data); err != nil {
+	if err := b.uploadTolockeds3(ctx, podLogLineEntry{
+		PodLogTimestamp:   b.lastLocalLogTimestamp,
+		Seq:               b.lastLocalLogSeq,
+		normalizedLogLine: string(data),
+	}); err != nil {
 		return err
 	}
 	b.lastLocalLogTimestamp = time.Time{}
+	b.lastLocalLogSeq = 0
 	return os.Remove(b.path)
 }
 
-// lastLogChunkTimestamp returns the timestamp of the last log chunk.
-func lastLogChunkTimestamp(data []byte) (time.Time, bool) {
-	lines := strings.Split(string(data), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		if ts, ok := logLineTimestamp([]byte(line + "\n")); ok {
-			return ts, true
-		}
-	}
-	return time.Time{}, false
-}
-
-// logLineTimestamp parses the timestamp from a log line.
-func logLineTimestamp(lineBytes []byte) (time.Time, bool) {
-	if _, ts, ok := ParsePodLogLineTimestamp(string(lineBytes)); ok {
-		return ts, true
-	}
-	var entry struct {
-		Time string `json:"time"`
-	}
-	if err := json.Unmarshal(lineBytes, &entry); err != nil || entry.Time == "" {
-		return time.Time{}, false
-	}
-	return parseRFC3339(entry.Time)
-}
-
-// WriteLine appends a single log line using the same chunking rules as connector log collection.
-// lastPodLogTimestamp should be the k8s/docker log prefix timestamp when available (connector logs).
-func (b *PodLogBuffer) WriteLine(ctx context.Context, lineBytes []byte, lastPodLogTimestamp time.Time) error {
-	chunkTS := lastPodLogTimestamp
-	if chunkTS.IsZero() {
-		chunkTS, _ = logLineTimestamp(lineBytes)
-	}
-
-	shouldFlush, err := b.appendLine(lastPodLogTimestamp, lineBytes)
+// WriteLine appends a single parsed log line using the same chunking rules as connector log collection.
+func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLineEntry) error {
+	shouldFlush, err := b.appendLine(normalizedLogLine)
 	if err != nil {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		return b.uploadTolockeds3(ctx, chunkTS, lineBytes)
+		return b.uploadTolockeds3(ctx, normalizedLogLine)
 	}
 	if shouldFlush {
 		return b.Flush(ctx)
@@ -308,14 +314,17 @@ func (b *PodLogBuffer) WriteLine(ctx context.Context, lineBytes []byte, lastPodL
 	return nil
 }
 
-func (b *PodLogBuffer) appendLine(lastPodLogTimestamp time.Time, lineBytes []byte) (shouldFlush bool, err error) {
+func (b *PodLogBuffer) appendLine(normalizedLogLine podLogLineEntry) (shouldFlush bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if !lastPodLogTimestamp.IsZero() {
-		b.lastLocalLogTimestamp = lastPodLogTimestamp
+	if !normalizedLogLine.PodLogTimestamp.IsZero() {
+		b.lastLocalLogTimestamp = normalizedLogLine.PodLogTimestamp
 	}
-	if err := b.writeToLocalLockedFile(lineBytes); err != nil {
+	if normalizedLogLine.Seq > 0 {
+		b.lastLocalLogSeq = normalizedLogLine.Seq
+	}
+	if err := b.writeToLocalLockedFile([]byte(normalizedLogLine.normalizedLogLine)); err != nil {
 		return false, err
 	}
 	size, err := b.currentLockedBufferSize()
@@ -364,8 +373,8 @@ func (b *PodLogBuffer) writeToLocalLockedFile(data []byte) (err error) {
 }
 
 // uploadTolockeds3 uploads the data to S3 with the filename.
-func (b *PodLogBuffer) uploadTolockeds3(ctx context.Context, lastLogTS time.Time, data []byte) error {
-	filename := b.nextLockedFilename(lastLogTS)
+func (b *PodLogBuffer) uploadTolockeds3(ctx context.Context, normalizedLogLine podLogLineEntry) error {
+	filename := b.nextLockedFilename(normalizedLogLine)
 	key := path.Join(b.s3LogDir, filename)
 
 	client, bucket, err := getS3Client()
@@ -376,40 +385,39 @@ func (b *PodLogBuffer) uploadTolockeds3(ctx context.Context, lastLogTS time.Time
 	_, err = client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
-		Body:   bytes.NewReader(data),
+		Body:   bytes.NewReader([]byte(normalizedLogLine.normalizedLogLine)),
 	})
 	return err
 }
 
 // nextLockedFilename returns the next filename for the next chunk.
-func (b *PodLogBuffer) nextLockedFilename(lastLogTS time.Time) string {
+func (b *PodLogBuffer) nextLockedFilename(normalizedLogLine podLogLineEntry) string {
 	b.counter++
-	ts := strings.ReplaceAll(lastLogTS.UTC().Format(time.RFC3339Nano), ":", "")
-	return fmt.Sprintf("%s%06d-%s.log", b.filenamePrefix, b.counter, ts)
+	ts := strings.ReplaceAll(normalizedLogLine.PodLogTimestamp.UTC().Format(time.RFC3339Nano), ":", "")
+	return fmt.Sprintf("%s%06d-%s%s%06d.log", b.filenamePrefix, b.counter, ts, logChunkSeqMarker, normalizedLogLine.Seq)
 }
 
 // NormalizePodLogLine strips docker/k8s prefixes and accepts only JSON log lines.
-func NormalizePodLogLine(line string) (string, time.Time, bool) {
-	line = strings.TrimRight(line, "\r\n")
-	line = stripansi.Strip(line)
-	line = strings.TrimSpace(line)
-	if line == "" {
+func NormalizePodLogLine(rawLogLine string) (string, time.Time, bool) {
+	rawLogLine = strings.TrimRight(rawLogLine, "\r\n")
+	rawLogLine = stripansi.Strip(rawLogLine)
+	rawLogLine = strings.TrimSpace(rawLogLine)
+	if rawLogLine == "" {
 		return "", time.Time{}, false
 	}
 
-	rest, podLogTimestamp, ok := ParsePodLogLineTimestamp(line)
+	jsonBody, podLogTimestamp, ok := ParsePodLogLineTimestamp(rawLogLine)
 	if !ok {
 		return "", time.Time{}, false
 	}
-	line = rest
-	if line == "" || !json.Valid([]byte(line)) {
+	if jsonBody == "" || !json.Valid([]byte(jsonBody)) {
 		return "", time.Time{}, false
 	}
-	line += "\n"
-	return line, podLogTimestamp, true
+	normalizedLine := jsonBody + "\n"
+	return normalizedLine, podLogTimestamp, true
 }
 
-func readPodLogStream(stream io.Reader, handleLine func(line string) error) error {
+func readPodLogStream(stream io.Reader, handleLine func(rawLogLine string) error) error {
 	reader := bufio.NewReader(stream)
 	for {
 		lineBytes, err := reader.ReadBytes('\n')
@@ -428,17 +436,17 @@ func readPodLogStream(stream io.Reader, handleLine func(line string) error) erro
 }
 
 // ParsePodLogLineTimestamp parses the RFC3339 timestamp prefix from a kubectl-style log line.
-// rest is the line body after the timestamp prefix when ok is true.
-func ParsePodLogLineTimestamp(line string) (rest string, ts time.Time, ok bool) {
-	prefix, rest, found := strings.Cut(line, " ")
+// jsonBody is the line body after the timestamp prefix when ok is true.
+func ParsePodLogLineTimestamp(rawLogLine string) (jsonBody string, ts time.Time, ok bool) {
+	prefix, jsonBody, found := strings.Cut(rawLogLine, " ")
 	if !found {
-		return line, time.Time{}, false
+		return rawLogLine, time.Time{}, false
 	}
 	podLogTimestamp, podLogTimestampOK := parseRFC3339(prefix)
 	if !podLogTimestampOK {
-		return line, time.Time{}, false
+		return rawLogLine, time.Time{}, false
 	}
-	return strings.TrimSpace(rest), podLogTimestamp, true
+	return strings.TrimSpace(jsonBody), podLogTimestamp, true
 }
 
 // parseRFC3339 parses RFC3339 timestamps in nano formats.

@@ -33,7 +33,7 @@ type RuntimeLogCollector struct {
 	streamLogs   StreamFunc
 	stillRunning StillRunningFunc
 
-	processLine func(ctx context.Context, line string) error
+	processLine func(ctx context.Context, rawLogLine string) error
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -97,7 +97,7 @@ func (c *RuntimeLogCollector) runStream(ctx context.Context) error {
 		c.streamCancelMu.Unlock()
 	}()
 
-	reader, err := c.streamLogs(streamCtx, ResumeLogSince(lastLogTimestamp), true)
+	reader, err := c.streamLogs(streamCtx, lastLogTimestamp, true)
 	if err != nil {
 		return err
 	}
@@ -105,17 +105,9 @@ func (c *RuntimeLogCollector) runStream(ctx context.Context) error {
 		defer closer.Close()
 	}
 
-	return readPodLogStream(reader, func(line string) error {
-		return c.processLine(ctx, line)
+	return readPodLogStream(reader, func(rawLogLine string) error {
+		return c.processLine(ctx, rawLogLine)
 	})
-}
-
-// ResumeLogSince returns a resume timestamp that avoids re-reading the last line Docker/k8s already delivered.
-func ResumeLogSince(since time.Time) time.Time {
-	if since.IsZero() {
-		return since
-	}
-	return since.Add(time.Nanosecond)
 }
 
 func (c *RuntimeLogCollector) shouldStop(ctx context.Context) bool {
@@ -151,7 +143,7 @@ func (c *RuntimeLogCollector) catchUp(ctx context.Context) {
 	catchUpCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	reader, err := c.streamLogs(catchUpCtx, ResumeLogSince(lastLogTimestamp), false)
+	reader, err := c.streamLogs(catchUpCtx, lastLogTimestamp, false)
 	if err != nil {
 		logger.Warnf("failed to catch up logs: %s", err)
 		return
@@ -160,8 +152,8 @@ func (c *RuntimeLogCollector) catchUp(ctx context.Context) {
 		defer closer.Close()
 	}
 
-	if err := readPodLogStream(reader, func(line string) error {
-		return c.processLine(ctx, line)
+	if err := readPodLogStream(reader, func(rawLogLine string) error {
+		return c.processLine(ctx, rawLogLine)
 	}); err != nil {
 		logger.Warnf("failed to read catch-up logs: %s", err)
 	}

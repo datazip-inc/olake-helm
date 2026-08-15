@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/rs/zerolog"
@@ -35,12 +36,15 @@ func (wf *WorkflowLogFile) Close() error {
 	return err
 }
 
-// InitWorkflowLogger creates a zerolog.Logger that writes to stdout and the given writer.
+// InitWorkflowLoggerForS3 creates a zerolog.Logger that writes to stdout and the given writer.
 // workflowID and command are attached to every log line for S3 worker log routing.
-func InitWorkflowLogger(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error) (context.Context, *WorkflowLogFile, error) {
+func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error) (context.Context, *WorkflowLogFile, error) {
 	stdoutWriter := createStdoutWriter()
 	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, fileWriter)
-	log := zerolog.New(multiWriter).With().Timestamp().Logger()
+	var seq uint64
+	log := zerolog.New(multiWriter).Hook(zerolog.HookFunc(func(e *zerolog.Event, _ zerolog.Level, _ string) {
+		e.Uint64("seq", atomic.AddUint64(&seq, 1))
+	})).With().Timestamp().Logger()
 	if workflowID != "" {
 		log = log.With().Str("workflowID", workflowID).Logger()
 	}

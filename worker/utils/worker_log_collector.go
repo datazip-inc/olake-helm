@@ -2,10 +2,7 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"io"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
@@ -17,14 +14,9 @@ type workflowLogKey struct {
 	command    types.Command
 }
 
-type workerLogLine struct {
-	podTimestamp time.Time
-	line         []byte
-}
-
 // NewWorkerLogCollector tails worker container logs via the runtime API and uploads chunks to S3.
 func NewWorkerLogCollector(ctx context.Context, workflowID, workDir string, streamLogs StreamFunc) (*RuntimeLogCollector, error) {
-	buffer, lastLogTimestamp, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
+	buffer, lastLogTimestamp, lastLogSeq, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
 	if err != nil {
 		return nil, err
 	}
@@ -42,28 +34,27 @@ func NewWorkerLogCollector(ctx context.Context, workflowID, workDir string, stre
 		done:             make(chan struct{}),
 	}
 
-	runtimeLogCollector.processLine = func(ctx context.Context, line string) error {
-		normalized, lastLogTimestamp, ok := NormalizePodLogLine(line)
+	runtimeLogCollector.processLine = func(ctx context.Context, rawLogLine string) error {
+		normalizedLogLine, ok := parsePodLogLine(rawLogLine)
 		if !ok {
 			return nil
 		}
-
-		var entry struct {
-			WorkflowID string `json:"workflowID"`
-		}
-		if err := json.Unmarshal([]byte(strings.TrimSpace(normalized)), &entry); err != nil {
-			return nil
-		}
 		// Only lines tagged for this activity; skip startup/root-logger noise without workflowID.
-		if entry.WorkflowID != workflowID {
+		if normalizedLogLine.WorkflowID != workflowID {
 			return nil
+		}
+		if normalizedLogLine.Seq > 0 {
+			if normalizedLogLine.Seq <= lastLogSeq {
+				return nil
+			}
+			lastLogSeq = normalizedLogLine.Seq
 		}
 
 		runtimeLogCollector.lastLogTimestampMu.Lock()
-		runtimeLogCollector.lastLogTimestamp = lastLogTimestamp
+		runtimeLogCollector.lastLogTimestamp = normalizedLogLine.PodLogTimestamp
 		runtimeLogCollector.lastLogTimestampMu.Unlock()
 
-		return runtimeLogCollector.buffer.WriteLine(ctx, []byte(normalized), lastLogTimestamp)
+		return runtimeLogCollector.buffer.WriteLine(ctx, normalizedLogLine)
 	}
 
 	return runtimeLogCollector, nil
@@ -82,12 +73,12 @@ func RecoverWorkerLogs(ctx context.Context, streamLogs func(ctx context.Context)
 		defer closer.Close()
 	}
 
-	groupedLogLines, err := groupWorkerLogLines(reader)
+	groupedNormalizedLogLines, err := groupWorkerLogLines(reader)
 	if err != nil {
 		return err
 	}
-	for key, lines := range groupedLogLines {
-		if err := appendWorkerLogLines(ctx, key.workflowID, key.command, lines); err != nil {
+	for key, normalizedLogLines := range groupedNormalizedLogLines {
+		if err := appendWorkerLogLines(ctx, key.workflowID, key.command, normalizedLogLines); err != nil {
 			logger.Warnf("failed to recover worker logs for workflowID=%s: %s", key.workflowID, err)
 		}
 	}
@@ -95,63 +86,55 @@ func RecoverWorkerLogs(ctx context.Context, streamLogs func(ctx context.Context)
 }
 
 // groupWorkerLogLines groups worker log lines by workflowID and command.
-func groupWorkerLogLines(reader io.Reader) (map[workflowLogKey][]workerLogLine, error) {
-	groupedLogLines := make(map[workflowLogKey][]workerLogLine)
+func groupWorkerLogLines(reader io.Reader) (map[workflowLogKey][]podLogLineEntry, error) {
+	groupedNormalizedLogLines := make(map[workflowLogKey][]podLogLineEntry)
 	var workflowID string
 	var command types.Command
 
-	err := readPodLogStream(reader, func(line string) error {
-		normalized, podTS, ok := NormalizePodLogLine(line)
+	err := readPodLogStream(reader, func(rawLogLine string) error {
+		normalizedLogLine, ok := parsePodLogLine(rawLogLine)
 		if !ok {
 			return nil
 		}
 
-		var entry struct {
-			WorkflowID string `json:"workflowID"`
-			Command    string `json:"command"`
-		}
-		if err := json.Unmarshal([]byte(strings.TrimSpace(normalized)), &entry); err != nil {
-			return nil
-		}
-		if entry.WorkflowID != "" {
-			workflowID = entry.WorkflowID
-		}
-		if entry.Command != "" {
-			command = types.Command(entry.Command)
+		if normalizedLogLine.WorkflowID != "" {
+			workflowID = normalizedLogLine.WorkflowID
 		}
 		if workflowID == "" {
 			return nil
+		}
+		if normalizedLogLine.Command != "" {
+			command = types.Command(normalizedLogLine.Command)
 		}
 		if command == "" {
 			command = types.Sync
 		}
 		key := workflowLogKey{workflowID: workflowID, command: command}
-		groupedLogLines[key] = append(groupedLogLines[key], workerLogLine{podTimestamp: podTS, line: []byte(normalized)})
+		groupedNormalizedLogLines[key] = append(groupedNormalizedLogLines[key], normalizedLogLine)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return groupedLogLines, nil
+	return groupedNormalizedLogLines, nil
 }
 
 // appendWorkerLogLines appends worker log lines to the buffer and flushes them to S3.
-func appendWorkerLogLines(ctx context.Context, workflowID string, command types.Command, lines []workerLogLine) error {
-	sort.Slice(lines, func(i, j int) bool {
-		return lines[i].podTimestamp.Before(lines[j].podTimestamp)
-	})
-
+func appendWorkerLogLines(ctx context.Context, workflowID string, command types.Command, normalizedLogLines []podLogLineEntry) error {
 	_, workDir := GetWorkflowDirAndSubDir(workflowID, command)
-	buffer, lastTS, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
+	buffer, _, lastLogSeq, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
 	if err != nil {
 		return err
 	}
 
-	for _, line := range lines {
-		if !lastTS.IsZero() && !line.podTimestamp.IsZero() && !line.podTimestamp.After(lastTS) {
-			continue
+	for _, normalizedLogLine := range normalizedLogLines {
+		if normalizedLogLine.Seq > 0 {
+			if normalizedLogLine.Seq <= lastLogSeq {
+				continue
+			}
+			lastLogSeq = normalizedLogLine.Seq
 		}
-		if err := buffer.WriteLine(ctx, line.line, line.podTimestamp); err != nil {
+		if err := buffer.WriteLine(ctx, normalizedLogLine); err != nil {
 			return err
 		}
 	}

@@ -457,7 +457,7 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 			return ctx, nil, err
 		}
 
-		return logger.InitWorkflowLogger(ctx, workflowID, string(command), io.Discard, func() error {
+		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), io.Discard, func() error {
 			return releaseCollectors(ctx)
 		})
 	case constants.StorageModeNFS:
