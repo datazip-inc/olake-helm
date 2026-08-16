@@ -6,6 +6,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -87,7 +88,7 @@ func requiredEnvVars() error {
 		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
 	}
 
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
 	case constants.StorageModeNFS:

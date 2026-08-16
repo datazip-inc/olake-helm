@@ -321,15 +321,17 @@ s3:
   region: ""
   prefix: ""
   auth:
+    # When true, skip static S3 keys and annotate worker + job/UI ServiceAccounts with roleArn (EKS IRSA).
     useIRSA: false
+    # Required when useIRSA is true. One role for worker, UI, and connector job pods (platform S3 + destinations).
     roleArn: ""
     existingSecret: ""
     credentials:
       accessKeyId: ""
       secretAccessKey: ""
     secretKeys:
-      accessKeyId: "AWS_ACCESS_KEY_ID"
-      secretAccessKey: "AWS_SECRET_ACCESS_KEY"
+      accessKeyId: "OLAKE_S3_ACCESS_KEY_ID"
+      secretAccessKey: "OLAKE_S3_SECRET_ACCESS_KEY"
 
 # NFS / PVC (used when S3 is not active)
 nfsServer:

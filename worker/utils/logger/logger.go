@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
@@ -26,7 +27,7 @@ func Init() {
 // S3 log collection requires JSON lines with workflowID; console format is skipped there.
 func createStdoutWriter() io.Writer {
 	format := viper.GetString(constants.EnvLogFormat)
-	if strings.EqualFold(format, "console") && constants.GetStorageMode() != constants.StorageModeS3 {
+	if strings.EqualFold(format, "console") && storagemode.Get() != constants.StorageModeS3 {
 		return zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339,

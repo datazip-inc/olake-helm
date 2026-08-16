@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -26,21 +26,20 @@ var (
 
 // InitStorage initializes the shared S3 client when storage mode is S3. No-op for NFS.
 func InitStorage(ctx context.Context) error {
-	if constants.GetStorageMode() != constants.StorageModeS3 {
+	if storagemode.Get() != constants.StorageModeS3 {
 		return nil
 	}
 
 	configOpts := []func(*config.LoadOptions) error{}
-	if region := envFirst(constants.EnvS3Region, "AWS_REGION"); region != "" {
+	if region := viper.GetString(constants.EnvS3Region); region != "" {
 		configOpts = append(configOpts, config.WithRegion(region))
 	}
 
-	accessKey := envFirst(constants.EnvS3AccessKeyID, "AWS_ACCESS_KEY_ID")
-	secretKey := envFirst(constants.EnvS3SecretAccessKey, "AWS_SECRET_ACCESS_KEY")
+	accessKey := viper.GetString(constants.EnvS3AccessKeyID)
+	secretKey := viper.GetString(constants.EnvS3SecretAccessKey)
 	if accessKey != "" && secretKey != "" {
-		sessionToken := envFirst(constants.EnvS3SessionToken, "AWS_SESSION_TOKEN")
 		configOpts = append(configOpts, config.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(accessKey, secretKey, sessionToken),
+			credentials.NewStaticCredentialsProvider(accessKey, secretKey, viper.GetString(constants.EnvS3SessionToken)),
 		))
 	}
 
@@ -50,7 +49,7 @@ func InitStorage(ctx context.Context) error {
 	}
 
 	var s3Opts []func(*s3.Options)
-	if endpoint := envFirst(constants.EnvS3Endpoint, "AWS_ENDPOINT_URL"); endpoint != "" {
+	if endpoint := viper.GetString(constants.EnvS3Endpoint); endpoint != "" {
 		// Path-style is required for MinIO and other S3-compatible endpoints.
 		s3Opts = append(s3Opts, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
@@ -61,16 +60,6 @@ func InitStorage(ctx context.Context) error {
 	s3Client = s3.NewFromConfig(awsCfg, s3Opts...)
 	s3Bucket = viper.GetString(constants.EnvS3Bucket)
 	return nil
-}
-
-// envFirst returns the first non-empty environment variable value from the given keys.
-func envFirst(keys ...string) string {
-	for _, key := range keys {
-		if value := os.Getenv(key); value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 // getS3Client returns the shared S3 client initialized by InitStorage.
@@ -87,13 +76,13 @@ func WriteConfigFiles(ctx context.Context, workDir string, configs []types.JobCo
 		return nil
 	}
 
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		return WriteFilesToS3(ctx, workDir, configs)
 	case constants.StorageModeNFS:
 		return WriteFilesToNFS(workDir, configs)
 	default:
-		return fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
+		return fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 	}
 }
 

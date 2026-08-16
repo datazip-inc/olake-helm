@@ -16,6 +16,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -152,13 +153,13 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 	if req.TempPath != "" {
 		var data string
 		var err error
-		switch constants.GetStorageMode() {
+		switch storagemode.Get() {
 		case constants.StorageModeS3:
 			data, err = readFileFromS3(ctx, "", req.TempPath, true)
 		case constants.StorageModeNFS:
 			data, err = readFileFromNFS(GetConfigDir(), req.TempPath)
 		default:
-			return fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
+			return fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 		}
 		if err != nil {
 			return fmt.Errorf("failed to read streams file: %s", err)
@@ -190,13 +191,13 @@ func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command typ
 
 	var stateFile string
 	var err error
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		stateFile, err = readFileFromS3(ctx, workDir, "state.json", true)
 	case constants.StorageModeNFS:
 		stateFile, err = readFileFromNFS(workDir, "state.json")
 	default:
-		return "", fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
+		return "", fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
@@ -217,7 +218,7 @@ func GetConfigDir() string {
 
 // GetTelemetryUserID reads the telemetry user ID from the appropriate storage mode.
 func GetTelemetryUserID(ctx context.Context) string {
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		data, err := readFileFromS3(ctx, "", constants.TelemetryUserIDPath, false)
 		if err != nil {
@@ -235,7 +236,7 @@ func GetTelemetryUserID(ctx context.Context) string {
 		}
 		return string(userID)
 	default:
-		logger.Errorf("unsupported storage mode for telemetry user ID: %s", constants.GetStorageMode())
+		logger.Errorf("unsupported storage mode for telemetry user ID: %s", storagemode.Get())
 		return ""
 	}
 }
@@ -254,7 +255,7 @@ func GetHostOutputDir(outputDir string) string {
 // WorkflowAlreadyLaunched reports whether this workflow has already started a connector run.
 // Config files alone do not count — they are written before the container/pod is launched.
 func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		return workflowConnectorLogsExistInS3(ctx, workdir)
 	case constants.StorageModeNFS:
@@ -325,7 +326,7 @@ func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, 
 // connectorConfigPath returns the path the connector binary should read for a config file.
 // NFS mounts the workflow dir at /mnt/config; S3 uses s3://bucket/[prefix/]{workflow-dir}/file.
 func connectorConfigPath(command types.Command, workflowID, filename string) string {
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
 		jobDir := GetWorkflowDirectory(command, workflowID)
@@ -450,7 +451,7 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 		return ctx, nil, err
 	}
 
-	switch constants.GetStorageMode() {
+	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		releaseCollectors, err := acquireWorkflowLogCollectors(ctx, workflowID, workdirPath, command, newWorkerLogCollector, newConnectorLogCollector)
 		if err != nil {

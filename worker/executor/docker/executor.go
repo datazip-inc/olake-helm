@@ -10,6 +10,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -66,7 +67,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
-		switch constants.GetStorageMode() {
+		switch storagemode.Get() {
 		case constants.StorageModeNFS:
 			hostOutputDir := utils.GetHostOutputDir(workdir)
 			hostConfig.Mounts = []mount.Mount{
@@ -76,7 +77,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 			// Connector must reach MinIO/S3 on the same Docker network as the worker.
 			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
 		default:
-			return "", fmt.Errorf("unsupported storage mode: %s", constants.GetStorageMode())
+			return "", fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 		}
 	}
 

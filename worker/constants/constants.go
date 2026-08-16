@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -64,12 +63,3 @@ var (
 	}
 	AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
 )
-
-// GetStorageMode returns the storage mode from the environment variable.
-func GetStorageMode() string {
-	mode := viper.GetString(EnvStorageMode)
-	if mode == "" {
-		return StorageModeNFS
-	}
-	return mode
-}

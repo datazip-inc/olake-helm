@@ -13,6 +13,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
 // Executor interface for k8s and docker executor
@@ -121,7 +122,7 @@ func (a *AbstractExecutor) Close() {
 
 // RecoverWorkerLogs uploads worker logs from the previous container/pod on startup (S3 mode).
 func (a *AbstractExecutor) RecoverWorkerLogs(ctx context.Context) error {
-	if constants.GetStorageMode() != constants.StorageModeS3 {
+	if storagemode.Get() != constants.StorageModeS3 {
 		return nil
 	}
 	switch e := a.executor.(type) {
