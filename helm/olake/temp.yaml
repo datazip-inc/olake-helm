@@ -1,0 +1,16 @@
+global:
+  localStorageMode: "s3"
+  env:
+    CONTAINER_REGISTRY_BASE: "672919669757.dkr.ecr.ap-south-1.amazonaws.com"
+
+s3LogFileStorage:
+  enabled: false
+  endpoint: ""
+  bucket: "dz-olake-testing"
+  region: "ap-south-1"
+  prefix: ""
+  existingSecret: ""
+  role:
+    enabled: true
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::672919669757:role/testing-arn-test-assume-role"

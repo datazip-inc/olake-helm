@@ -70,13 +70,6 @@ Create the name of the service account to use for job pods
 {{- end }}
 
 {{/*
-Shared storage mode: s3 when bucket+region are set, otherwise storage.mode (default nfs).
-*/}}
-{{- define "olake.storageMode" -}}
-{{- if and .Values.s3.bucket .Values.s3.region -}}s3{{- else -}}{{- .Values.storage.mode | default "nfs" -}}{{- end -}}
-{{- end -}}
-
-{{/*
 Worker/UI probe shell: include shared-storage write only in NFS mode.
 */}}
 {{- define "olake.workerReadinessProbeShell" -}}
@@ -92,31 +85,59 @@ Worker/UI probe shell: include shared-storage write only in NFS mode.
 {{- end -}}
 
 {{/*
-S3 storage environment variables for olake-global-env (NFS uses olake-workers-config).
+S3 log file storage: hosted (enabled: false) or local MinIO (enabled: true + endpoint).
+Local MinIO deployment is not yet included in this chart.
 */}}
-{{- define "olake.storageEnv" -}}
-{{- if eq (include "olake.storageMode" .) "s3" }}
-OLAKE_S3_BUCKET: {{ required "s3.bucket is required when S3 storage is active" .Values.s3.bucket | quote }}
-OLAKE_S3_REGION: {{ required "s3.region is required when S3 storage is active" .Values.s3.region | quote }}
-{{- if .Values.s3.prefix }}
-OLAKE_S3_PREFIX: {{ .Values.s3.prefix | quote }}
-{{- end }}
-{{- if and (not .Values.s3.auth.useIRSA) (or .Values.s3.auth.existingSecret .Values.s3.auth.credentials.accessKeyId) }}
-OLAKE_S3_CREDENTIALS_SECRET: {{ include "olake.s3.secretName" . | quote }}
-{{- end }}
+{{- define "olake.s3LogFileStorageHosted" -}}
+{{- if and (not .Values.s3LogFileStorage.enabled) .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region -}}true{{- end -}}
+{{- end -}}
+
+{{- define "olake.s3LogFileStorageLocal" -}}
+{{- if and .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.endpoint .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Log storage mode from global.localStorageMode (default nfs).
+When s3, validates s3LogFileStorage is complete before render.
+*/}}
+{{- define "olake.storageMode" -}}
+{{- $mode := .Values.global.localStorageMode | default "nfs" -}}
+{{- if eq $mode "s3" -}}
+{{- if not (or (eq (include "olake.s3LogFileStorageHosted" .) "true") (eq (include "olake.s3LogFileStorageLocal" .) "true")) -}}
+{{- fail "global.localStorageMode is \"s3\" but s3LogFileStorage is incomplete: set bucket and region for hosted S3 (enabled: false), or enabled, endpoint, bucket, and region for local MinIO" -}}
+{{- end -}}
+{{- end -}}
+{{- $mode -}}
+{{- end -}}
+
+{{/*
+S3 IRSA annotations for hosted log storage (worker and job service accounts).
+Returns a YAML map when active, empty otherwise.
+*/}}
+{{- define "olake.s3IRSAAnnotations" -}}
+{{- if and (eq (include "olake.storageMode" .) "s3") (eq (include "olake.s3LogFileStorageHosted" .) "true") .Values.s3LogFileStorage.role.enabled }}
+{{- .Values.s3LogFileStorage.role.annotations | default dict | toYaml }}
 {{- end }}
 {{- end -}}
 
 {{/*
-S3 credentials secret name
+S3 log file storage environment variables for olake-global-env.
 */}}
-{{- define "olake.s3.secretName" -}}
-{{- if .Values.s3.auth.existingSecret }}
-{{- .Values.s3.auth.existingSecret }}
-{{- else }}
-{{- printf "%s-s3-credentials" (include "olake.fullname" .) }}
+{{- define "olake.storageEnv" -}}
+{{- if eq (include "olake.storageMode" .) "s3" }}
+OLAKE_S3_BUCKET: {{ required "s3LogFileStorage.bucket is required when S3 log storage is active" .Values.s3LogFileStorage.bucket | quote }}
+OLAKE_S3_REGION: {{ required "s3LogFileStorage.region is required when S3 log storage is active" .Values.s3LogFileStorage.region | quote }}
+{{- if .Values.s3LogFileStorage.prefix }}
+OLAKE_S3_PREFIX: {{ .Values.s3LogFileStorage.prefix | quote }}
+{{- end }}
+{{- if eq (include "olake.s3LogFileStorageLocal" .) "true" }}
+OLAKE_S3_ENDPOINT: {{ required "s3LogFileStorage.endpoint is required for local MinIO" .Values.s3LogFileStorage.endpoint | quote }}
+{{- end }}
+{{- if and (not .Values.s3LogFileStorage.role.enabled) .Values.s3LogFileStorage.existingSecret }}
+OLAKE_S3_CREDENTIALS_SECRET: {{ .Values.s3LogFileStorage.existingSecret | quote }}
 {{- end }}
 {{- end }}
+{{- end -}}
 
 {{/*
 Shared storage PVC name

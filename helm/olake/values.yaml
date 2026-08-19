@@ -109,6 +109,11 @@ global:
   #     RUN_MODE: "production"
   env: {}
 
+  # -- Local storage mode for job config and log files
+  #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
+  #   - "nfs": NFS shared volume
+  localStorageMode: "nfs"
+
 # OLake UI - Main application
 olakeUI:
   # -- Number of OLake UI replicas
@@ -312,26 +317,31 @@ olakeWorker:
       level: info
       format: console
 
-# Shared storage: S3 wins when s3.bucket and s3.region are both set; otherwise storage.mode (default nfs).
-storage:
-  mode: nfs
-
-s3:
+# S3 Log File Storage (used when global.localStorageMode is "s3")
+s3LogFileStorage:
+  # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
+  #   - true:  local / built-in MinIO (requires endpoint; not yet deployed by this chart)
+  #   - false: hosted / external S3 (AWS S3, GCS S3 API, etc.)
+  enabled: false
+  # -- S3-compatible endpoint. Required for local MinIO (enabled: true). Leave empty for hosted AWS S3.
+  endpoint: ""
   bucket: ""
   region: ""
   prefix: ""
-  auth:
-    # When true, skip static S3 keys and annotate worker + job/UI ServiceAccounts with roleArn (EKS IRSA).
-    useIRSA: false
-    # Required when useIRSA is true. One role for worker, UI, and connector job pods (platform S3 + destinations).
-    roleArn: ""
-    existingSecret: ""
-    credentials:
-      accessKeyId: ""
-      secretAccessKey: ""
-    secretKeys:
-      accessKeyId: "OLAKE_S3_ACCESS_KEY_ID"
-      secretAccessKey: "OLAKE_S3_SECRET_ACCESS_KEY"
+  # -- Static credentials secret (required when role.enabled is false)
+  # kubectl create secret generic s3-log-file-storage-secret \
+  #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+  #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+  existingSecret: ""
+  role:
+    # -- Use IAM role for hosted S3 auth (EKS IRSA). When true, existingSecret is not required.
+    enabled: false
+    # Cloud provider IAM role association for hosted S3 log storage.
+    # Examples:
+    #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
+    #   GCP Workload Identity: iam.gke.io/gcp-service-account: "olake-s3-log-storage@project.iam.gserviceaccount.com"
+    #   Azure Workload Identity: azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
+    annotations: {}
 
 # NFS / PVC (used when S3 is not active)
 nfsServer:

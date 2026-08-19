@@ -166,16 +166,41 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
-        envFrom:
-        - configMapRef:
-            name: olake-global-env
+        # Log storage configuration
+        - name: OLAKE_STORAGE_MODE
+          value: {{ include "olake.storageMode" . | quote }}
+        {{- if eq (include "olake.storageMode" .) "s3" }}
+        - name: OLAKE_S3_BUCKET
+          value: {{ required "s3LogFileStorage.bucket is required when S3 log storage is active" .Values.s3LogFileStorage.bucket | quote }}
+        - name: OLAKE_S3_REGION
+          value: {{ required "s3LogFileStorage.region is required when S3 log storage is active" .Values.s3LogFileStorage.region | quote }}
+        {{- if .Values.s3LogFileStorage.prefix }}
+        - name: OLAKE_S3_PREFIX
+          value: {{ .Values.s3LogFileStorage.prefix | quote }}
+        {{- end }}
+        {{- if eq (include "olake.s3LogFileStorageLocal" .) "true" }}
+        - name: OLAKE_S3_ENDPOINT
+          value: {{ required "s3LogFileStorage.endpoint is required for local MinIO" .Values.s3LogFileStorage.endpoint | quote }}
+        {{- end }}
+        {{- if and (not .Values.s3LogFileStorage.role.enabled) .Values.s3LogFileStorage.existingSecret }}
+        - name: OLAKE_S3_CREDENTIALS_SECRET
+          value: {{ .Values.s3LogFileStorage.existingSecret | quote }}
+        - name: OLAKE_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.s3LogFileStorage.existingSecret }}
+              key: OLAKE_S3_ACCESS_KEY_ID
+        - name: OLAKE_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.s3LogFileStorage.existingSecret }}
+              key: OLAKE_S3_SECRET_ACCESS_KEY
+        {{- end }}
+        {{- end }}
         {{- if not .Values.temporal.enabled }}
+        envFrom:
         - secretRef:
             name: {{ include "olake.temporal.secretName" . }}
-        {{- end }}
-        {{- if and (eq (include "olake.storageMode" .) "s3") (not .Values.s3.auth.useIRSA) (or .Values.s3.auth.existingSecret .Values.s3.auth.credentials.accessKeyId) }}
-        - secretRef:
-            name: {{ include "olake.s3.secretName" . }}
         {{- end }}
         # - name: POSTGRES_DB
         #   value: "postgres://$(POSTGRES_DB_USER):$(POSTGRES_DB_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=$(POSTGRES_DB_SSLMODE)"
