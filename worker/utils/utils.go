@@ -105,7 +105,8 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
+// ApplyConfigUpdates overwrites req.Configs entries named in updates, and adds addIfMissing entries only if not already present.
+func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
 	existing := make(map[string]int)
 	for i, config := range req.Configs {
 		existing[config.Name] = i
@@ -136,12 +137,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	addIfMissing := make(map[string]string)
-	if !viper.GetBool(constants.EnvTelemetryDisabled) {
-		addIfMissing["user_id.txt"] = GetTelemetryUserID()
-	}
-
-	applyConfigUpdates(req, updates, addIfMissing)
+	ApplyConfigUpdates(req, updates, nil)
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -159,7 +155,7 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 			"streams.json":     string(data),
 		}
 
-		applyConfigUpdates(req, updates, nil)
+		ApplyConfigUpdates(req, updates, nil)
 	}
 
 	return nil

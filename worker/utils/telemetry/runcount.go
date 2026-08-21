@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"go.temporal.io/sdk/client"
@@ -24,19 +23,12 @@ type jobRunCounter struct {
 
 // jobCounterPath: <persistent-dir>/telemetry/job-counters/<job_id>, next to telemetry/user_id.
 func jobCounterPath(jobID int) string {
-	dir := utils.GetConfigDir()
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, "telemetry", "job-counters", fmt.Sprintf("%d", jobID))
+	return filepath.Join(utils.GetConfigDir(), "telemetry", "job-counters", fmt.Sprintf("%d", jobID))
 }
 
 // readCounter returns (counter, true) if a counter file exists and parses;
 // (zero value, false) if it's missing, unreadable, or unparsable.
 func readCounter(path string) (jobRunCounter, bool) {
-	if path == "" {
-		return jobRunCounter{}, false
-	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return jobRunCounter{}, false
@@ -53,8 +45,7 @@ func writeCounter(path string, c jobRunCounter) {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0755)
-	_ = os.WriteFile(path, data, constants.DefaultFilePermissions)
+	_ = utils.WriteFile(path, data)
 }
 
 // GetOrIncrementSyncRunCount returns which run number this sync is for the
@@ -69,9 +60,6 @@ func writeCounter(path string, c jobRunCounter) {
 // incrementing it again.
 func GetOrIncrementSyncRunCount(ctx context.Context, tempClient client.Client, req *types.ExecutionRequest, attempt int) int {
 	path := jobCounterPath(req.JobID)
-	if path == "" {
-		return 0
-	}
 
 	if attempt > 1 {
 		c, ok := readCounter(path)

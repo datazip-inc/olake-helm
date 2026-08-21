@@ -51,6 +51,9 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 		}
 	}
 
+	// base telemetry context for non-sync commands; old CLI versions just ignore the file
+	telemetry.WriteConfigs(req, telemetry.BaseContext(req, utils.GetExecutorEnvironment()))
+
 	return a.executor.Execute(ctx, req)
 }
 
@@ -68,7 +71,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// Update the configs with latest
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		telemetry.TrackSyncFailed(req, environment)
+		telemetry.TrackSyncEvent(telemetry.BaseContext(req, environment), telemetry.TelemetryEventFailed, "")
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
@@ -79,16 +82,24 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
 
-	// update the configs with latest job details
+	// calculate run count before sending in telemetry.json
+	runCount := telemetry.GetOrIncrementSyncRunCount(ctx, a.tempClient, req, attempt)
+	cliTelemetry := telemetry.SupportsCLITelemetry(req.Version)
+	tctx := telemetry.BuildContext(req, jobDetails, environment, runCount)
+
+	// update the configs with latest job details; old CLI versions just ignore the telemetry file
 	utils.UpdateConfigWithJobDetails(jobDetails, req)
+	telemetry.WriteConfigs(req, tctx)
 
 	// Remove --state flag if state is empty
 	if utils.IsStateEmpty(jobDetails.State) {
 		req.Args = utils.RemoveFlagFromArgs(req.Args, constants.StateFlag)
 	}
 
-	// Send telemetry event - "sync started"
-	telemetry.TrackSyncStarted(a.tempClient, req, environment, attempt)
+	// worker sends "started" only when the connector doesn't support it.
+	if !cliTelemetry {
+		telemetry.TrackSyncEvent(tctx, telemetry.TelemetryEventStarted, "")
+	}
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
@@ -99,12 +110,18 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		}
 
 		if errors.Is(err, constants.ErrExecutionFailed) {
-			telemetry.TrackSyncFailed(req, environment)
+			// if the connector was killed externally (OOM/eviction) it never ran its
+			// own exit telemetry, so the worker sends "failed" regardless of owner
+			reason := telemetry.ExternalKillReason(err)
+			if !cliTelemetry || reason != "" {
+				telemetry.TrackSyncEvent(tctx, telemetry.TelemetryEventFailed, reason)
+			}
 			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 		}
 
+		// connector never launched (e.g. image pull / container-create failure)
 		log.Error("sync command failed", "error", err)
-		telemetry.TrackSyncFailed(req, environment)
+		telemetry.TrackSyncEvent(tctx, telemetry.TelemetryEventFailed, "")
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
 
@@ -129,12 +146,16 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 	}
 
 	environment := utils.GetExecutorEnvironment()
+	tctx := telemetry.BuildContext(req, jobDetails, environment, telemetry.ReadSyncRunCount(req.JobID))
 
 	switch status {
 	case syncStatusSuccess:
-		telemetry.TrackSyncCompleted(req, environment)
+		// worker sends "completed" only when the connector doesn't support it.
+		if !telemetry.SupportsCLITelemetry(req.Version) {
+			telemetry.TrackSyncEvent(tctx, telemetry.TelemetryEventCompleted, "")
+		}
 	case syncStatusCancelled:
-		telemetry.TrackSyncCancelled(req, environment)
+		telemetry.TrackSyncEvent(tctx, telemetry.TelemetryEventCancelled, "")
 	case syncStatusFailed:
 		// SyncActivity already sent "failed".
 	}

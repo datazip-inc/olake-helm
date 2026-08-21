@@ -32,6 +32,7 @@ type EventPayload struct {
 	WorkflowID           string
 	SyncRunCount         int
 	Event                TelemetryEvent
+	Properties           map[string]any
 }
 
 // SendEvent sends a sync-telemetry event to olake-ui.
@@ -64,6 +65,9 @@ func SendEvent(buildPayload func() EventPayload) {
 		}
 		if payload.SyncRunCount > 0 {
 			body["sync_run_count"] = payload.SyncRunCount
+		}
+		if len(payload.Properties) > 0 {
+			body["properties"] = payload.Properties
 		}
 
 		jsonData, err := json.Marshal(body)
