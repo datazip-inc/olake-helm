@@ -52,6 +52,11 @@ type podLogLineEntry struct {
 	normalizedLogLine string
 }
 
+type s3Object struct {
+	Key          string
+	LastModified time.Time
+}
+
 // NewPodLogBuffer creates a new PodLogBuffer
 func NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix string, counter int) (*PodLogBuffer, error) {
 	s3LogDir, err := configStorageKey(workDir, logRelDir, false)
@@ -71,14 +76,14 @@ func NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix string, counte
 	}, nil
 }
 
-// listS3ObjectKeys lists the S3 object keys for the given prefix.
-func listS3ObjectKeys(ctx context.Context, prefix string) ([]string, error) {
+// listS3Objects lists S3 objects under the given prefix, including LastModified.
+func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return nil, err
 	}
 
-	var s3ObjectKeys []string
+	var s3Objects []s3Object
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 		Bucket: &bucket,
 		Prefix: &prefix,
@@ -89,10 +94,13 @@ func listS3ObjectKeys(ctx context.Context, prefix string) ([]string, error) {
 			return nil, fmt.Errorf("failed to list objects in s3://%s/%s: %s", bucket, prefix, err)
 		}
 		for _, obj := range page.Contents {
-			s3ObjectKeys = append(s3ObjectKeys, aws.ToString(obj.Key))
+			s3Objects = append(s3Objects, s3Object{
+				Key:          aws.ToString(obj.Key),
+				LastModified: aws.ToTime(obj.LastModified),
+			})
 		}
 	}
-	return s3ObjectKeys, nil
+	return s3Objects, nil
 }
 
 // parseLogChunkMetadata parses counter, timestamp, and seq from a chunk filename.
@@ -197,13 +205,13 @@ func resolveLogChunkResumeState(ctx context.Context, workDir, logRelDir, filenam
 		return time.Time{}, 0, 0, err
 	}
 
-	keys, err := listS3ObjectKeys(ctx, s3LogDir)
+	s3Objects, err := listS3Objects(ctx, s3LogDir)
 	if err != nil {
 		return time.Time{}, 0, 0, err
 	}
 
-	for _, key := range keys {
-		keySuffix := strings.TrimPrefix(key, s3LogDir)
+	for _, s3object := range s3Objects {
+		keySuffix := strings.TrimPrefix(s3object.Key, s3LogDir)
 		if keySuffix == "" {
 			continue
 		}
@@ -228,14 +236,14 @@ func resolveCurrentLogDir(ctx context.Context, workDir string) (string, error) {
 		return "", err
 	}
 
-	keys, err := listS3ObjectKeys(ctx, logsPrefix)
+	s3Objects, err := listS3Objects(ctx, logsPrefix)
 	if err != nil {
 		return "", err
 	}
 
 	var currentLogDir string
-	for _, key := range keys {
-		pathWithinLogsDir := strings.TrimPrefix(key, logsPrefix)
+	for _, s3object := range s3Objects {
+		pathWithinLogsDir := strings.TrimPrefix(s3object.Key, logsPrefix)
 		logDir, _, ok := strings.Cut(pathWithinLogsDir, "/")
 		if !ok || !strings.HasPrefix(logDir, constants.ConnectorLogDirPrefix) {
 			continue

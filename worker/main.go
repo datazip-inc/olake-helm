@@ -98,8 +98,8 @@ func main() {
 		}
 	}()
 
-	// Initialize log cleaner
-	utils.InitLogCleaner(utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
+	// Initialize log cleaner (NFS directories or S3 workflow prefixes)
+	utils.InitLogCleaner(ctx, utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)

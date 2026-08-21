@@ -182,13 +182,13 @@ func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) bool {
 		return false
 	}
 
-	keys, err := listS3ObjectKeys(ctx, logsPath)
+	s3Objects, err := listS3Objects(ctx, logsPath)
 	if err != nil {
 		return false
 	}
 
-	for _, key := range keys {
-		parts := strings.Split(strings.TrimPrefix(key, logsPath), "/")
+	for _, s3object := range s3Objects {
+		parts := strings.Split(strings.TrimPrefix(s3object.Key, logsPath), "/")
 		if len(parts) != 2 {
 			continue
 		}
@@ -197,6 +197,23 @@ func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) bool {
 		}
 	}
 	return false
+}
+
+// deleteS3Object deletes a single object from the configured S3 bucket.
+func deleteS3Object(ctx context.Context, key string) error {
+	client, bucket, err := getS3Client()
+	if err != nil {
+		return err
+	}
+
+	_, err = client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete s3://%s/%s: %s", bucket, key, err)
+	}
+	return nil
 }
 
 // configStorageKey mirrors the NFS layout as an S3 object key.
