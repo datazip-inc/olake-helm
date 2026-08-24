@@ -136,9 +136,13 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	if strings.TrimSpace(jobData.Schema) != "" {
-		updates["schema.json"] = jobData.Schema
-		req.Args = AppendSchemaFlag(req.Args)
+	if schemaConfig := strings.TrimSpace(jobData.Schema); schemaConfig != "" {
+		if UseSchemaSplit(jobData.Version) {
+			updates["schema.json"] = schemaConfig
+			req.Args = AppendSchemaFlag(req.Args)
+		} else {
+			logger.Warnf("schema_config present but source version %s is below %s; skipping --schema", jobData.Version, constants.MinSchemaSplitVersion)
+		}
 	}
 
 	addIfMissing := make(map[string]string)
@@ -164,9 +168,13 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 			"streams.json":     string(data),
 		}
 
-		if strings.TrimSpace(jobDetails.Schema) != "" {
-			updates["schema.json"] = jobDetails.Schema
-			req.Args = AppendSchemaFlag(req.Args)
+		if schemaConfig := strings.TrimSpace(jobDetails.Schema); schemaConfig != "" {
+			if UseSchemaSplit(jobDetails.Version) {
+				updates["schema.json"] = schemaConfig
+				req.Args = AppendSchemaFlag(req.Args)
+			} else {
+				logger.Warnf("schema_config present but source version %s is below %s; skipping --schema", jobDetails.Version, constants.MinSchemaSplitVersion)
+			}
 		}
 
 		applyConfigUpdates(req, updates, nil)
