@@ -26,7 +26,8 @@ const (
 	DefaultDirPermissions  = 0755
 	DefaultFilePermissions = 0644
 
-	StateFlag = "--state"
+	StateFlag  = "--state"
+	SchemaFlag = "--schema"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}

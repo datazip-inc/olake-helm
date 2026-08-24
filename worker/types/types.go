@@ -35,6 +35,7 @@ type JobData struct {
 	Source      string
 	Destination string
 	Streams     string
+	Schema      string
 	State       string
 	Version     string
 	Driver      string
