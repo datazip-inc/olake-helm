@@ -28,6 +28,10 @@ const (
 
 	StateFlag  = "--state"
 	SchemaFlag = "--schema"
+
+	// MinSchemaSplitVersion is the minimum source connector version that supports --schema.
+	// TODO: set to the actual release version before merge.
+	MinSchemaSplitVersion = "v0.8.0"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
