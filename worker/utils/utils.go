@@ -136,6 +136,11 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
+	if strings.TrimSpace(jobData.Schema) != "" {
+		updates["schema.json"] = jobData.Schema
+		req.Args = AppendSchemaFlag(req.Args)
+	}
+
 	addIfMissing := make(map[string]string)
 	if !viper.GetBool(constants.EnvTelemetryDisabled) {
 		addIfMissing["user_id.txt"] = GetTelemetryUserID()
@@ -157,6 +162,11 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 			"destination.json": jobDetails.Destination,
 			"state.json":       jobDetails.State,
 			"streams.json":     string(data),
+		}
+
+		if strings.TrimSpace(jobDetails.Schema) != "" {
+			updates["schema.json"] = jobDetails.Schema
+			req.Args = AppendSchemaFlag(req.Args)
 		}
 
 		applyConfigUpdates(req, updates, nil)
@@ -345,6 +355,17 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 func IsStateEmpty(state string) bool {
 	state = strings.TrimSpace(state)
 	return state == "" || state == "{}"
+}
+
+// AppendSchemaFlag adds --schema /mnt/config/schema.json when schema_config is
+// present and the flag is not already on the arg list.
+func AppendSchemaFlag(arguments []string) []string {
+	// already present
+	if slices.Contains(arguments, constants.SchemaFlag) {
+		return arguments
+	}
+
+	return append(arguments, constants.SchemaFlag, "/mnt/config/schema.json")
 }
 
 // RemoveFlagFromArgs returns a new slice with the given flag

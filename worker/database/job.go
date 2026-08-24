@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -11,9 +12,24 @@ import (
 	"github.com/lib/pq"
 )
 
-const (
-	queryTimeout = 5 * time.Second
-)
+const queryTimeout = 5 * time.Second
+
+const columnExistsQuery = `
+SELECT EXISTS (
+	SELECT 1
+	FROM information_schema.columns
+	WHERE table_schema = 'public'
+	  AND table_name = $1
+	  AND column_name = $2
+)`
+
+func columnExists(ctx context.Context, db *DB, table, column string) (bool, error) {
+	var exists bool
+	if err := db.client.QueryRowContext(ctx, columnExistsQuery, table, column).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check column %s on %s: %w", column, table, err)
+	}
+	return exists, nil
+}
 
 // decryptJobData decrypts the Source and Destination config fields of a JobData.
 // If OLAKE_SECRET_KEY is not configured, Decrypt returns the value unchanged.
@@ -38,20 +54,51 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	query := fmt.Sprintf(`
+	jobTable := db.tables["job"]
+	sourceTable := db.tables["source"]
+	destTable := db.tables["dest"]
+
+	hasSchemaConfig, err := columnExists(cctx, db, jobTable, "schema_config")
+	if err != nil {
+		log.Error("failed to check schema_config column", "jobID", jobId, "error", err)
+		return types.JobData{}, fmt.Errorf("failed to check schema_config column: %w", err)
+	}
+
+	var jobData types.JobData
+	var schemaConfig sql.NullString
+
+	// TODO: make column-exist check and query dynamic to handle more fields which future may add
+	if hasSchemaConfig {
+		query := fmt.Sprintf(`
+			SELECT j.name, j.streams_config, j.schema_config, j.state, j.project_id, s.config, d.config, s.version, s.type
+			FROM %q j
+			JOIN %q s ON j.source_id = s.id
+			JOIN %q d ON j.dest_id = d.id
+			WHERE j.id = $1`,
+			jobTable, sourceTable, destTable)
+		err = db.client.QueryRowContext(cctx, query, jobId).Scan(
+			&jobData.JobName, &jobData.Streams, &schemaConfig, &jobData.State,
+			&jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
+		)
+	} else {
+		query := fmt.Sprintf(`
 			SELECT j.name, j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type
 			FROM %q j
 			JOIN %q s ON j.source_id = s.id
 			JOIN %q d ON j.dest_id = d.id
 			WHERE j.id = $1`,
-		db.tables["job"], db.tables["source"], db.tables["dest"])
-
-	rows := db.client.QueryRowContext(cctx, query, jobId)
-
-	var jobData types.JobData
-	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver); err != nil {
+			jobTable, sourceTable, destTable)
+		err = db.client.QueryRowContext(cctx, query, jobId).Scan(
+			&jobData.JobName, &jobData.Streams, &jobData.State,
+			&jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
+		)
+	}
+	if err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
+	}
+	if schemaConfig.Valid {
+		jobData.Schema = schemaConfig.String
 	}
 
 	if err := decryptJobData(&jobData); err != nil {
