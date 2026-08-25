@@ -60,6 +60,9 @@ spec:
           }
 
           echo "Waiting for OLake stack to be ready..."
+          {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+          check_service "minio" "http://{{ include "olake.minio.serviceName" . }}.{{ include "olake.namespace" . }}.svc.cluster.local:9000/minio/health/ready"
+          {{- end }}
           
           check_service "olake-workers" "http://olake-workers.{{ include "olake.namespace" . }}.svc.cluster.local:8090/ready"
           

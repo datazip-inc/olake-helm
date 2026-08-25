@@ -85,15 +85,32 @@ Worker/UI probe shell: include shared-storage write only in NFS mode.
 {{- end -}}
 
 {{/*
-S3 log file storage: hosted (enabled: false) or local MinIO (enabled: true + endpoint).
-Local MinIO deployment is not yet included in this chart.
+S3 log file storage: hosted AWS S3 (enabled: false, no endpoint) or in-cluster MinIO (enabled: true).
+External S3-compatible endpoints (e.g. external MinIO) use enabled: false with endpoint set.
 */}}
-{{- define "olake.s3LogFileStorageHosted" -}}
-{{- if and (not .Values.s3LogFileStorage.enabled) .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region -}}true{{- end -}}
+{{- define "olake.minio.serviceName" -}}
+{{- printf "%s-minio" (include "olake.fullname" .) -}}
 {{- end -}}
 
-{{- define "olake.s3LogFileStorageLocal" -}}
-{{- if and .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.endpoint .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region -}}true{{- end -}}
+{{- define "olake.minio.secretName" -}}
+{{- printf "%s-minio-secret" (include "olake.fullname" .) -}}
+{{- end -}}
+
+{{- define "olake.s3Endpoint" -}}
+{{- if .Values.s3LogFileStorage.endpoint -}}
+{{- .Values.s3LogFileStorage.endpoint -}}
+{{- else if .Values.s3LogFileStorage.enabled -}}
+{{- printf "http://%s.%s.svc.cluster.local:9000" (include "olake.minio.serviceName" .) (include "olake.namespace" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "olake.s3CredentialsSecretName" -}}
+{{- if .Values.s3LogFileStorage.role.enabled -}}
+{{- else if .Values.s3LogFileStorage.enabled -}}
+{{- include "olake.minio.secretName" . -}}
+{{- else if .Values.s3LogFileStorage.existingSecret -}}
+{{- .Values.s3LogFileStorage.existingSecret -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -103,8 +120,8 @@ When s3, validates s3LogFileStorage is complete before render.
 {{- define "olake.storageMode" -}}
 {{- $mode := .Values.global.localStorageMode | default "nfs" -}}
 {{- if eq $mode "s3" -}}
-{{- if not (or (eq (include "olake.s3LogFileStorageHosted" .) "true") (eq (include "olake.s3LogFileStorageLocal" .) "true")) -}}
-{{- fail "global.localStorageMode is \"s3\" but s3LogFileStorage is incomplete: set bucket and region for hosted S3 (enabled: false), or enabled, endpoint, bucket, and region for local MinIO" -}}
+{{- if not (and .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region) -}}
+{{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.localStorageMode is s3" -}}
 {{- end -}}
 {{- end -}}
 {{- $mode -}}
@@ -115,7 +132,7 @@ S3 IRSA annotations for hosted log storage (worker and job service accounts).
 Returns a YAML map when active, empty otherwise.
 */}}
 {{- define "olake.s3IRSAAnnotations" -}}
-{{- if and (eq (include "olake.storageMode" .) "s3") (eq (include "olake.s3LogFileStorageHosted" .) "true") .Values.s3LogFileStorage.role.enabled }}
+{{- if and (eq (include "olake.storageMode" .) "s3") (not .Values.s3LogFileStorage.enabled) (not .Values.s3LogFileStorage.endpoint) .Values.s3LogFileStorage.role.enabled }}
 {{- .Values.s3LogFileStorage.role.annotations | default dict | toYaml }}
 {{- end }}
 {{- end -}}
@@ -130,11 +147,13 @@ OLAKE_S3_REGION: {{ required "s3LogFileStorage.region is required when S3 log st
 {{- if .Values.s3LogFileStorage.prefix }}
 OLAKE_S3_PREFIX: {{ .Values.s3LogFileStorage.prefix | quote }}
 {{- end }}
-{{- if eq (include "olake.s3LogFileStorageLocal" .) "true" }}
-OLAKE_S3_ENDPOINT: {{ required "s3LogFileStorage.endpoint is required for local MinIO" .Values.s3LogFileStorage.endpoint | quote }}
+{{- $endpoint := include "olake.s3Endpoint" . -}}
+{{- if $endpoint }}
+OLAKE_S3_ENDPOINT: {{ $endpoint | quote }}
 {{- end }}
-{{- if and (not .Values.s3LogFileStorage.role.enabled) .Values.s3LogFileStorage.existingSecret }}
-OLAKE_S3_CREDENTIALS_SECRET: {{ .Values.s3LogFileStorage.existingSecret | quote }}
+{{- $s3Secret := include "olake.s3CredentialsSecretName" . -}}
+{{- if $s3Secret }}
+OLAKE_S3_CREDENTIALS_SECRET: {{ $s3Secret | quote }}
 {{- end }}
 {{- end }}
 {{- end -}}

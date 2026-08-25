@@ -53,8 +53,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
-      {{- if .Values.temporal.enabled }}
+      {{- if or .Values.temporal.enabled (and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3")) }}
       initContainers:
+      {{- if .Values.temporal.enabled }}
       - name: wait-for-temporal
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent
@@ -68,6 +69,22 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      {{- end }}
+      {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+      - name: wait-for-minio
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO to be ready..."
+          until nc -z {{ include "olake.minio.serviceName" . }}.{{ include "olake.namespace" . }}.svc.cluster.local 9000; do
+            echo "MinIO is not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "MinIO is ready!"
+      {{- end }}
       {{- end }}
       containers:
       - name: olake-workers
@@ -143,22 +160,24 @@ spec:
         - name: OLAKE_S3_PREFIX
           value: {{ .Values.s3LogFileStorage.prefix | quote }}
         {{- end }}
-        {{- if eq (include "olake.s3LogFileStorageLocal" .) "true" }}
+        {{- $endpoint := include "olake.s3Endpoint" . -}}
+        {{- if $endpoint }}
         - name: OLAKE_S3_ENDPOINT
-          value: {{ required "s3LogFileStorage.endpoint is required for local MinIO" .Values.s3LogFileStorage.endpoint | quote }}
+          value: {{ $endpoint | quote }}
         {{- end }}
-        {{- if and (not .Values.s3LogFileStorage.role.enabled) .Values.s3LogFileStorage.existingSecret }}
+        {{- $s3Secret := include "olake.s3CredentialsSecretName" . -}}
+        {{- if $s3Secret }}
         - name: OLAKE_S3_CREDENTIALS_SECRET
-          value: {{ .Values.s3LogFileStorage.existingSecret | quote }}
+          value: {{ $s3Secret | quote }}
         - name: OLAKE_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.s3LogFileStorage.existingSecret }}
+              name: {{ $s3Secret }}
               key: OLAKE_S3_ACCESS_KEY_ID
         - name: OLAKE_S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.s3LogFileStorage.existingSecret }}
+              name: {{ $s3Secret }}
               key: OLAKE_S3_SECRET_ACCESS_KEY
         {{- end }}
         {{- end }}

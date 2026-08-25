@@ -320,19 +320,49 @@ olakeWorker:
 # S3 Log File Storage (used when global.localStorageMode is "s3")
 s3LogFileStorage:
   # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
-  #   - true:  local / built-in MinIO (requires endpoint; not yet deployed by this chart)
-  #   - false: hosted / external S3 (AWS S3, GCS S3 API, etc.)
-  enabled: false
-  # -- S3-compatible endpoint. Required for local MinIO (enabled: true). Leave empty for hosted AWS S3.
+  #   - true:  deploy built-in MinIO (endpoint and credentials are managed by the chart)
+  #   - false: hosted / external S3 (AWS S3, external MinIO, GCS S3 API, etc.)
+  enabled: true
+  # -- S3-compatible endpoint override. Auto-set when enabled: true. Required for external MinIO.
   endpoint: ""
-  bucket: ""
-  region: ""
+  bucket: "olake"
+  region: "us-east-1"
   prefix: ""
-  # -- Static credentials secret (required when role.enabled is false)
+  # -- Static credentials secret (required for external S3/MinIO when role.enabled is false)
   # kubectl create secret generic s3-log-file-storage-secret \
   #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
   #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
   existingSecret: ""
+  auth:
+    # -- MinIO root credentials when enabled: true (also used as OLAKE_S3_* keys)
+    rootUser: "olake"
+    rootPassword: "password"
+  persistence:
+    # -- Backing volume size for in-cluster MinIO (uses global.storageClass when set)
+    size: 20Gi
+  image:
+    repository: minio/minio
+    tag: RELEASE.2025-04-03T14-56-28Z
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+
+  # -- Tolerations for pod assignment
+  tolerations: []
+
+  # -- Affinity settings for pod assignment
+  affinity: {}
+
+  # -- Additional pod annotations
+  podAnnotations: {}
+
+  # -- Additional pod labels
+  podLabels: {}
+
+  # -- MinIO resource requirements (optional overrides)
+  # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
+  resources: {}
+
   role:
     # -- Use IAM role for hosted S3 auth (EKS IRSA). When true, existingSecret is not required.
     enabled: false
