@@ -15,7 +15,7 @@ import (
 
 const (
 	schemaVersion          = 1
-	eventSourceUI          = "ui"
+	serviceUI              = "ui"
 	cliTelemetryMinVersion = "v0.9.4" // min CLI version that reads telemetry.json
 )
 
@@ -24,14 +24,17 @@ const (
 type TelemetryContext struct {
 	WorkflowID         string `json:"-"` // needed for olake-ui
 	SchemaVersion      int    `json:"schema_version"`
-	EventSource        string `json:"event_source,omitempty"`
-	UserID             string `json:"user_id,omitempty"`
+	Service            string `json:"service,omitempty"`
+	DistinctID         string `json:"distinct_id,omitempty"`
 	JobID              int    `json:"job_id,omitempty"`
+	JobName            string `json:"job_name,omitempty"`
 	Environment        string `json:"environment,omitempty"`
 	SyncRunCount       int    `json:"sync_run_count,omitempty"`
 	Frequency          string `json:"frequency,omitempty"`
 	CreatedAt          string `json:"created_at,omitempty"`
+	SourceName         string `json:"source_name,omitempty"`
 	SourceVersion      string `json:"source_version,omitempty"`
+	DestinationName    string `json:"destination_name,omitempty"`
 	DestinationVersion string `json:"destination_version,omitempty"`
 }
 
@@ -40,14 +43,17 @@ func BuildContext(req *types.ExecutionRequest, job types.JobData, environment st
 	return TelemetryContext{
 		WorkflowID:         req.WorkflowID,
 		SchemaVersion:      schemaVersion,
-		EventSource:        eventSourceUI,
-		UserID:             utils.GetTelemetryUserID(),
+		Service:            serviceUI,
+		DistinctID:         utils.GetTelemetryUserID(),
 		JobID:              req.JobID,
+		JobName:            job.JobName,
 		Environment:        environment,
 		SyncRunCount:       runCount,
 		Frequency:          job.Frequency,
 		CreatedAt:          job.CreatedAt.Format(time.RFC3339),
+		SourceName:         job.SourceName,
 		SourceVersion:      job.Version,
+		DestinationName:    job.DestinationName,
 		DestinationVersion: job.DestinationVersion,
 	}
 }
@@ -58,8 +64,8 @@ func BaseContext(req *types.ExecutionRequest, environment string) TelemetryConte
 	return TelemetryContext{
 		WorkflowID:    req.WorkflowID,
 		SchemaVersion: schemaVersion,
-		EventSource:   eventSourceUI,
-		UserID:        utils.GetTelemetryUserID(),
+		Service:       serviceUI,
+		DistinctID:    utils.GetTelemetryUserID(),
 		JobID:         req.JobID,
 		Environment:   environment,
 	}
@@ -95,7 +101,7 @@ func WriteConfigs(req *types.ExecutionRequest, ctx TelemetryContext) {
 		return
 	}
 
-	configs := map[string]string{"user_id.txt": ctx.UserID}
+	configs := map[string]string{"user_id.txt": ctx.DistinctID}
 	if semver.IsValid(req.Version) {
 		if j, err := ctx.JSON(); err == nil {
 			configs["telemetry.json"] = j

@@ -41,6 +41,8 @@ type JobData struct {
 	Frequency          string
 	CreatedAt          time.Time
 	DestinationVersion string
+	SourceName         string
+	DestinationName    string
 }
 
 type WebhookNotificationArgs struct {
