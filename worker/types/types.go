@@ -36,7 +36,7 @@ type JobData struct {
 	Destination        string
 	Streams            string
 	State              string
-	Version            string
+	Version            string // source version
 	Driver             string
 	Frequency          string
 	CreatedAt          time.Time

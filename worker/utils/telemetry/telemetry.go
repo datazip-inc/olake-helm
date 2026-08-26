@@ -25,26 +25,21 @@ const (
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 // EventPayload is the sync-telemetry callback payload sent to olake-ui.
-// SyncRunCount is omitted from the JSON body when zero.
 type EventPayload struct {
-	JobID                int
-	ExecutionEnvironment string
-	WorkflowID           string
-	SyncRunCount         int
-	Event                TelemetryEvent
-	Properties           map[string]any
+	JobID      int
+	WorkflowID string
+	Event      TelemetryEvent
+	Properties map[string]any
 }
 
 // SendEvent sends a sync-telemetry event to olake-ui.
-func SendEvent(buildPayload func() EventPayload) {
+func SendEvent(payload EventPayload) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Warnf("recovered panic in telemetry SendEvent: %v", r)
 			}
 		}()
-
-		payload := buildPayload()
 
 		switch payload.Event {
 		case TelemetryEventStarted, TelemetryEventCompleted, TelemetryEventFailed, TelemetryEventCancelled:
@@ -60,11 +55,7 @@ func SendEvent(buildPayload func() EventPayload) {
 		body := map[string]interface{}{
 			"job_id":      payload.JobID,
 			"workflow_id": payload.WorkflowID,
-			"environment": payload.ExecutionEnvironment,
 			"event":       payload.Event,
-		}
-		if payload.SyncRunCount > 0 {
-			body["sync_run_count"] = payload.SyncRunCount
 		}
 		if len(payload.Properties) > 0 {
 			body["properties"] = payload.Properties

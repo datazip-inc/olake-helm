@@ -15,13 +15,13 @@ import (
 
 const (
 	schemaVersion          = 1
-	serviceUI              = "ui"
+	serviceUI              = "UI"
 	cliTelemetryMinVersion = "v0.9.4" // min CLI version that reads telemetry.json
 )
 
-// TelemetryContext is the per-run context handed to the connector via
+// TelemetryPayload is the per-run payload handed to the connector via
 // telemetry.json, and reused to build worker-emitted event properties.
-type TelemetryContext struct {
+type TelemetryPayload struct {
 	WorkflowID         string `json:"-"` // needed for olake-ui
 	SchemaVersion      int    `json:"schema_version"`
 	Service            string `json:"service,omitempty"`
@@ -38,16 +38,16 @@ type TelemetryContext struct {
 	DestinationVersion string `json:"destination_version,omitempty"`
 }
 
-// BuildContext assembles the full sync telemetry context.
-func BuildContext(req *types.ExecutionRequest, job types.JobData, environment string, runCount int) TelemetryContext {
-	return TelemetryContext{
+// BuildPayload assembles the full sync telemetry payload.
+func BuildPayload(req *types.ExecutionRequest, job types.JobData, runCount int) TelemetryPayload {
+	return TelemetryPayload{
 		WorkflowID:         req.WorkflowID,
 		SchemaVersion:      schemaVersion,
 		Service:            serviceUI,
 		DistinctID:         utils.GetTelemetryUserID(),
 		JobID:              req.JobID,
 		JobName:            job.JobName,
-		Environment:        environment,
+		Environment:        utils.GetExecutorEnvironment(),
 		SyncRunCount:       runCount,
 		Frequency:          job.Frequency,
 		CreatedAt:          job.CreatedAt.Format(time.RFC3339),
@@ -58,23 +58,23 @@ func BuildContext(req *types.ExecutionRequest, job types.JobData, environment st
 	}
 }
 
-// BaseContext assembles telemetry context for commands with no job data
+// BasePayload assembles telemetry payload for commands with no job data
 // (discover/check/spec), or as a fallback when job data can't be fetched.
-func BaseContext(req *types.ExecutionRequest, environment string) TelemetryContext {
-	return TelemetryContext{
+func BasePayload(req *types.ExecutionRequest) TelemetryPayload {
+	return TelemetryPayload{
 		WorkflowID:    req.WorkflowID,
 		SchemaVersion: schemaVersion,
 		Service:       serviceUI,
 		DistinctID:    utils.GetTelemetryUserID(),
 		JobID:         req.JobID,
-		Environment:   environment,
+		Environment:   utils.GetExecutorEnvironment(),
 	}
 }
 
-// Properties returns the context as a map, for the "properties" field of a
+// Properties returns the payload as a map, for the "properties" field of a
 // worker-emitted event sent to olake-ui.
-func (c TelemetryContext) Properties() map[string]any {
-	b, err := json.Marshal(c)
+func (p TelemetryPayload) Properties() map[string]any {
+	b, err := json.Marshal(p)
 	if err != nil {
 		return map[string]any{}
 	}
@@ -83,9 +83,9 @@ func (c TelemetryContext) Properties() map[string]any {
 	return m
 }
 
-// JSON marshals the context for telemetry.json.
-func (c TelemetryContext) JSON() (string, error) {
-	b, err := json.Marshal(c)
+// JSON marshals the payload for telemetry.json.
+func (p TelemetryPayload) JSON() (string, error) {
+	b, err := json.Marshal(p)
 	if err != nil {
 		return "", err
 	}
@@ -96,17 +96,17 @@ func (c TelemetryContext) JSON() (string, error) {
 // unless telemetry is disabled. Added only if not already present, so
 // retries reuse the same files. Unparsable versions (latest/dev) get no
 // telemetry.json - CLI stays silent, worker owns the events.
-func WriteConfigs(req *types.ExecutionRequest, ctx TelemetryContext) {
+func WriteConfigs(req *types.ExecutionRequest, payload TelemetryPayload) {
 	if viper.GetBool(constants.EnvTelemetryDisabled) {
 		return
 	}
 
-	configs := map[string]string{"user_id.txt": ctx.DistinctID}
+	configs := map[string]string{"user_id.txt": payload.DistinctID}
 	if semver.IsValid(req.Version) {
-		if j, err := ctx.JSON(); err == nil {
+		if j, err := payload.JSON(); err == nil {
 			configs["telemetry.json"] = j
 		} else {
-			logger.Warnf("failed to marshal telemetry context: %s", err)
+			logger.Warnf("failed to marshal telemetry payload: %s", err)
 		}
 	}
 	utils.ApplyConfigUpdates(req, nil, configs)
