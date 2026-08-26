@@ -77,9 +77,133 @@
                   "type": "object",
                   "description": "Kubernetes affinity/anti-affinity rules.",
                   "additionalProperties": true
+                },
+                "indexStorage": {
+                  "type": "object",
+                  "description": "Per-job index volume overrides, deep-merged over global.indexStorage.",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": ["pvc", "existingClaim", "none"],
+                      "description": "Volume source: 'pvc' provisions one PVC per JobID (olake-index-<JobID>), 'existingClaim' mounts a user-supplied PVC, 'none' disables the index volume."
+                    },
+                    "existingClaim": {
+                      "type": "string",
+                      "description": "Name of the PVC to mount when mode is 'existingClaim'."
+                    },
+                    "size": {
+                      "type": "string",
+                      "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$",
+                      "description": "Requested volume size, e.g. 50Gi. Grow-only; Kubernetes rejects shrinking."
+                    },
+                    "storageClass": {
+                      "type": "string",
+                      "description": "StorageClass for the index PVC. Empty falls back to global.storageClass, then the cluster default. Must be block storage."
+                    },
+                    "accessModes": {
+                      "type": "array",
+                      "description": "Access modes for the index PVC.",
+                      "items": {
+                        "type": "string",
+                        "enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany", "ReadOnlyMany"]
+                      }
+                    },
+                    "mountPath": {
+                      "type": "string",
+                      "pattern": "^/.*",
+                      "description": "Mount path inside the connector container."
+                    },
+                    "subPath": {
+                      "type": "string",
+                      "description": "Subdirectory of the volume to mount."
+                    },
+                    "cacheSizeMB": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Pebble block cache size in megabytes, passed to the connector as OLAKE_INDEX_DB_CACHE_SIZE. Resident memory inside the connector pod."
+                    },
+                    "maxOpenFiles": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "description": "Extra annotations on the index PVC.",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "description": "Extra labels on the index PVC.",
+                      "additionalProperties": { "type": "string" }
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "indexStorage": {
+          "type": "object",
+          "description": "Chart-wide defaults for the per-job Pebble index volume mounted into sync and clear-destination pods.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["pvc", "existingClaim", "none"],
+              "description": "Volume source: 'pvc' provisions one PVC per JobID (olake-index-<JobID>), 'existingClaim' mounts a user-supplied PVC, 'none' disables the index volume."
+            },
+            "existingClaim": {
+              "type": "string",
+              "description": "Name of the PVC to mount when mode is 'existingClaim'."
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$",
+              "description": "Requested volume size, e.g. 50Gi. Grow-only; Kubernetes rejects shrinking."
+            },
+            "storageClass": {
+              "type": "string",
+              "description": "StorageClass for the index PVC. Empty falls back to global.storageClass, then the cluster default. Must be block storage."
+            },
+            "accessModes": {
+              "type": "array",
+              "description": "Access modes for the index PVC.",
+              "items": {
+                "type": "string",
+                "enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany", "ReadOnlyMany"]
+              }
+            },
+            "mountPath": {
+              "type": "string",
+              "pattern": "^/.*",
+              "description": "Mount path inside the connector container."
+            },
+            "subPath": {
+              "type": "string",
+              "description": "Subdirectory of the volume to mount."
+            },
+            "cacheSizeMB": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Pebble block cache size in megabytes, passed to the connector as OLAKE_INDEX_DB_CACHE_SIZE. Resident memory inside the connector pod."
+            },
+            "maxOpenFiles": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Extra annotations on the index PVC.",
+              "additionalProperties": { "type": "string" }
+            },
+            "labels": {
+              "type": "object",
+              "description": "Extra labels on the index PVC.",
+              "additionalProperties": { "type": "string" }
             }
           },
           "additionalProperties": false

@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -166,11 +167,21 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	}
 
 	// 2. Load job profiles
-	if rawProfiles, exists := cm.Data["OLAKE_JOB_PROFILES"]; exists && rawProfiles != "" {
-		w.jobProfiles = LoadJobProfiles(rawProfiles)
-		logger.Infof("updated job profiles with %d entries", len(w.jobProfiles))
+	//
+	// A missing key is treated differently from an empty one. The chart always
+	// renders OLAKE_JOB_PROFILES, so its absence means the ConfigMap was written
+	// by something else or truncated - keep the cached profiles rather than
+	// dropping the default profile and every job's index storage config. An
+	// empty value is an explicit instruction to clear them.
+	if rawProfiles, exists := cm.Data["OLAKE_JOB_PROFILES"]; exists {
+		if strings.TrimSpace(rawProfiles) == "" {
+			logger.Infof("OLAKE_JOB_PROFILES is empty in ConfigMap %s, clearing job profiles", w.configMapName)
+			w.jobProfiles = map[int]JobSchedulingConfig{}
+		} else {
+			w.jobProfiles = LoadJobProfiles(rawProfiles)
+			logger.Infof("updated job profiles with %d entries", len(w.jobProfiles))
+		}
 	} else {
-		logger.Debugf("no OLAKE_JOB_PROFILES in ConfigMap %s", w.configMapName)
-		w.jobProfiles = map[int]JobSchedulingConfig{}
+		logger.Warnf("no OLAKE_JOB_PROFILES key in ConfigMap %s, keeping the %d cached profiles", w.configMapName, len(w.jobProfiles))
 	}
 }

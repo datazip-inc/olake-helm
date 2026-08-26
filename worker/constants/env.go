@@ -58,4 +58,15 @@ const (
 
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
+
+	// chart-wide default for the per-job Pebble index volume
+	EnvIndexStorage = "OLAKE_INDEX_STORAGE"
+
+	// path the olake driver opens its Pebble index at. The executor mounts the
+	// job's index volume here and pins the variable on the driver container.
+	EnvIndexDBDir = "OLAKE_INDEX_DB_DIR"
+
+	// Pebble tuning passed to the driver alongside the index directory.
+	EnvIndexDBCacheSize    = "OLAKE_INDEX_DB_CACHE_SIZE"
+	EnvIndexDBMaxOpenFiles = "OLAKE_INDEX_DB_MAX_OPEN_FILES"
 )

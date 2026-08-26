@@ -73,7 +73,106 @@ global:
   #                 - key: "gpu"
   #                   operator: "In"
   #                   values: ["true"]
+  #       indexStorage:        # per-job override, deep-merged over global.indexStorage
+  #         size: 100Gi
   jobProfiles: {}
+
+  # -- Per-job block volume holding the Pebble index used by the Iceberg
+  # positional-delete / deletion-vector write path.
+  #
+  # olake-workers provisions one PVC per job (`olake-index-<JobID>`) on the job's
+  # first async run and mounts it into every later run of that job. The claim is
+  # keyed on JobID only, so a job's `sync` and `clear-destination` pods mount the
+  # SAME volume and therefore open the same index. Short-lived operations (spec,
+  # check, discover) never get one.
+  #
+  # The PVC is never deleted by the worker: rebuilding the index is expensive, so
+  # it outlives the pods that use it. Remove it with `kubectl delete pvc olake-index-<JobID>`.
+  #
+  # IMPORTANT (AZ pinning): a ReadWriteOnce block volume (AWS EBS, GCP zonal PD,
+  # Azure LRS disk) is pinned to one availability zone by the CSI driver. Every
+  # later pod for that job MUST schedule in that zone or it stays Pending with
+  # `volume node affinity conflict`. Keep the job profile's nodeSelector /
+  # affinity consistent with the volume's zone. For zone-free block storage use
+  # GCP regional PD (`replication-type: regional-pd`) or Azure ZRS
+  # (`skuName: Premium_ZRS`) via `storageClass`; AWS EBS has no multi-AZ option.
+  #
+  # Per-job overrides go in `global.jobProfiles.<JobID>.indexStorage` and are
+  # deep-merged over these values, so a job overriding only `size` keeps the rest.
+  indexStorage:
+    # -- Volume source: "pvc" (worker provisions one PVC per job),
+    # "existingClaim" (mount a PVC you created) or "none" (no index volume).
+    mode: pvc
+
+    # -- Name of the PVC to mount when mode is "existingClaim".
+    # Combine with `subPath` when several jobs share one claim.
+    existingClaim: ""
+
+    # -- Requested volume size. Growing it is applied on the job's next run and
+    # requires `allowVolumeExpansion: true` on the StorageClass. Kubernetes
+    # rejects shrinking; the worker logs a warning and keeps the current size.
+    #
+    # AZURE BILLING: Premium and Standard SSD managed disks are billed by tier,
+    # not by requested size. 50Gi lands in the P10/E10 tier and is billed as
+    # 128 GiB per job. Pick a tier boundary (32Gi, 64Gi, 128Gi) or use a
+    # per-GiB SKU such as PremiumV2_LRS to avoid paying for unused capacity.
+    size: 50Gi
+
+    # -- StorageClass for the index PVC. Empty falls back to `global.storageClass`,
+    # then to the cluster default. Must be block storage: the index needs POSIX
+    # locking and reliable fsync, so NFS / EFS / Azure Files are not suitable.
+    #
+    # SET THIS EXPLICITLY IN PRODUCTION. The index is an LSM store whose write
+    # path is fsync-bound, and most cluster defaults are far too slow for it:
+    #
+    #   Cloud  Default class    What you get at 50Gi     Use instead
+    #   ---------------------------------------------------------------------
+    #   EKS    gp2              150 IOPS (3 IOPS/GiB)    gp3 (3000 IOPS floor)
+    #   AKS    managed-csi      ~500 IOPS (E10 tier)     managed-csi-premium
+    #                                                    or Premium_LRS
+    #   GKE    standard         ~37 write IOPS (HDD!)    pd-balanced / pd-ssd
+    #
+    # On AWS also consider a StorageClass with `encrypted: "true"`: gp2/gp3 are
+    # unencrypted unless EBS encryption-by-default is enabled on the account.
+    storageClass: ""
+
+    # -- Access modes for the index PVC. Block storage is single-attach.
+    #
+    # CONCURRENCY LIMIT: each running sync attaches its own disk, and every node
+    # has a cap on attached disks. Azure is the tightest - Standard_D4s_v3 allows
+    # 8 data disks, D8s_v3 allows 16; AWS Nitro instances share roughly 28
+    # attachments between EBS volumes and ENIs; GKE allows 16-128 by machine
+    # type. Beyond the cap, further sync pods stay Pending with
+    # `node(s) exceed max volume count` until a slot frees up. Size nodes for the
+    # number of syncs you expect to run at once.
+    accessModes:
+      - ReadWriteOnce
+
+    # -- Mount path inside the connector container.
+    mountPath: /var/lib/olake/index
+
+    # -- Optional subdirectory of the volume to mount.
+    subPath: ""
+
+    # -- Pebble block cache size in megabytes, passed to the connector as
+    # OLAKE_INDEX_DB_CACHE_SIZE.
+    #
+    # MEMORY: this is resident memory inside the connector pod, on top of what
+    # the sync itself uses. Connector pods request 256Mi and set no limit, so a
+    # 512 MB cache means a pod that requests far less than it uses. On a busy
+    # node that shows up as memory pressure and evictions rather than a clean
+    # OOMKill. Either keep the cache small or give the connector pods a matching
+    # memory request.
+    cacheSizeMB: 512
+
+    # -- Maximum SSTable file descriptors Pebble keeps open, passed to the
+    # connector as OLAKE_INDEX_DB_MAX_OPEN_FILES. Must stay below the
+    # container's nofile limit.
+    maxOpenFiles: 1000
+
+    # -- Extra annotations and labels on the index PVC (backup tooling, cost allocation).
+    annotations: {}
+    labels: {}
 
   # -- Service account configuration for job pods created by olake-workers
   # Used for cloud provider IAM integration (AWS IRSA, GCP Workload Identity, Azure Workload Identity)

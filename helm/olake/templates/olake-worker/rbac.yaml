@@ -23,6 +23,11 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log", "pods/status"]
   verbs: ["get", "list", "watch"]
+# Pod events carry the only signal that a scheduled pod cannot attach or mount
+# its volumes; without it such a pod is polled until the sync timeout.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list"]
 # Job management for batch processing
 - apiGroups: ["batch"]
   resources: ["jobs"]
@@ -31,6 +36,12 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps", "secrets"]
   verbs: ["get", "list", "watch"]
+# Per-job index volumes (olake-index-<JobID>): created on a job's first async run
+# and expanded when `indexStorage.size` grows. No delete verb - the index is
+# expensive to rebuild, so claims are removed manually.
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "create", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -3,7 +3,11 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -13,6 +17,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
@@ -51,9 +56,28 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		return "", err
 	}
 
+	indexMount, err := d.ensureIndexMount(req.JobID, req.Command)
+	if err != nil {
+		log.Error("failed to prepare index directory", "jobID", req.JobID, "error", err)
+		return "", err
+	}
+
 	// Environment variables propagation
+	envVars := utils.GetWorkerEnvVars()
+	if indexMount != nil {
+		// Set rather than append: the worker's own environment is propagated
+		// above and may already carry this key, and the mount target is the
+		// only value that is correct for this container.
+		envVars[constants.EnvIndexDBDir] = indexMount.Target
+
+		// Index tuning has no per-job configuration in docker mode, so the
+		// worker's own environment wins when it sets these.
+		setEnvDefault(envVars, constants.EnvIndexDBCacheSize, constants.DefaultIndexCacheSizeMB)
+		setEnvDefault(envVars, constants.EnvIndexDBMaxOpenFiles, constants.DefaultIndexMaxOpenFiles)
+	}
+
 	var envs []string
-	for k, v := range utils.GetWorkerEnvVars() {
+	for k, v := range envVars {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
 
@@ -71,12 +95,24 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
+	if indexMount != nil {
+		hostConfig.Mounts = append(hostConfig.Mounts, *indexMount)
+	}
+
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
-	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	containerID, adopted, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
 		log.Error("failed to create container", "containerName", containerName, "error", err)
 		return "", err
+	}
+
+	// A container started before this worker was upgraded has no index bind
+	// mount. Let that run finish and rebuild its index rather than failing a
+	// sync that is already in progress; the next run gets the mount.
+	if adopted && indexMount != nil && !d.containerMountsIndexDir(ctx, containerID, indexMount) {
+		log.Warn("resumed a container that predates index storage; it will run without the index directory",
+			"containerName", containerName, "target", indexMount.Target)
 	}
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
@@ -106,6 +142,52 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	return string(output), nil
+}
+
+// setEnvDefault fills in a value only when the key carries nothing usable.
+func setEnvDefault(envVars map[string]string, key string, value int) {
+	if strings.TrimSpace(envVars[key]) == "" {
+		envVars[key] = strconv.Itoa(value)
+	}
+}
+
+// ensureIndexMount returns the bind mount that carries a job's Pebble index, or
+// nil when the operation has no index (spec, check, discover).
+//
+// The workdir handed to a run is derived from the Temporal workflow ID, which
+// carries the schedule fire time, so it is a fresh directory on every sync. An
+// index kept there would be rebuilt each run, and one written to a path with no
+// mount at all lives only in the container's writable layer. Both are lost, so
+// the index gets its own persistence-root directory, keyed on JobID alone: a
+// job's sync and clear-destination runs then open the same index, matching the
+// per-job claim the kubernetes executor mounts.
+func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command) (*mount.Mount, error) {
+	if !slices.Contains(constants.AsyncCommands, operation) {
+		return nil, nil
+	}
+
+	// A per-job directory needs a real JobID to key on. Running without one would
+	// either share a single index across jobs or lose it with the container, so
+	// this fails the run rather than degrading silently.
+	if jobID <= 0 {
+		return nil, fmt.Errorf("cannot prepare an index directory for %s: invalid JobID %d", operation, jobID)
+	}
+
+	target := strings.TrimSpace(viper.GetString(constants.EnvIndexDBDir))
+	if target == "" {
+		target = constants.DefaultIndexMountPath
+	}
+
+	indexDir := filepath.Join(utils.GetConfigDir(), constants.IndexDirName, fmt.Sprintf("olake-index-%d", jobID))
+	if err := os.MkdirAll(indexDir, constants.DefaultDirPermissions); err != nil {
+		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
+	}
+
+	return &mount.Mount{
+		Type:   mount.TypeBind,
+		Source: utils.GetHostOutputDir(indexDir),
+		Target: target,
+	}, nil
 }
 
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {

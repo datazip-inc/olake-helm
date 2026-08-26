@@ -36,11 +36,24 @@ data:
   # =================================================================
   # JOB PROFILES CONFIGURATION
   # =================================================================
-  {{- if .Values.global.jobProfiles }}
+  # Always rendered, even when empty: the worker keeps its cached profiles when
+  # the key is missing, and treats an empty value as an explicit "clear all".
   # Converted to JSON for consistent parsing by the worker
-  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
-  {{- end }}
+  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | default dict | toJson | quote }}
   
+  # =================================================================
+  # INDEX STORAGE CONFIGURATION
+  # =================================================================
+  # Chart-wide default for the per-job Pebble index volume. Per-job overrides
+  # travel inside OLAKE_JOB_PROFILES and are deep-merged over this block.
+  {{- if .Values.global.indexStorage }}
+  {{- $indexStorage := deepCopy .Values.global.indexStorage }}
+  {{- if not $indexStorage.storageClass }}
+  {{- $_ := set $indexStorage "storageClass" (.Values.global.storageClass | default "") }}
+  {{- end }}
+  OLAKE_INDEX_STORAGE: {{ $indexStorage | toJson | quote }}
+  {{- end }}
+
   # =================================================================
   # JOB SERVICE ACCOUNT CONFIGURATION
   # =================================================================

@@ -30,15 +30,18 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace         string
+	PVCName           string
+	ServiceAccount    string
+	JobServiceAccount string
+	SecretKey         string
+	BasePath          string
+	WorkerIdentity    string
+	SecurityContext   *corev1.PodSecurityContext
+	JobPodAnnotations map[string]string
+	// IndexStorage is the chart-wide default for the per-job Pebble index
+	// volume, before job profile overrides are merged on top.
+	IndexStorage IndexStorageConfig
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -89,6 +92,9 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
+	// Parse the chart-wide index storage defaults
+	indexStorage := LoadIndexStorage(viper.GetString(constants.EnvIndexStorage))
+
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -112,6 +118,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			WorkerIdentity:    workerIdenttity,
 			SecurityContext:   securityContext,
 			JobPodAnnotations: jobPodAnnotations,
+			IndexStorage:      indexStorage,
 		},
 	}, nil
 }
@@ -119,12 +126,31 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
 	log := logger.Log(ctx)
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
-	podSpec := k.CreatePodSpec(req, workdir, imageName)
+
+	// Provision the per-job index volume before the pod that mounts it.
+	indexVolume, err := k.EnsureIndexVolume(ctx, req.JobID, req.Command)
+	if err != nil {
+		log.Error("failed to prepare index volume", "jobID", req.JobID, "command", req.Command, "error", err)
+		return "", err
+	}
+
+	podSpec := k.CreatePodSpec(req, workdir, imageName, indexVolume)
 	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
 
-	if _, err := k.createPod(ctx, podSpec); err != nil {
+	runningPod, err := k.createPod(ctx, podSpec)
+	if err != nil {
 		log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
 		return "", err
+	}
+
+	// createPod adopts a pod that already exists, which is how a retried activity
+	// resumes its run. A pod started before this worker was upgraded carries no
+	// index volume; that run finishes without one and rebuilds its index, which
+	// is better than failing a sync that is already in progress. The next run
+	// creates a pod that mounts the claim.
+	if indexVolume != nil && !podMountsIndexVolume(runningPod, indexVolume) {
+		log.Warn("resumed a pod that predates index storage; it will run without the index volume",
+			"podName", podSpec.Name, "claim", indexVolume.ClaimName)
 	}
 
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
