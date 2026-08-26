@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -29,12 +28,12 @@ func jobCounterPath(jobID int) string {
 // readCounter returns (counter, true) if a counter file exists and parses;
 // (zero value, false) if it's missing, unreadable, or unparsable.
 func readCounter(path string) (jobRunCounter, bool) {
-	data, err := os.ReadFile(path)
+	data, err := utils.ReadFile(path)
 	if err != nil {
 		return jobRunCounter{}, false
 	}
 	var c jobRunCounter
-	if err := json.Unmarshal(data, &c); err != nil {
+	if err := json.Unmarshal([]byte(data), &c); err != nil {
 		return jobRunCounter{}, false
 	}
 	return c, true
