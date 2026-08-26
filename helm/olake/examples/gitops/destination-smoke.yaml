@@ -1,11 +1,13 @@
-apiVersion: olake.io/v1
-kind: Destination
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: smoke-dest
-spec:
-  # Must match a real project id from the UI
+  labels:
+    olake.io/managed: "true"
+    olake.io/kind: destination
+data:
   projectId: "123"
-  userId: 1
+  userId: "1"
   config: |
     {
       "name": "smoke-dest",

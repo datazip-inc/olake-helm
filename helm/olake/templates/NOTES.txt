@@ -66,10 +66,9 @@
 
 🔄 GITOPS:
    Embedded reconciler enabled (GITOPS_ENABLED=true).
-   - CRDs: installed from chart crds/ on helm install
+   - Managed objects: labelled ConfigMaps (see examples/gitops/)
    - Docs: helm/olake/docs/gitops.md
-   - Examples: helm/olake/examples/gitops/
-   - Argo CD health: helm/olake/docs/argocd-health.yaml
+   - Failure indicators: worker-owned Pods (Temporal IndicatorWorkflow)
 {{- end }}
 
 For more information, visit: https://olake.io/docs

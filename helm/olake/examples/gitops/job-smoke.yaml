@@ -1,10 +1,13 @@
-apiVersion: olake.io/v1
-kind: Job
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: smoke-job
-spec:
+  labels:
+    olake.io/managed: "true"
+    olake.io/kind: job
+data:
   projectId: "123"
-  userId: 1
+  userId: "1"
   config: |
     {
       "name": "smoke-job",

@@ -18,6 +18,8 @@ import (
 type Executor interface {
 	Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error)
 	Cleanup(ctx context.Context, req *types.ExecutionRequest) error
+	// Indicator is GitOps-only: spawn/delete a failure-indicator pod/container.
+	Indicator(ctx context.Context, req *types.IndicatorRequest) error
 	Close() error
 }
 
@@ -112,6 +114,11 @@ func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *type
 
 	log.Info("successfully cleaned up and persisted state", "jobID", req.JobID)
 	return nil
+}
+
+// Indicator is GitOps-only: spawn/delete a failure-indicator pod/container.
+func (a *AbstractExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
+	return a.executor.Indicator(ctx, req)
 }
 
 func (a *AbstractExecutor) Close() {

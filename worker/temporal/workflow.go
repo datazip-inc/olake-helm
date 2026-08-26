@@ -17,6 +17,7 @@ const (
 	PostSyncActivity                = "PostSyncActivity"
 	PostClearActivity               = "PostClearActivity"
 	SendWebhookNotificationActivity = "SendWebhookNotificationActivity"
+	IndicatorActivity               = "IndicatorActivity"
 )
 
 // Retry policy for non-sync activities (discover, test, spec, cleanup)

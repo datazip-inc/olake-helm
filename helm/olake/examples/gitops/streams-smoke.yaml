@@ -1,8 +1,11 @@
-apiVersion: olake.io/v1
-kind: Streams
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: smoke-streams
-spec:
+  labels:
+    olake.io/managed: "true"
+    olake.io/kind: streams
+data:
   projectId: "123"
   job: smoke-job
   config: |

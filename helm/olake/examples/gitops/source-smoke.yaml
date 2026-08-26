@@ -1,11 +1,13 @@
-apiVersion: olake.io/v1
-kind: Source
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: smoke-source
-spec:
-  # Must match a real project id from the UI (API paths use /api/v1/project/<id>/...)
+  labels:
+    olake.io/managed: "true"
+    olake.io/kind: source
+data:
   projectId: "123"
-  userId: 1
+  userId: "1"
   config: |
     {
       "name": "smoke-source-test_1",
