@@ -1,0 +1,123 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "postgresql.fullname" . }}
+  namespace: {{ include "postgresql.namespace" . }}
+  annotations: {}
+  labels:
+    {{- include "postgresql.selectorLabels" . | nindent 4 }}
+    {{- include "postgresql.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "postgresql.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "postgresql.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "postgresql.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: postgresql
+        image: {{ include "postgresql.image" . | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "postgresql.secretName" . }}
+              key: {{ .Values.primaryDatabaseKey | default "database" }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "postgresql.secretName" . }}
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "postgresql.secretName" . }}
+              key: password
+        {{- $defaultResources := dict 
+          "requests" (dict "memory" "512Mi" "cpu" "500m")
+        }}
+        {{- $resources := mergeOverwrite $defaultResources (.Values.resources | default dict) }}
+        {{- $defaultReadinessProbe := dict 
+          "initialDelaySeconds" 5
+          "periodSeconds" 10
+          "timeoutSeconds" 5
+          "failureThreshold" 6
+          "successThreshold" 1
+          "exec" (dict "command" (list "/bin/sh" "-c" "exec pg_isready -U ${POSTGRES_USER} -h 127.0.0.1 -p 5432"))
+        }}
+        {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.readinessProbe | default dict) }}
+        readinessProbe:
+          {{- toYaml $readinessProbe | nindent 10 }}
+        {{- $defaultLivenessProbe := dict 
+          "initialDelaySeconds" 30
+          "periodSeconds" 10
+          "timeoutSeconds" 5
+          "failureThreshold" 6
+          "successThreshold" 1
+          "exec" (dict "command" (list "/bin/sh" "-c" "exec pg_isready -U ${POSTGRES_USER} -h 127.0.0.1 -p 5432"))
+        }}
+        {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.livenessProbe | default dict) }}
+        livenessProbe:
+          {{- toYaml $livenessProbe | nindent 10 }}
+        resources:
+          {{- toYaml $resources | nindent 10 }}
+        volumeMounts:
+        - name: postgresql-storage
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: postgresql-storage
+      labels:
+        {{- include "postgresql.selectorLabels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      {{- if .Values.global.storageClass }}
+      storageClassName: {{ .Values.global.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+{{- end }}
