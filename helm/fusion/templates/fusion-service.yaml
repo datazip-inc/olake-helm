@@ -1,0 +1,60 @@
+{{- range $name, $frontend := .Values.server }}
+{{- if $frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fusion.fullname" $ }}-{{ $name }}
+  namespace: {{ include "fusion.namespace" $ }}
+  labels:
+    {{- include "fusion.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: fusion
+  {{- with $frontend.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $frontend.service.type }}
+  ports:
+    - name: {{ $name }}
+      port: {{ tpl ($frontend.service.port | toString) $ }}
+      targetPort: {{ $frontend.port }}
+      protocol: TCP
+      {{- if and (eq $frontend.service.type "NodePort") $frontend.service.nodePort }}
+      nodePort: {{ $frontend.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "fusion.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: fusion
+---
+{{- end }}
+{{- end }}
+{{- range $reporter := .Values.plugin.metricReporters }}
+{{- if and $reporter.enabled $reporter.properties.port $reporter.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fusion.fullname" $ }}-{{ $reporter.name }}
+  namespace: {{ include "fusion.namespace" $ }}
+  labels:
+    {{- include "fusion.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: fusion
+  {{- with $reporter.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $reporter.service.type }}
+  ports:
+    - name: {{ $reporter.name }}
+      port: {{ tpl ($reporter.service.port | toString) $ }}
+      targetPort: {{ $reporter.properties.port }}
+      protocol: TCP
+      {{- if and (eq $reporter.service.type "NodePort") $reporter.service.nodePort }}
+      nodePort: {{ $reporter.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "fusion.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: fusion
+---
+{{- end }}
+{{- end }}

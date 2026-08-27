@@ -1,0 +1,38 @@
+apiVersion: v2
+name: fusion
+description: A Helm chart for OLake Fusion - Iceberg table maintenance and compaction service, built on Apache Amoro
+type: application
+version: 0.0.1
+appVersion: "0.9.0"
+home: https://github.com/datazip-inc/olake-helm
+sources:
+  - https://github.com/datazip-inc/olake-helm
+  - https://github.com/apache/amoro
+keywords:
+  - iceberg
+  - compaction
+  - optimizer
+  - amoro
+  - data-lakehouse
+  - kubernetes
+  - olake
+maintainers:
+  - name: Team OLake
+    email: hello@olake.io
+dependencies:
+  # Shared NFS server + ReadWriteMany claim, used only for a standalone Fusion
+  # install. When Fusion runs as a subchart of `olake`, the parent already
+  # provides the claim, so `sharedStorage.create` stays false and this is skipped.
+  # PostgreSQL backing the Fusion metastore. Skipped when the parent hands
+  # Fusion an existing database through `postgresql.external`.
+  - name: postgresql
+    version: "0.0.1"
+    repository: "file://../postgresql"
+    alias: postgresql
+    condition: postgresql.enabled
+  - name: nfs-server
+    version: "0.0.1"
+    repository: "file://../nfs-server"
+    alias: nfsServer
+    condition: sharedStorage.create
+
