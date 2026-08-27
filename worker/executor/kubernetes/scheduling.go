@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -14,12 +13,6 @@ import (
 
 // Package-level variable to store last known good mapping for fallback
 var lastValidMapping map[int]map[string]string
-
-// Package-level variable to store the last successfully parsed job profiles.
-// Without it, a malformed OLAKE_JOB_PROFILES would drop every profile - including
-// the default profile 0 - and jobs would silently run with no scheduling
-// constraints and no index volume configuration.
-var lastValidProfiles map[int]JobSchedulingConfig
 
 // JobMappingStats contains statistics about job mapping loading
 type JobMappingStats struct {
@@ -166,17 +159,9 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 	result := make(map[int]JobSchedulingConfig)
 
 	if err := json.Unmarshal([]byte(profiles), &result); err != nil {
-		if lastValidProfiles != nil {
-			logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s. keeping the last valid profiles (%d entries)", err, len(lastValidProfiles))
-			return lastValidProfiles
-		}
-		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s. no previous profiles to fall back on, scheduling and index storage will use chart defaults", err)
+		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s", err)
 		return map[int]JobSchedulingConfig{}
 	}
-
-	// An explicit empty object is a valid instruction to clear every profile, so
-	// it is cached like any other successful parse.
-	lastValidProfiles = result
 
 	logger.Infof("job profiles loaded: %d entries", len(result))
 
@@ -189,14 +174,12 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 	return result
 }
 
-// Default values applied when a field is left unset at every configuration level.
+// Index storage modes and the defaults applied when a field is left unset.
 const (
-	IndexStorageModePVC           = "pvc"
-	IndexStorageModeExistingClaim = "existingClaim"
-	IndexStorageModeNone          = "none"
+	indexStorageModePVC  = "pvc"
+	indexStorageModeNone = "none"
 
-	DefaultIndexStorageMode = IndexStorageModePVC
-	DefaultIndexStorageSize = "50Gi"
+	defaultIndexStorageSize = "50Gi"
 )
 
 // IndexStorageConfig describes the per-job block volume that holds the Pebble
@@ -204,11 +187,9 @@ const (
 // The same volume is mounted by every async operation of a job (sync and
 // clear-destination), so both see the same index.
 type IndexStorageConfig struct {
-	// Mode selects the volume source: "pvc" (worker provisions one PVC per job),
-	// "existingClaim" (mount a user supplied PVC) or "none" (no index volume).
+	// Mode selects whether the worker provisions a per-job PVC ("pvc") or the
+	// job runs without an index volume ("none").
 	Mode string `json:"mode,omitempty"`
-	// ExistingClaim is the PVC name used when Mode is "existingClaim".
-	ExistingClaim string `json:"existingClaim,omitempty"`
 	// Size is the requested volume size. Growing it is applied on the next run;
 	// Kubernetes rejects shrinking.
 	Size string `json:"size,omitempty"`
@@ -218,27 +199,20 @@ type IndexStorageConfig struct {
 	AccessModes []string `json:"accessModes,omitempty"`
 	// MountPath is where the volume is mounted inside the connector container.
 	MountPath string `json:"mountPath,omitempty"`
-	// SubPath mounts a subdirectory of the volume, for laying out several jobs
-	// inside one existing claim.
-	SubPath string `json:"subPath,omitempty"`
-	// CacheSizeMB is the Pebble block cache size in megabytes. It is resident
-	// memory in the connector pod, so it must fit inside the pod's memory budget.
+	// CacheSizeMB is the Pebble block cache size in megabytes, per stream.
 	CacheSizeMB int `json:"cacheSizeMB,omitempty"`
-	// MaxOpenFiles caps the file descriptors Pebble keeps open for its SSTables.
+	// MaxOpenFiles caps the file descriptors Pebble keeps open, per stream.
 	MaxOpenFiles int `json:"maxOpenFiles,omitempty"`
-
-	Annotations map[string]string `json:"annotations,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
 }
 
-// LoadIndexStorage parses the chart-wide OLAKE_INDEX_STORAGE JSON string.
+// loadIndexStorage parses the chart-wide OLAKE_INDEX_STORAGE JSON string.
 // An empty or malformed value yields the built-in defaults rather than
 // disabling the index volume, so a bad edit cannot silently start running
 // syncs without their index.
-func LoadIndexStorage(raw string) IndexStorageConfig {
+func loadIndexStorage(raw string) IndexStorageConfig {
 	defaults := IndexStorageConfig{
-		Mode:         DefaultIndexStorageMode,
-		Size:         DefaultIndexStorageSize,
+		Mode:         indexStorageModePVC,
+		Size:         defaultIndexStorageSize,
 		MountPath:    constants.DefaultIndexMountPath,
 		AccessModes:  []string{string(corev1.ReadWriteOnce)},
 		CacheSizeMB:  constants.DefaultIndexCacheSizeMB,
@@ -256,12 +230,12 @@ func LoadIndexStorage(raw string) IndexStorageConfig {
 		return defaults
 	}
 
-	return MergeIndexStorage(defaults, &parsed)
+	return mergeIndexStorage(defaults, &parsed)
 }
 
-// MergeIndexStorage deep-merges override onto base per key, so a job that only
+// mergeIndexStorage deep-merges override onto base per key, so a job that only
 // overrides `size` keeps the inherited storageClass, mountPath and the rest.
-func MergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) IndexStorageConfig {
+func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) IndexStorageConfig {
 	if override == nil {
 		return base
 	}
@@ -269,9 +243,6 @@ func MergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	merged := base
 	if override.Mode != "" {
 		merged.Mode = override.Mode
-	}
-	if override.ExistingClaim != "" {
-		merged.ExistingClaim = override.ExistingClaim
 	}
 	if override.Size != "" {
 		merged.Size = override.Size
@@ -285,29 +256,11 @@ func MergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	if override.MountPath != "" {
 		merged.MountPath = override.MountPath
 	}
-	if override.SubPath != "" {
-		merged.SubPath = override.SubPath
-	}
 	if override.CacheSizeMB != 0 {
 		merged.CacheSizeMB = override.CacheSizeMB
 	}
 	if override.MaxOpenFiles != 0 {
 		merged.MaxOpenFiles = override.MaxOpenFiles
 	}
-	if len(override.Annotations) > 0 {
-		merged.Annotations = mergeStringMap(base.Annotations, override.Annotations)
-	}
-	if len(override.Labels) > 0 {
-		merged.Labels = mergeStringMap(base.Labels, override.Labels)
-	}
-	return merged
-}
-
-func mergeStringMap(base, override map[string]string) map[string]string {
-	merged := make(map[string]string, len(base)+len(override))
-	for k, v := range base {
-		merged[k] = v
-	}
-	maps.Copy(merged, override)
 	return merged
 }

@@ -15,11 +15,6 @@ const (
 	// that cannot resolve itself before the run is failed. Generous enough to
 	// absorb a slow volume detach from a dead node (~6 minutes worst case).
 	UnschedulableGracePeriod = time.Minute * 10
-	// VolumeAttachGracePeriod is how long a scheduled pod may keep reporting
-	// volume attach or mount failures before the run is failed. Attaching a
-	// block volume normally takes 10-60s; a volume left attached to a node that
-	// died is force-detached after ~6 minutes.
-	VolumeAttachGracePeriod  = time.Minute * 15
 	TaskQueue                = "OLAKE_DOCKER_TASK_QUEUE"
 	OperationTypeKey         = "OperationType"
 	DefaultTemporalNamespace = "default"

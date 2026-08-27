@@ -36,10 +36,10 @@ data:
   # =================================================================
   # JOB PROFILES CONFIGURATION
   # =================================================================
-  # Always rendered, even when empty: the worker keeps its cached profiles when
-  # the key is missing, and treats an empty value as an explicit "clear all".
+  {{- if .Values.global.jobProfiles }}
   # Converted to JSON for consistent parsing by the worker
-  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | default dict | toJson | quote }}
+  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
+  {{- end }}
   
   # =================================================================
   # INDEX STORAGE CONFIGURATION

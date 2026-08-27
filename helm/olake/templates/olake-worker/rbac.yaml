@@ -23,11 +23,6 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log", "pods/status"]
   verbs: ["get", "list", "watch"]
-# Pod events carry the only signal that a scheduled pod cannot attach or mount
-# its volumes; without it such a pod is polled until the sync timeout.
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["get", "list"]
 # Job management for batch processing
 - apiGroups: ["batch"]
   resources: ["jobs"]

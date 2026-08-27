@@ -18,7 +18,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 	"github.com/spf13/viper"
@@ -69,7 +68,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 }
 
 // getOrCreateContainer creates a container or returns the ID of an existing one
-func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, bool, error) {
+func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *container.Config, hostConfig *container.HostConfig, containerName string) (string, error) {
 	log := logger.Log(ctx)
 	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     containerConfig,
@@ -79,32 +78,15 @@ func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 	if err != nil {
 		if errdefs.IsAlreadyExists(err) || errdefs.IsConflict(err) {
 			log.Info("container already exists, resuming", "containerName", containerName)
-			return containerName, true, nil
+			return containerName, nil
 		}
 
 		log.Error("failed to create container", "containerName", containerName, "error", err)
-		return "", false, fmt.Errorf("failed to create container: %s", err)
+		return "", fmt.Errorf("failed to create container: %s", err)
 	}
 
 	log.Debug("created container", "containerName", containerName, "containerID", resp.ID)
-	return resp.ID, false, nil
-}
-
-// containerMountsIndexDir reports whether an existing container already binds the
-// job's index directory. A container started before this worker was upgraded
-// does not, and resuming it would write the index into its writable layer.
-func (d *DockerExecutor) containerMountsIndexDir(ctx context.Context, containerID string, indexMount *mount.Mount) bool {
-	inspect, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
-	if err != nil {
-		logger.Log(ctx).Warn("failed to inspect the resumed container", "containerID", containerID, "error", err)
-		return false
-	}
-	for _, m := range inspect.Container.Mounts {
-		if m.Destination == indexMount.Target {
-			return true
-		}
-	}
-	return false
+	return resp.ID, nil
 }
 
 // getContainerLogs retrieves and properly parses logs from a container using stdcopy

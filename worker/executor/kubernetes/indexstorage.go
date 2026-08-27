@@ -19,47 +19,46 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
-// IndexVolume is the resolved index volume for a single pod: which claim to
-// mount and where. Sync and clear-destination of the same JobID resolve to the
-// same ClaimName, which is what makes them share one Pebble index.
-type IndexVolume struct {
-	ClaimName string
-	MountPath string
-	SubPath   string
-	// Pebble tuning handed to the connector alongside the mount.
-	CacheSizeMB  int
-	MaxOpenFiles int
+// indexVolume is the resolved index volume for a single pod: which claim to
+// mount, where, and the Pebble tuning the connector needs alongside it. Sync and
+// clear-destination of the same JobID resolve to the same claim, which is what
+// makes them share one index.
+type indexVolume struct {
+	claimName    string
+	mountPath    string
+	cacheSizeMB  int
+	maxOpenFiles int
 }
 
 // errIndexRBAC marks a claim operation the worker is not permitted to perform.
-// It is handled rather than returned to the caller: see EnsureIndexVolume.
+// It is handled rather than returned to the caller: see ensureIndexVolume.
 var errIndexRBAC = errors.New("not permitted to manage index PVCs")
 
-// IndexPVCName returns the deterministic per-job claim name. It keys on JobID
+// indexPVCName returns the deterministic per-job claim name. It keys on JobID
 // only - never on the operation - so every async run of a job mounts the same
 // volume.
-func IndexPVCName(jobID int) string {
+func indexPVCName(jobID int) string {
 	return fmt.Sprintf("olake-index-%d", jobID)
 }
 
-// ResolveIndexStorage merges the chart-wide default with the job profile and
-// the default profile (JobID 0), in increasing order of precedence, and fills in
-// the built-in defaults so callers never have to re-check for empty fields.
-func (k *KubernetesExecutor) ResolveIndexStorage(jobID int) IndexStorageConfig {
+// resolveIndexStorage merges the chart-wide default with the default profile
+// (JobID 0) and the job's own profile, in increasing order of precedence, and
+// fills in the built-in defaults so callers never re-check for empty fields.
+func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 	resolved := k.config.IndexStorage
 
 	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
-		resolved = MergeIndexStorage(resolved, profile.IndexStorage)
+		resolved = mergeIndexStorage(resolved, profile.IndexStorage)
 	}
 	if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
-		resolved = MergeIndexStorage(resolved, profile.IndexStorage)
+		resolved = mergeIndexStorage(resolved, profile.IndexStorage)
 	}
 
 	if resolved.Mode == "" {
-		resolved.Mode = DefaultIndexStorageMode
+		resolved.Mode = indexStorageModePVC
 	}
 	if resolved.Size == "" {
-		resolved.Size = DefaultIndexStorageSize
+		resolved.Size = defaultIndexStorageSize
 	}
 	if resolved.MountPath == "" {
 		resolved.MountPath = constants.DefaultIndexMountPath
@@ -74,11 +73,11 @@ func (k *KubernetesExecutor) ResolveIndexStorage(jobID int) IndexStorageConfig {
 	return resolved
 }
 
-// EnsureIndexVolume resolves the index storage config for a job and makes sure
+// ensureIndexVolume resolves the index storage config for a job and makes sure
 // the backing claim exists. It returns nil when the job gets no index volume:
 // short-lived operations (spec, check, discover) never carry one, and neither
 // does mode "none".
-func (k *KubernetesExecutor) EnsureIndexVolume(ctx context.Context, jobID int, operation types.Command) (*IndexVolume, error) {
+func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command) (*indexVolume, error) {
 	log := logger.Log(ctx)
 
 	// Only sync and clear-destination touch the Iceberg index.
@@ -86,18 +85,30 @@ func (k *KubernetesExecutor) EnsureIndexVolume(ctx context.Context, jobID int, o
 		return nil, nil
 	}
 
-	cfg := k.ResolveIndexStorage(jobID)
+	cfg := k.resolveIndexStorage(jobID)
 
-	if cfg.Mode == IndexStorageModeNone {
+	switch cfg.Mode {
+	case indexStorageModeNone:
 		log.Debug("index storage disabled for job", "jobID", jobID)
 		return nil, nil
+	case indexStorageModePVC:
+	default:
+		return nil, fmt.Errorf("unknown indexStorage.mode %q for job %d (expected %q or %q)",
+			cfg.Mode, jobID, indexStorageModePVC, indexStorageModeNone)
 	}
 
 	if err := validateIndexMountPath(cfg.MountPath, jobID); err != nil {
 		return nil, err
 	}
 
-	volume, err := k.resolveIndexVolume(ctx, jobID, operation, cfg)
+	// A per-job claim needs a real JobID to key on. Running the pod anyway would
+	// write the index to the container's writable layer and lose it, so this
+	// fails the run instead of degrading silently.
+	if jobID <= 0 {
+		return nil, fmt.Errorf("cannot provision an index volume for %s: invalid JobID %d", operation, jobID)
+	}
+
+	claimName, err := k.ensureIndexPVC(ctx, jobID, cfg)
 	if err != nil {
 		// A worker that upgraded ahead of its RBAC cannot manage claims. The
 		// index is derived state that the connector rebuilds when it is absent,
@@ -110,65 +121,13 @@ func (k *KubernetesExecutor) EnsureIndexVolume(ctx context.Context, jobID int, o
 		}
 		return nil, err
 	}
-	return volume, nil
-}
 
-func (k *KubernetesExecutor) resolveIndexVolume(ctx context.Context, jobID int, operation types.Command, cfg IndexStorageConfig) (*IndexVolume, error) {
-	switch cfg.Mode {
-	case IndexStorageModeExistingClaim:
-		if err := k.checkExistingClaim(ctx, jobID, cfg.ExistingClaim); err != nil {
-			return nil, err
-		}
-		return newIndexVolume(cfg.ExistingClaim, cfg), nil
-
-	case IndexStorageModePVC:
-		// A per-job claim needs a real JobID to key on. Running the pod anyway
-		// would write the index to the container's writable layer and lose it,
-		// so this fails the run instead of degrading silently.
-		if jobID <= 0 {
-			return nil, fmt.Errorf("cannot provision an index volume for %s: invalid JobID %d", operation, jobID)
-		}
-		claimName, err := k.ensureIndexPVC(ctx, jobID, cfg)
-		if err != nil {
-			return nil, err
-		}
-		return newIndexVolume(claimName, cfg), nil
-
-	default:
-		return nil, fmt.Errorf("unknown indexStorage.mode %q for job %d (expected %q, %q or %q)",
-			cfg.Mode, jobID, IndexStorageModePVC, IndexStorageModeExistingClaim, IndexStorageModeNone)
-	}
-}
-
-func newIndexVolume(claimName string, cfg IndexStorageConfig) *IndexVolume {
-	return &IndexVolume{
-		ClaimName:    claimName,
-		MountPath:    cfg.MountPath,
-		SubPath:      cfg.SubPath,
-		CacheSizeMB:  cfg.CacheSizeMB,
-		MaxOpenFiles: cfg.MaxOpenFiles,
-	}
-}
-
-// checkExistingClaim verifies a user-supplied claim is usable before a pod is
-// built around it. A pod referencing a claim that does not exist is not
-// rejected - it waits to be scheduled until the activity times out, which is the
-// hang this feature must not reintroduce.
-func (k *KubernetesExecutor) checkExistingClaim(ctx context.Context, jobID int, claimName string) error {
-	if claimName == "" {
-		return fmt.Errorf("indexStorage.mode is %q for job %d but indexStorage.existingClaim is empty",
-			IndexStorageModeExistingClaim, jobID)
-	}
-
-	_, err := k.client.CoreV1().PersistentVolumeClaims(k.namespace).Get(ctx, claimName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return fmt.Errorf("indexStorage.existingClaim %q for job %d does not exist in namespace %s",
-			claimName, jobID, k.namespace)
-	}
-	if err != nil {
-		return indexClaimError("get", claimName, err)
-	}
-	return nil
+	return &indexVolume{
+		claimName:    claimName,
+		mountPath:    cfg.MountPath,
+		cacheSizeMB:  cfg.CacheSizeMB,
+		maxOpenFiles: cfg.MaxOpenFiles,
+	}, nil
 }
 
 // validateIndexMountPath rejects a mount path that would break the pod rather
@@ -210,28 +169,12 @@ func indexClaimError(action, name string, err error) error {
 	return fmt.Errorf("failed to %s index PVC %s: %s", action, name, err)
 }
 
-func accessModesToStrings(modes []corev1.PersistentVolumeAccessMode) []string {
-	out := make([]string, 0, len(modes))
-	for _, mode := range modes {
-		out = append(out, string(mode))
-	}
-	return out
-}
-
-// normalizeAccessModes renders a set of access modes as a comparable,
-// order-independent string.
-func normalizeAccessModes(modes []string) string {
-	sorted := slices.Clone(modes)
-	slices.Sort(sorted)
-	return strings.Join(sorted, ",")
-}
-
 // ensureIndexPVC creates the per-job claim on first use and is a no-op on every
-// later run. The claim is never deleted here: the index is expensive to rebuild,
-// so it outlives the pods that use it.
+// later run. The claim is never deleted here: it outlives the pods that use it
+// so the index survives between runs.
 func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg IndexStorageConfig) (string, error) {
 	log := logger.Log(ctx)
-	name := IndexPVCName(jobID)
+	name := indexPVCName(jobID)
 	claims := k.client.CoreV1().PersistentVolumeClaims(k.namespace)
 
 	requested, err := resource.ParseQuantity(cfg.Size)
@@ -247,7 +190,7 @@ func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg 
 			return "", fmt.Errorf("index PVC %s is being deleted; wait for it to disappear and re-run, "+
 				"or remove its finalizers - the next run will provision a fresh volume and rebuild the index", name)
 		}
-		k.reconcileIndexPVC(ctx, existing, cfg, requested)
+		k.expandIndexPVC(ctx, existing, requested)
 		return name, nil
 	}
 	if !apierrors.IsNotFound(err) {
@@ -277,30 +220,16 @@ func (k *KubernetesExecutor) buildIndexPVC(name string, jobID int, cfg IndexStor
 		accessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 	}
 
-	labels := map[string]string{
-		"app.kubernetes.io/name":       "olake",
-		"app.kubernetes.io/component":  "index-storage",
-		"app.kubernetes.io/managed-by": "olake-workers",
-		"olake.io/job-id":              fmt.Sprintf("%d", jobID),
-	}
-	for key, val := range cfg.Labels {
-		if _, reserved := labels[key]; !reserved {
-			labels[key] = val
-		}
-	}
-
-	annotations := make(map[string]string, len(cfg.Annotations)+1)
-	for key, val := range cfg.Annotations {
-		annotations[key] = val
-	}
-	annotations["olake.io/created-by-pod"] = k.config.WorkerIdentity
-
 	claim := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   k.namespace,
-			Labels:      labels,
-			Annotations: annotations,
+			Name:      name,
+			Namespace: k.namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "olake",
+				"app.kubernetes.io/component":  "index-storage",
+				"app.kubernetes.io/managed-by": "olake-workers",
+				"olake.io/job-id":              fmt.Sprintf("%d", jobID),
+			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: accessModes,
@@ -321,25 +250,11 @@ func (k *KubernetesExecutor) buildIndexPVC(name string, jobID int, cfg IndexStor
 	return claim
 }
 
-// reconcileIndexPVC applies the one change Kubernetes allows in place - growing
-// the volume - and warns about changes it cannot apply. Nothing is deleted here:
-// discarding a bound claim would discard the index with it.
-func (k *KubernetesExecutor) reconcileIndexPVC(ctx context.Context, existing *corev1.PersistentVolumeClaim, cfg IndexStorageConfig, requested resource.Quantity) {
+// expandIndexPVC applies the one change Kubernetes allows in place - growing the
+// volume. Nothing is deleted here: discarding a bound claim would discard the
+// index with it.
+func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev1.PersistentVolumeClaim, requested resource.Quantity) {
 	log := logger.Log(ctx)
-
-	if cfg.StorageClass != "" && existing.Spec.StorageClassName != nil && *existing.Spec.StorageClassName != cfg.StorageClass {
-		log.Warn("index PVC storageClass differs from configuration and cannot be changed in place; keeping the existing volume",
-			"pvcName", existing.Name, "existing", *existing.Spec.StorageClassName, "configured", cfg.StorageClass)
-	}
-
-	if len(cfg.AccessModes) > 0 {
-		configured := normalizeAccessModes(cfg.AccessModes)
-		current := normalizeAccessModes(accessModesToStrings(existing.Spec.AccessModes))
-		if current != configured {
-			log.Warn("index PVC accessModes differ from configuration and cannot be changed in place; keeping the existing volume",
-				"pvcName", existing.Name, "existing", current, "configured", configured)
-		}
-	}
 
 	current := existing.Spec.Resources.Requests[corev1.ResourceStorage]
 	switch requested.Cmp(current) {

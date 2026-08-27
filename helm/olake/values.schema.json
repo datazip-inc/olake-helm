@@ -84,12 +84,8 @@
                   "properties": {
                     "mode": {
                       "type": "string",
-                      "enum": ["pvc", "existingClaim", "none"],
-                      "description": "Volume source: 'pvc' provisions one PVC per JobID (olake-index-<JobID>), 'existingClaim' mounts a user-supplied PVC, 'none' disables the index volume."
-                    },
-                    "existingClaim": {
-                      "type": "string",
-                      "description": "Name of the PVC to mount when mode is 'existingClaim'."
+                      "enum": ["pvc", "none"],
+                      "description": "'pvc' provisions one PVC per JobID (olake-index-<JobID>); 'none' disables the index volume."
                     },
                     "size": {
                       "type": "string",
@@ -113,10 +109,6 @@
                       "pattern": "^/.*",
                       "description": "Mount path inside the connector container."
                     },
-                    "subPath": {
-                      "type": "string",
-                      "description": "Subdirectory of the volume to mount."
-                    },
                     "cacheSizeMB": {
                       "type": "integer",
                       "minimum": 1,
@@ -126,16 +118,6 @@
                       "type": "integer",
                       "minimum": 1,
                       "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
-                    },
-                    "annotations": {
-                      "type": "object",
-                      "description": "Extra annotations on the index PVC.",
-                      "additionalProperties": { "type": "string" }
-                    },
-                    "labels": {
-                      "type": "object",
-                      "description": "Extra labels on the index PVC.",
-                      "additionalProperties": { "type": "string" }
                     }
                   },
                   "additionalProperties": false
@@ -152,12 +134,8 @@
           "properties": {
             "mode": {
               "type": "string",
-              "enum": ["pvc", "existingClaim", "none"],
-              "description": "Volume source: 'pvc' provisions one PVC per JobID (olake-index-<JobID>), 'existingClaim' mounts a user-supplied PVC, 'none' disables the index volume."
-            },
-            "existingClaim": {
-              "type": "string",
-              "description": "Name of the PVC to mount when mode is 'existingClaim'."
+              "enum": ["pvc", "none"],
+              "description": "'pvc' provisions one PVC per JobID (olake-index-<JobID>); 'none' disables the index volume."
             },
             "size": {
               "type": "string",
@@ -181,10 +159,6 @@
               "pattern": "^/.*",
               "description": "Mount path inside the connector container."
             },
-            "subPath": {
-              "type": "string",
-              "description": "Subdirectory of the volume to mount."
-            },
             "cacheSizeMB": {
               "type": "integer",
               "minimum": 1,
@@ -194,16 +168,6 @@
               "type": "integer",
               "minimum": 1,
               "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
-            },
-            "annotations": {
-              "type": "object",
-              "description": "Extra annotations on the index PVC.",
-              "additionalProperties": { "type": "string" }
-            },
-            "labels": {
-              "type": "object",
-              "description": "Extra labels on the index PVC.",
-              "additionalProperties": { "type": "string" }
             }
           },
           "additionalProperties": false

@@ -101,18 +101,10 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
-	containerID, adopted, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
 		log.Error("failed to create container", "containerName", containerName, "error", err)
 		return "", err
-	}
-
-	// A container started before this worker was upgraded has no index bind
-	// mount. Let that run finish and rebuild its index rather than failing a
-	// sync that is already in progress; the next run gets the mount.
-	if adopted && indexMount != nil && !d.containerMountsIndexDir(ctx, containerID, indexMount) {
-		log.Warn("resumed a container that predates index storage; it will run without the index directory",
-			"containerName", containerName, "target", indexMount.Target)
 	}
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {

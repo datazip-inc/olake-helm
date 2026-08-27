@@ -100,13 +100,9 @@ global:
   # Per-job overrides go in `global.jobProfiles.<JobID>.indexStorage` and are
   # deep-merged over these values, so a job overriding only `size` keeps the rest.
   indexStorage:
-    # -- Volume source: "pvc" (worker provisions one PVC per job),
-    # "existingClaim" (mount a PVC you created) or "none" (no index volume).
+    # -- "pvc" provisions one PVC per job; "none" runs jobs without an index
+    # volume, which is the opt-out when upgrading a deployment with many jobs.
     mode: pvc
-
-    # -- Name of the PVC to mount when mode is "existingClaim".
-    # Combine with `subPath` when several jobs share one claim.
-    existingClaim: ""
 
     # -- Requested volume size. Growing it is applied on the job's next run and
     # requires `allowVolumeExpansion: true` on the StorageClass. Kubernetes
@@ -148,31 +144,26 @@ global:
     accessModes:
       - ReadWriteOnce
 
-    # -- Mount path inside the connector container.
+    # -- Mount path inside the connector container. The connector creates the
+    # per-stream directories underneath it.
     mountPath: /var/lib/olake/index
 
-    # -- Optional subdirectory of the volume to mount.
-    subPath: ""
-
-    # -- Pebble block cache size in megabytes, passed to the connector as
-    # OLAKE_INDEX_DB_CACHE_SIZE.
+    # -- Pebble block cache size in megabytes, PER STREAM, passed to the
+    # connector as OLAKE_INDEX_DB_CACHE_SIZE.
     #
-    # MEMORY: this is resident memory inside the connector pod, on top of what
-    # the sync itself uses. Connector pods request 256Mi and set no limit, so a
-    # 512 MB cache means a pod that requests far less than it uses. On a busy
-    # node that shows up as memory pressure and evictions rather than a clean
-    # OOMKill. Either keep the cache small or give the connector pods a matching
-    # memory request.
+    # MEMORY: the connector opens one index database per selected stream, each
+    # with its own cache, so a job with 10 streams holds ~10x this value
+    # resident - 5 GB at the default. Connector pods request 256Mi and set no
+    # limit, so such a pod uses far more than it requests; on a busy node that
+    # shows up as memory pressure and evicted neighbours rather than a clean
+    # OOMKill. Scale this down for wide jobs, or give connector pods a memory
+    # request that matches streams x cacheSizeMB.
     cacheSizeMB: 512
 
-    # -- Maximum SSTable file descriptors Pebble keeps open, passed to the
-    # connector as OLAKE_INDEX_DB_MAX_OPEN_FILES. Must stay below the
-    # container's nofile limit.
+    # -- Maximum SSTable file descriptors Pebble keeps open, PER STREAM, passed
+    # to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES. Multiplied by the
+    # number of streams it must stay below the container's nofile limit.
     maxOpenFiles: 1000
-
-    # -- Extra annotations and labels on the index PVC (backup tooling, cost allocation).
-    annotations: {}
-    labels: {}
 
   # -- Service account configuration for job pods created by olake-workers
   # Used for cloud provider IAM integration (AWS IRSA, GCP Workload Identity, Azure Workload Identity)

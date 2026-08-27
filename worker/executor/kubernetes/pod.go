@@ -21,14 +21,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
-// podPollInterval is how long the executor waits between pod status checks.
-const (
-	podPollInterval = 5 * time.Second
-	// podEventCheckInterval throttles event lookups: they only matter while a
-	// pod is stuck, and a sync may wait for days.
-	podEventCheckInterval = 30 * time.Second
-)
-
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	log.Debug("waiting for pod to complete", "podName", podName, "timeout", timeout)
@@ -39,10 +31,6 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	// transient stall is visible in the worker log without repeating every poll.
 	var unschedulableSince time.Time
 	var lastUnschedulable string
-
-	// Tracks a scheduled pod whose volumes will not attach or mount.
-	var volumeProblemSince time.Time
-	var lastVolumeCheck time.Time
 
 	for time.Now().Before(deadline) {
 		// Record heartbeat to enable cancellation detection if heartbeat function is provided
@@ -81,30 +69,8 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			} else {
 				unschedulableSince = time.Time{}
 			}
-
-			// Scheduling is only half the story. A pod that was placed and then
-			// cannot attach or mount its volumes sits in ContainerCreating with
-			// nothing in its status to say why, and would otherwise be polled
-			// until the sync timeout - 30 days by default.
-			if isScheduled(pod) && time.Since(lastVolumeCheck) > podEventCheckInterval {
-				lastVolumeCheck = time.Now()
-
-				problem := k.volumeProblem(ctx, podName)
-				switch {
-				case problem == "":
-					volumeProblemSince = time.Time{}
-				case volumeProblemSince.IsZero():
-					volumeProblemSince = time.Now()
-					log.Warn("pod is waiting for its volumes", "podName", podName, "reason", problem)
-				case time.Since(volumeProblemSince) > constants.VolumeAttachGracePeriod:
-					log.Error("pod volumes never became available", "podName", podName, "reason", problem)
-					return fmt.Errorf("%w: pod %s could not mount its volumes for %v: %s",
-						constants.ErrExecutionFailed, podName, constants.VolumeAttachGracePeriod, problem)
-				}
-			}
 		} else {
 			unschedulableSince = time.Time{}
-			volumeProblemSince = time.Time{}
 		}
 
 		// Check if pod completed successfully
@@ -119,12 +85,6 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
 			if slices.Contains(retryableReasons, pod.Status.Reason) {
 				log.Warn("pod not running, continuing to poll", "podName", podName, "reason", pod.Status.Reason, "message", pod.Status.Message)
-				// Wait before re-polling: continuing straight to the next
-				// iteration would spin against the API server.
-				if err := waitBeforeNextPoll(ctx); err != nil {
-					log.Warn("context cancelled while waiting for pod", "podName", podName)
-					return err
-				}
 				continue
 			}
 
@@ -154,25 +114,17 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		}
 
 		// Wait before checking again, with responsive cancellation
-		if err := waitBeforeNextPoll(ctx); err != nil {
+		select {
+		case <-time.After(5 * time.Second):
+			// Continue to next iteration
+		case <-ctx.Done():
 			log.Warn("context cancelled while waiting for pod", "podName", podName)
-			return err
+			return ctx.Err()
 		}
 	}
 
 	log.Error("pod timed out", "podName", podName, "timeout", timeout)
 	return fmt.Errorf("pod timed out after %v", timeout)
-}
-
-// waitBeforeNextPoll sleeps between pod status checks, returning early when the
-// context is cancelled.
-func waitBeforeNextPoll(ctx context.Context) error {
-	select {
-	case <-time.After(podPollInterval):
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // unschedulableMessage returns the scheduler's explanation for a pod it could
@@ -186,52 +138,6 @@ func unschedulableMessage(pod *corev1.Pod) string {
 		}
 	}
 	return ""
-}
-
-// isScheduled reports whether the scheduler has placed the pod on a node.
-func isScheduled(pod *corev1.Pod) bool {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodScheduled {
-			return condition.Status == corev1.ConditionTrue
-		}
-	}
-	return pod.Spec.NodeName != ""
-}
-
-// volumeProblem returns the most recent volume attach or mount failure reported
-// for a pod, or an empty string when there is none.
-//
-// These are only visible as events: kubelet leaves the container in
-// ContainerCreating regardless, which is also what a slow image pull looks like,
-// so the events are what separate "still working" from "stuck".
-func (k *KubernetesExecutor) volumeProblem(ctx context.Context, podName string) string {
-	events, err := k.client.CoreV1().Events(k.namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("involvedObject.name=%s,involvedObject.kind=Pod", podName),
-	})
-	if err != nil {
-		// Not being able to read events is not a reason to fail a running sync.
-		logger.Log(ctx).Debug("failed to list pod events", "podName", podName, "error", err)
-		return ""
-	}
-
-	var latest string
-	var latestAt time.Time
-	for _, event := range events.Items {
-		if event.Type != corev1.EventTypeWarning {
-			continue
-		}
-		if event.Reason != "FailedAttachVolume" && event.Reason != "FailedMount" {
-			continue
-		}
-		at := event.LastTimestamp.Time
-		if at.IsZero() {
-			at = event.EventTime.Time
-		}
-		if latest == "" || at.After(latestAt) {
-			latest, latestAt = fmt.Sprintf("%s: %s", event.Reason, event.Message), at
-		}
-	}
-	return latest
 }
 
 // permanentSchedulingFailure turns a scheduler message into an actionable reason
@@ -250,10 +156,6 @@ func permanentSchedulingFailure(message string) string {
 	case strings.Contains(message, "volume node affinity conflict"):
 		return fmt.Sprintf("%s. The job's index volume is pinned to one availability zone; "+
 			"align the job profile's nodeSelector/affinity with that zone, or discard the volume to rebuild the index elsewhere", message)
-
-	// A claim that does not exist is never provisioned by waiting.
-	case strings.Contains(message, "persistentvolumeclaim") && strings.Contains(message, "not found"):
-		return fmt.Sprintf("%s. Create the claim, or point indexStorage at one that exists", message)
 
 	// Nothing is provisioning the claim. Usually a cluster with no default
 	// StorageClass, or no CSI driver installed for it - on EKS the
@@ -318,7 +220,7 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 
 // CreatePodSpec builds the connector pod. indexVolume is nil for operations that
 // carry no Pebble index (spec, check, discover) or when index storage is disabled.
-func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string, indexVolume *IndexVolume) *corev1.Pod {
+func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string, indexVolume *indexVolume) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
 	pod := &corev1.Pod{
@@ -420,14 +322,13 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			Name: "index-storage",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: indexVolume.ClaimName,
+					ClaimName: indexVolume.claimName,
 				},
 			},
 		})
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
 			Name:      "index-storage",
-			MountPath: indexVolume.MountPath,
-			SubPath:   indexVolume.SubPath,
+			MountPath: indexVolume.mountPath,
 		})
 		// Mounting the volume is not enough: the driver opens its Pebble index at
 		// the path this variable names. Without it the index is written to the
@@ -435,18 +336,17 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env,
 			corev1.EnvVar{
 				Name:  constants.EnvIndexDBDir,
-				Value: indexVolume.MountPath,
+				Value: indexVolume.mountPath,
 			},
 			corev1.EnvVar{
 				Name:  constants.EnvIndexDBCacheSize,
-				Value: strconv.Itoa(indexVolume.CacheSizeMB),
+				Value: strconv.Itoa(indexVolume.cacheSizeMB),
 			},
 			corev1.EnvVar{
 				Name:  constants.EnvIndexDBMaxOpenFiles,
-				Value: strconv.Itoa(indexVolume.MaxOpenFiles),
+				Value: strconv.Itoa(indexVolume.maxOpenFiles),
 			},
 		)
-		pod.Spec.SecurityContext = withIndexVolumeFSGroup(pod.Spec.SecurityContext)
 	}
 
 	// Set ServiceAccountName only if configured (non-empty)
@@ -476,60 +376,6 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	}
 
 	return pod
-}
-
-// podMountsIndexVolume reports whether a pod already carries the expected index
-// claim.
-func podMountsIndexVolume(pod *corev1.Pod, indexVolume *IndexVolume) bool {
-	if pod == nil || indexVolume == nil {
-		return false
-	}
-	for _, volume := range pod.Spec.Volumes {
-		if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName == indexVolume.ClaimName {
-			return true
-		}
-	}
-	return false
-}
-
-// withIndexVolumeFSGroup makes sure a container that runs as a non-root user can
-// write to a freshly provisioned index volume.
-//
-// A newly created block volume is owned by root. The shared config volume is
-// ReadWriteMany and usually world-writable, so this never mattered before, but
-// Pebble needs to create files on the index volume from the connector's own
-// user. Kubernetes only chowns a volume when fsGroup is set, so derive one from
-// the configured identity when the operator specified a user but no fsGroup.
-// An explicitly configured fsGroup is always left alone.
-func withIndexVolumeFSGroup(securityContext *corev1.PodSecurityContext) *corev1.PodSecurityContext {
-	if securityContext == nil || securityContext.FSGroup != nil {
-		return securityContext
-	}
-	if securityContext.RunAsGroup == nil && securityContext.RunAsUser == nil {
-		// No identity configured: the container runs as the image's user, and
-		// guessing an fsGroup here could break access to the shared volume.
-		return securityContext
-	}
-
-	fsGroup := securityContext.RunAsGroup
-	if fsGroup == nil {
-		fsGroup = securityContext.RunAsUser
-	}
-	// fsGroup 0 is root, which is what the volume already belongs to.
-	if *fsGroup == 0 {
-		return securityContext
-	}
-
-	// Copy first - the security context is shared by every pod this worker builds.
-	patched := securityContext.DeepCopy()
-	patched.FSGroup = ptr.To(*fsGroup)
-	if patched.FSGroupChangePolicy == nil {
-		// Ownership is applied to every volume in the pod, including the shared
-		// config volume. OnRootMismatch skips the recursive walk once the root
-		// directory already carries the right group.
-		patched.FSGroupChangePolicy = ptr.To(corev1.FSGroupChangeOnRootMismatch)
-	}
-	return patched
 }
 
 func (k *KubernetesExecutor) createPod(ctx context.Context, podSpec *corev1.Pod) (*corev1.Pod, error) {
