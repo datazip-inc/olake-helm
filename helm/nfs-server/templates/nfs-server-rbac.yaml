@@ -1,0 +1,65 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nfs-server.base" . }}-nfs-server
+  namespace: {{ include "nfs-server.namespace" . }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    app.kubernetes.io/name: {{ include "nfs-server.name" . }}-nfs-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: nfs-server
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nfs-server.base" . }}-nfs-server
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    # Static labels only - no dynamic chart version labels
+    app.kubernetes.io/name: {{ include "nfs-server.name" . }}-nfs-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: nfs-server
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["extensions"]
+  resources: ["podsecuritypolicies"]
+  resourceNames: ["nfs-provisioner"]
+  verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nfs-server.base" . }}-nfs-server
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    # Static labels only - no dynamic chart version labels
+    app.kubernetes.io/name: {{ include "nfs-server.name" . }}-nfs-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: nfs-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "nfs-server.base" . }}-nfs-server
+subjects:
+- kind: ServiceAccount
+  name: {{ include "nfs-server.base" . }}-nfs-server
+  namespace: {{ include "nfs-server.namespace" . }}
+{{- end }}

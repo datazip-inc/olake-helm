@@ -1,0 +1,26 @@
+{{- if not .Values.enabled }}
+{{- if not .Values.external.storageClass }}
+{{- fail "nfsServer.external.storageClass is required when nfsServer.enabled is false" }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nfs-server.sharedStoragePVC" . }}
+  namespace: {{ include "nfs-server.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "nfs-server.name" . }}-shared-storage
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: shared-storage
+    {{- include "nfs-server.labels" . | nindent 4 }}
+  {{- if or .Values.enabled (not .Values.external.deletePVCOnUninstall) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  {{- end }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{- if .Values.enabled }} {{ include "nfs-server.sharedStorageSize" . }}{{- else }} {{ .Values.external.size }}{{- end }}
+  storageClassName: {{- if .Values.enabled }} {{ .Values.storageClass.name | default "nfs-server" }}{{- else }} {{ .Values.external.storageClass }}{{- end }}
