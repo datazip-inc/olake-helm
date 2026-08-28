@@ -26,7 +26,7 @@ This sets `GITOPS_ENABLED=true` and `POD_NAMESPACE` on the olake-ui Deployment.
 
 - `global.jobServiceAccount.create: true` **or** `gitops.serviceAccount.create: true` so olake-ui has a ServiceAccount with GitOps RBAC.
 - olake-ui image built with GitOps support (controller-runtime embedded).
-- GitOps RBAC is **namespace-scoped** (`Role` on `configmaps` and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete — failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
+- GitOps RBAC is **namespace-scoped** (`Role` on `configmaps`, `secrets`, and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete — failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
 
 ### Failure indicators
 

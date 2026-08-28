@@ -30,7 +30,7 @@
 
 ## GitOps
 
-Manage OLake resources as Kubernetes CRs (`olake.io/v1`) with the embedded reconciler in olake-ui. See **[docs/gitops.md](docs/gitops.md)** for Helm values, CRDs, RBAC, Argo CD health, and example manifests.
+Manage OLake sources, destinations, jobs, and streams as labelled **ConfigMaps** (or **Secrets** for credentials) with the embedded reconciler in olake-ui. See **[docs/gitops.md](docs/gitops.md)** for Helm values, RBAC, example manifests, and Argo CD / Flux notes.
 
 ```yaml
 gitops:
