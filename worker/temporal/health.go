@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/metrics"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
@@ -14,10 +15,9 @@ import (
 const healthPort = 8090
 
 type Server struct {
-	server    *http.Server
-	worker    *Worker
-	startTime time.Time
-	db        *database.DB
+	server *http.Server
+	worker *Worker
+	db     *database.DB
 }
 
 type HealthResponse struct {
@@ -30,9 +30,8 @@ func NewHealthServer(worker *Worker, db *database.DB) *Server {
 	mux := http.NewServeMux()
 
 	hs := &Server{
-		worker:    worker,
-		startTime: time.Now(),
-		db:        db,
+		worker: worker,
+		db:     db,
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", healthPort),
 			Handler: mux,
@@ -42,7 +41,7 @@ func NewHealthServer(worker *Worker, db *database.DB) *Server {
 	// Endpoints: align with old worker
 	mux.HandleFunc("/health", hs.healthHandler)
 	mux.HandleFunc("/ready", hs.readinessHandler)
-	mux.HandleFunc("/metrics", hs.metricsHandler)
+	mux.Handle("/metrics", metrics.Handler())
 
 	return hs
 }
@@ -123,14 +122,4 @@ func (hs *Server) readinessHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, response)
-}
-
-// Metrics: align shape with old worker
-func (hs *Server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
-	metrics := map[string]interface{}{
-		"worker_status":  "running",
-		"uptime_seconds": time.Since(hs.startTime).Seconds(),
-		"timestamp":      time.Now(),
-	}
-	writeJSON(w, http.StatusOK, metrics)
 }

@@ -14,7 +14,6 @@ import (
 	_ "github.com/datazip-inc/olake-helm/worker/executor/docker"
 	_ "github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
-	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
@@ -69,17 +68,14 @@ func main() {
 		logger.Fatalf("failed to create Temporal worker: %s", err)
 	}
 
-	// start health server for kubernetes environment
-	// TODO: add health check for docker environment as well
-	if utils.GetExecutorEnvironment() == string(types.Kubernetes) {
-		healthServer := temporal.NewHealthServer(worker, db)
-		go func() {
-			err := healthServer.Start()
-			if err != nil {
-				logger.Fatalf("failed to start Kubernetes health server: %s", err)
-			}
-		}()
-	}
+	// start health/metrics server (both Kubernetes and Docker environments)
+	healthServer := temporal.NewHealthServer(worker, db)
+	go func() {
+		err := healthServer.Start()
+		if err != nil {
+			logger.Fatalf("failed to start health server: %s", err)
+		}
+	}()
 
 	// Start the Temporal worker in a separate goroutine so the main goroutine
 	// continues to run and listen for termination signals.

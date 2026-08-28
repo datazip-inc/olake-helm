@@ -6,6 +6,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
+	"github.com/datazip-inc/olake-helm/worker/metrics"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 
@@ -40,7 +41,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	// w.RegisterWorkflow(ExecuteClearWorkflow)
 
 	// regsiter activities
-	activitiesInstance := NewActivity(e, db, t)
+	activitiesInstance := NewActivity(e, db, t, metrics.NewTracker(ctx))
 	w.RegisterActivity(activitiesInstance.ExecuteActivity)
 	w.RegisterActivity(activitiesInstance.SyncActivity)
 	w.RegisterActivity(activitiesInstance.PostSyncActivity)

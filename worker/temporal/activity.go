@@ -8,6 +8,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/metrics"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -22,10 +23,11 @@ type Activity struct {
 	executor   *executor.AbstractExecutor
 	db         *database.DB
 	tempClient client.Client
+	tracker    *metrics.Tracker
 }
 
-func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Activity {
-	return &Activity{executor: e, db: db, tempClient: c.GetClient()}
+func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal, tracker *metrics.Tracker) *Activity {
+	return &Activity{executor: e, db: db, tempClient: c.GetClient(), tracker: tracker}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -83,10 +85,20 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		req.Args = utils.RemoveFlagFromArgs(req.Args, constants.StateFlag)
 	}
 
+	// Register the run with the metrics tracker
+	_, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	a.tracker.Start(req.WorkflowID, workdir, metrics.SyncLabels{
+		JobID:           req.JobID,
+		JobName:         jobDetails.JobName,
+		SourceName:      jobDetails.SourceName,
+		DestinationName: jobDetails.DestinationName,
+	})
+
 	// Send telemetry event - "sync started"
 	telemetry.SendEvent(req.JobID, utils.GetExecutorEnvironment(), req.WorkflowID, telemetry.TelemetryEventStarted)
 
 	result, err := a.executor.Execute(ctx, req)
+	a.tracker.Finish(req.WorkflowID, err == nil)
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
 		if ctx.Err() != nil {
