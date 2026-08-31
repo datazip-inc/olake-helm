@@ -111,7 +111,7 @@ global:
 
   # -- Local storage mode for job config and log files
   #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
-  #   - "nfs": NFS shared volume
+  #   - "nfs": NFS shared volume (DEPRECATED — support will be removed soon)
   localStorageMode: "nfs"
 
 # OLake UI - Main application
@@ -373,7 +373,9 @@ s3LogFileStorage:
     #   Azure Workload Identity: azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
     annotations: {}
 
-# NFS / PVC (used when S3 is not active)
+# DEPRECATED: NFS shared storage. Currently the default component. Support will be removed soon.
+# Migrate to S3: set global.localStorageMode: "s3" and configure s3LogFileStorage.
+# Still used when global.localStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.
