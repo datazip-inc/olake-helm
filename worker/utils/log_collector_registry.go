@@ -2,10 +2,8 @@ package utils
 
 import (
 	"context"
-	"slices"
 	"sync"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
@@ -50,7 +48,7 @@ func acquireWorkflowLogCollectors(
 	workerCollector.Start(ctx)
 
 	var connectorCollector *RuntimeLogCollector
-	if slices.Contains(constants.AsyncCommands, command) && newConnectorLogCollector != nil {
+	if newConnectorLogCollector != nil {
 		connectorCollector, err = newConnectorLogCollector(ctx, workflowID, workDir, command)
 		if err != nil {
 			logger.Warnf("failed to start connector log collector for workflowID=%s: %s", workflowID, err)
