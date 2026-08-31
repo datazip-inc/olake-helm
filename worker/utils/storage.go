@@ -143,7 +143,7 @@ func WriteFilesToNFS(workDir string, configs []types.JobConfig) error {
 }
 
 // ReadFileFromNFS reads a file from the local filesystem.
-func readFileFromNFS(workDir, relativePath string) (string, error) {
+func ReadFileFromNFS(workDir, relativePath string) (string, error) {
 	filePath := filepath.Join(workDir, relativePath)
 	return ReadFile(filePath)
 }
@@ -175,7 +175,7 @@ func WriteFilesToS3(ctx context.Context, workDir string, configs []types.JobConf
 }
 
 // ReadFileFromS3 reads a file from the S3 bucket.
-func readFileFromS3(ctx context.Context, workDir, relativePath string, validateJSON bool) (string, error) {
+func ReadFileFromS3(ctx context.Context, workDir, relativePath string, validateJSON bool) (string, error) {
 	var key string
 	var err error
 	if workDir == "" {

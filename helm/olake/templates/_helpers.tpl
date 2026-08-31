@@ -116,12 +116,16 @@ External S3-compatible endpoints (e.g. external MinIO) use enabled: false with e
 {{/*
 Log storage mode from global.localStorageMode (default nfs).
 When s3, validates s3LogFileStorage is complete before render.
+Fusion still requires the shared RWX volume and is not supported in s3 mode.
 */}}
 {{- define "olake.storageMode" -}}
 {{- $mode := .Values.global.localStorageMode | default "nfs" -}}
 {{- if eq $mode "s3" -}}
 {{- if not (and .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region) -}}
 {{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.localStorageMode is s3" -}}
+{{- end -}}
+{{- if .Values.fusion.enabled -}}
+{{- fail "Fusion is not supported when global.localStorageMode is s3; set fusion.enabled to false or use nfs" -}}
 {{- end -}}
 {{- end -}}
 {{- $mode -}}

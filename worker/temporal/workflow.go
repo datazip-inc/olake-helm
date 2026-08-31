@@ -19,6 +19,15 @@ const (
 	SendWebhookNotificationActivity = "SendWebhookNotificationActivity"
 )
 
+// syncStatus tells PostSyncActivity how the sync actually finished.
+type syncStatus string
+
+const (
+	syncStatusSuccess   syncStatus = "success"
+	syncStatusFailed    syncStatus = "failed"
+	syncStatusCancelled syncStatus = "cancelled"
+)
+
 // Retry policy for non-sync activities (discover, test, spec, cleanup)
 var (
 	DefaultRetryPolicy = &temporal.RetryPolicy{
@@ -103,7 +112,24 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 			RetryPolicy:         SyncRetryPolicy,
 		}
 		newCtx = workflow.WithActivityOptions(newCtx, cleanupOtions)
-		cleanupErr := workflow.ExecuteActivity(newCtx, cleanupActivity, req).Get(newCtx, nil)
+
+		var cleanupErr error
+		if req.Command == types.Sync {
+			// err is the named return above - only this workflow sees it.
+			var status syncStatus
+			switch {
+			case err == nil:
+				status = syncStatusSuccess
+			case temporal.IsCanceledError(err):
+				status = syncStatusCancelled
+			default:
+				status = syncStatusFailed
+			}
+			cleanupErr = workflow.ExecuteActivity(newCtx, cleanupActivity, req, status).Get(newCtx, nil)
+		} else {
+			cleanupErr = workflow.ExecuteActivity(newCtx, cleanupActivity, req).Get(newCtx, nil)
+		}
+
 		if cleanupErr != nil {
 			if err != nil {
 				err = fmt.Errorf("sync failed: %s, cleanup also failed: %s", err, cleanupErr)

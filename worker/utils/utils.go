@@ -108,7 +108,8 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
+// ApplyConfigUpdates overwrites req.Configs entries named in updates, and adds addIfMissing entries only if not already present.
+func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
 	existing := make(map[string]int)
 	for i, config := range req.Configs {
 		existing[config.Name] = i
@@ -139,12 +140,7 @@ func UpdateConfigWithJobDetails(ctx context.Context, jobData types.JobData, req 
 		"state.json":       jobData.State,
 	}
 
-	addIfMissing := make(map[string]string)
-	if !viper.GetBool(constants.EnvTelemetryDisabled) {
-		addIfMissing["user_id.txt"] = GetTelemetryUserID(ctx)
-	}
-
-	applyConfigUpdates(req, updates, addIfMissing)
+	ApplyConfigUpdates(req, updates, nil)
 }
 
 func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -155,9 +151,9 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 		var err error
 		switch storagemode.Get() {
 		case constants.StorageModeS3:
-			data, err = readFileFromS3(ctx, "", req.TempPath, true)
+			data, err = ReadFileFromS3(ctx, "", req.TempPath, true)
 		case constants.StorageModeNFS:
-			data, err = readFileFromNFS(GetConfigDir(), req.TempPath)
+			data, err = ReadFileFromNFS(GetConfigDir(), req.TempPath)
 		default:
 			return fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 		}
@@ -171,7 +167,7 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 			"streams.json":     data,
 		}
 
-		applyConfigUpdates(req, updates, nil)
+		ApplyConfigUpdates(req, updates, nil)
 	}
 
 	return nil
@@ -193,9 +189,9 @@ func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command typ
 	var err error
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
-		stateFile, err = readFileFromS3(ctx, workDir, "state.json", true)
+		stateFile, err = ReadFileFromS3(ctx, workDir, "state.json", true)
 	case constants.StorageModeNFS:
-		stateFile, err = readFileFromNFS(workDir, "state.json")
+		stateFile, err = ReadFileFromNFS(workDir, "state.json")
 	default:
 		return "", fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
 	}
@@ -220,7 +216,7 @@ func GetConfigDir() string {
 func GetTelemetryUserID(ctx context.Context) string {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
-		data, err := readFileFromS3(ctx, "", constants.TelemetryUserIDPath, false)
+		data, err := ReadFileFromS3(ctx, "", constants.TelemetryUserIDPath, false)
 		if err != nil {
 			logger.Errorf("failed to read telemetry user ID: %s", err)
 			return ""
@@ -282,6 +278,13 @@ func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
 // WorkflowHash returns a deterministic hash string for a given workflowID
 func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+// SyncWorkflowAndScheduleID returns a job's base sync workflow ID and its
+// schedule ID
+func SyncWorkflowAndScheduleID(projectID string, jobID int) (string, string) {
+	workflowID := fmt.Sprintf("sync-%s-%d", projectID, jobID)
+	return workflowID, fmt.Sprintf("schedule-%s", workflowID)
 }
 
 // GetTemporalNamespace returns the configured namespace when TEMPORAL_EXTERNAL is true,
