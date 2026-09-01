@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fusion.fullname" . }}
+  namespace: {{ include "fusion.namespace" . }}
+  labels:
+    {{- include "fusion.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+spec:
+  {{- /* Fusion is a singleton; a second replica double-registers its optimizers. */}}
+  replicas: 1
+  # TODO: remove this when the dual registration issue is resolved.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "fusion.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: fusion
+  template:
+    metadata:
+      labels:
+        {{- include "fusion.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: fusion
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/fusion-configmap.yaml") . | sha256sum }}
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "fusion.serviceAccountName" . }}
+      initContainers:
+        {{- include "fusion.pod.initContainers" . | nindent 8 }}
+      containers:
+        - name: fusion
+          image: {{ include "fusion.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/entrypoint.sh", "ams"]
+          {{- if .Values.bootstrap.enabled }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    {{- include "fusion.bootstrap.postStart" . | nindent 20 }}
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    {{- include "fusion.bootstrap.preStop" . | nindent 20 }}
+          {{- end }}
+          ports:
+            {{- include "fusion.pod.container.ports" . | nindent 12 }}
+          env:
+            {{- include "fusion.pod.container.env" . | nindent 12 }}
+          volumeMounts:
+            {{- include "fusion.pod.container.mounts" . | nindent 12 }}
+          {{- $defaultResources := dict
+            "requests" (dict "memory" "512Mi" "cpu" "500m")
+          }}
+          {{- $resources := mergeOverwrite $defaultResources (.Values.resources | default dict) }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/ams/v1/health/status
+              port: rest
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/ams/v1/versionInfo
+              port: rest
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          {{- end }}
+      volumes:
+        {{- include "fusion.pod.volumes" . | nindent 8 }}

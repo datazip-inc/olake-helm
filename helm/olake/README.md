@@ -167,44 +167,32 @@ global:
 
 **Deprecation Notice:** The legacy `global.jobMapping` configuration (which only supported `nodeSelector`) is deprecated and will be removed in a future release. Users are strongly advised to migrate to `global.jobProfiles`, which provides feature-rich scheduling capabilities including tolerations and affinity rules.
 
-### Fusion Compaction Scheduling
+### Fusion (Iceberg Compaction)
 
-Fusion runs two kinds of pods with very different resource profiles:
+Fusion ships as its own chart, wired in here as a dependency. Enable it and
+everything else follows:
 
-- The **Fusion pod** and the **optimizer** pod — a lightweight, always-on orchestrator.
-- The **executor** pod(s) — created on-demand when compaction runs, and typically need much more memory/CPU (larger tables = bigger executors).
-
-Running both on the same node pool means keeping a large node around even when compaction isn't active. To avoid that, the Fusion pod and optimizer can be scheduled independently from the executor pods:
-
-```yaml
-fusion:
-  nodeSelector:
-    node-type: "olake-standard"
-  tolerations:
-    - key: "service"
-      operator: "Equal"
-      value: "olake"
-      effect: "NoSchedule"
-  affinity: {}
-
-  optimizer:
-    # If left empty, falls back to fusion.nodeSelector / tolerations / affinity above.
-    nodeSelector: {}
-    tolerations: []
-    affinity: {}
-
-    spark:
-      executor:
-        # If left empty, falls back to fusion.nodeSelector / tolerations / affinity above.
-        nodeSelector:
-          node-type: "olake-compaction-large"
-        tolerations:
-          - key: "compaction"
-            operator: "Equal"
-            value: "true"
-            effect: "NoSchedule"
-        affinity: {}
+```bash
+helm upgrade --install olake olake/olake -n olake --set fusion.enabled=true
 ```
+
+Fusion then reuses this chart's PostgreSQL and the `olake-shared-storage` PVC
+instead of standing up its own, and OLake UI is pointed at it automatically.
+
+Everything about Fusion itself — its image, the optimizer master/worker pods,
+Spark configuration and their scheduling — is configured under the `fusion:` key
+in these values, which is passed straight through to the subchart. See
+[helm/fusion/README.md](../fusion/README.md) for the full key reference.
+
+To run Fusion as its own separate release instead, install the `fusion` chart on
+its own and set `fusion.releaseName` here to match it.
+
+> **Upgrading from a chart version where Fusion lived here:** `fusion.image`,
+> `fusion.optimizer.*`, `fusion.serviceAccount`, `fusion.shade` and
+> `fusion.plugin` all stay under the same `fusion:` key — they now reach the
+> subchart rather than templates in this chart. Two keys were renamed:
+> `fusion.optimizer.nodeSelector` is now `fusion.optimizer.master.nodeSelector`,
+> and `fusion.optimizer.spark.executor.*` is now `fusion.optimizer.worker.*`.
 
 ### Cloud IAM Integration
 
@@ -381,7 +369,7 @@ global:
 
 ### Global Pod Annotations
 
-Annotations defined in `global.podAnnotations` are applied to every pod managed by this chart — all Deployment pods (OLake UI, OLake Workers, PostgreSQL, Temporal, Elasticsearch, Fusion), Fusion Spark optimizer pods, and connector activity pods (sync, discover, check) spawned by olake-workers.
+Annotations defined in `global.podAnnotations` are applied to every pod managed by this chart — all Deployment pods (OLake UI, OLake Workers, PostgreSQL, Temporal, Elasticsearch) and connector activity pods (sync, discover, check) spawned by olake-workers. The fusion chart has its own `global.podAnnotations`, which covers the Fusion pod and its optimizer master/worker pods.
 
 This is useful for service mesh sidecar injection (Istio, Linkerd) or any admission-webhook-based tooling that requires pod-level annotations.
 
@@ -418,7 +406,6 @@ The following images must be mirrored to the registry before deploying:
 | `olakego/source-*` (e.g. `olakego/source-mongodb:v0.7.0`) | Docker Hub |
 | `temporalio/auto-setup:1.22.3`, `temporalio/ui:2.16.2` | Docker Hub |
 | `library/postgres:14-alpine` | Docker Hub |
-| `olakego/fusion:latest`, `olakego/fusion-spark:latest` | Docker Hub |
 | `sig-storage/nfs-provisioner:v4.0.8` | `registry.k8s.io` (built-in NFS only) |
 
 #### Step 2 — Authenticate with the registry

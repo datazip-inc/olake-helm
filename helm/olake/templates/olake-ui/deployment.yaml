@@ -82,7 +82,7 @@ spec:
         - -c
         - |
           echo "Waiting for Fusion REST service to be ready..."
-          until nc -z {{ include "olake.fullname" . }}-fusion-rest.{{ include "olake.namespace" . }}.svc.cluster.local 1630; do
+          until nc -z {{ include "olake.fusionRestService" . }}.{{ include "olake.namespace" . }}.svc.cluster.local 1630; do
             echo "Fusion REST service is not ready yet. Waiting..."
             sleep 5
           done
@@ -117,19 +117,19 @@ spec:
         - name: ENABLE_OPTIMIZATION
           value: "true"
         - name: OPTIMIZATION_BASE_URL
-          value: {{ printf "http://%s-fusion-rest.%s.svc.cluster.local:1630" (include "olake.fullname" .) (include "olake.namespace" .) | quote }}
+          value: {{ printf "http://%s.%s.svc.cluster.local:1630" (include "olake.fusionRestService" .) (include "olake.namespace" .) | quote }}
         - name: OPTIMIZATION_GROUP
-          value: spark-container
+          value: {{ .Values.fusion.optimizerGroup | quote }}
         - name: USERNAME
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
-              key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A username key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.username }}{{ else }}AdminUsername{{ end }}
+              name: {{ include "olake.fusionAuthSecretName" . }}
+              key: {{ required "A username key must be provided in fusion.auth.secretKeys" .Values.fusion.auth.secretKeys.username }}
         - name: PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.olakeUI.initUser.existingSecret | default (printf "%s-fusion" (include "olake.fullname" .)) }}
-              key: {{ if .Values.olakeUI.initUser.existingSecret }}{{ required "A password key must be provided in olakeUI.initUser.secretKeys" .Values.olakeUI.initUser.secretKeys.password }}{{ else }}AdminPassword{{ end }}
+              name: {{ include "olake.fusionAuthSecretName" . }}
+              key: {{ required "A password key must be provided in fusion.auth.secretKeys" .Values.fusion.auth.secretKeys.password }}
         {{- end }}
         # Database configuration
         - name: OLAKE_POSTGRES_HOST
