@@ -38,12 +38,12 @@ func (wf *WorkflowLogFile) Close() error {
 
 // InitWorkflowLoggerForS3 creates a zerolog.Logger that writes to stdout and the given writer.
 // workflowID and command are attached to every log line for S3 worker log routing.
-func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error) (context.Context, *WorkflowLogFile, error) {
+// lastLogSeq is the highest seq already uploaded in worker-*-seqN.log (0 if none).
+func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error, lastLogSeq uint64) (context.Context, *WorkflowLogFile, error) {
 	stdoutWriter := createStdoutWriter()
 	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, fileWriter)
-	var seq uint64
 	log := zerolog.New(multiWriter).Hook(zerolog.HookFunc(func(e *zerolog.Event, _ zerolog.Level, _ string) {
-		e.Uint64("seq", atomic.AddUint64(&seq, 1))
+		e.Uint64("seq", atomic.AddUint64(&lastLogSeq, 1))
 	})).With().Timestamp().Logger()
 	if workflowID != "" {
 		log = log.With().Str("workflowID", workflowID).Logger()

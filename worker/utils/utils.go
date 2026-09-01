@@ -461,9 +461,15 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 			return ctx, nil, err
 		}
 
+		// Same resume as connector logs: last seq is persisted in the chunk filename.
+		var lastLogSeq uint64
+		if _, seq, _, resumeErr := resolveLogChunkResumeState(ctx, workdirPath, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref); resumeErr == nil {
+			lastLogSeq = seq
+		}
+
 		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), io.Discard, func() error {
 			return releaseCollectors(ctx)
-		})
+		}, lastLogSeq)
 	case constants.StorageModeNFS:
 		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
 	default:
