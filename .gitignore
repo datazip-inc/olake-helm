@@ -1,7 +1,7 @@
 ### Helm ###
 # Chart dependencies
 **/charts/*.tgz
-**/olake/Chart.lock
+**/Chart.lock
 
 # CMake
 cmake-build-*/
