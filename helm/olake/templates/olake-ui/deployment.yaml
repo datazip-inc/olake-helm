@@ -56,7 +56,7 @@ spec:
       {{- if (include "olake.jobServiceAccountName" .) }}
       serviceAccountName: {{ include "olake.jobServiceAccountName" . }}
       {{- end }}
-      {{- if or .Values.temporal.enabled .Values.fusion.enabled }}
+      {{- if or .Values.temporal.enabled .Values.fusion.enabled (and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3")) }}
       initContainers:
       {{- if .Values.temporal.enabled }}
       - name: wait-for-temporal
@@ -87,6 +87,21 @@ spec:
             sleep 5
           done
           echo "Fusion REST service is ready!"
+      {{- end }}
+      {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+      - name: wait-for-minio
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO to be ready..."
+          until nc -z {{ include "olake.minio.serviceName" . }}.{{ include "olake.namespace" . }}.svc.cluster.local 9000; do
+            echo "MinIO is not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "MinIO is ready!"
       {{- end }}
       {{- end }}
       containers:
@@ -166,6 +181,39 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}ssl_mode{{ else }}{{ .Values.postgresql.external.secretKeys.ssl_mode }}{{ end }}
+        # Log storage configuration
+        - name: OLAKE_STORAGE_MODE
+          value: {{ include "olake.storageMode" . | quote }}
+        {{- if eq (include "olake.storageMode" .) "s3" }}
+        - name: OLAKE_S3_BUCKET
+          value: {{ required "s3LogFileStorage.bucket is required when S3 log storage is active" .Values.s3LogFileStorage.bucket | quote }}
+        - name: OLAKE_S3_REGION
+          value: {{ required "s3LogFileStorage.region is required when S3 log storage is active" .Values.s3LogFileStorage.region | quote }}
+        {{- if .Values.s3LogFileStorage.prefix }}
+        - name: OLAKE_S3_PREFIX
+          value: {{ .Values.s3LogFileStorage.prefix | quote }}
+        {{- end }}
+        {{- $endpoint := include "olake.s3Endpoint" . -}}
+        {{- if $endpoint }}
+        - name: OLAKE_S3_ENDPOINT
+          value: {{ $endpoint | quote }}
+        {{- end }}
+        {{- $s3Secret := include "olake.s3CredentialsSecretName" . -}}
+        {{- if $s3Secret }}
+        - name: OLAKE_S3_CREDENTIALS_SECRET
+          value: {{ $s3Secret | quote }}
+        - name: OLAKE_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ $s3Secret }}
+              key: OLAKE_S3_ACCESS_KEY_ID
+        - name: OLAKE_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $s3Secret }}
+              key: OLAKE_S3_SECRET_ACCESS_KEY
+        {{- end }}
+        {{- end }}
         {{- if not .Values.temporal.enabled }}
         envFrom:
         - secretRef:
@@ -198,7 +246,7 @@ spec:
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" (printf "echo ok > /tmp/olake-config/.healthcheck-ui && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.uiProbeShell" .)))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeUI.readinessProbe | default dict) }}
         readinessProbe:
@@ -209,7 +257,7 @@ spec:
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" (printf "echo ok > /tmp/olake-config/.healthcheck-ui && nc -z localhost %s" (.Values.olakeUI.env.HTTP_PORT | default "8000"))))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.uiProbeShell" .)))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeUI.livenessProbe | default dict) }}
         livenessProbe:
@@ -219,8 +267,12 @@ spec:
         configMap:
           name: olake-ui-config
       - name: shared-storage
+        {{- if eq (include "olake.storageMode" .) "nfs" }}
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
       {{- with first .Values.global.imagePullSecrets }}
       - name: registry-creds
         secret:

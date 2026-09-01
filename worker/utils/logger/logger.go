@@ -3,21 +3,16 @@ package logger
 import (
 	"io"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
 
-var (
-	rootLogger zerolog.Logger
-
-	// ansiColorRegex matches common ANSI color escape sequences (e.g., "\x1b[32m", "\x1b[0m").
-	ansiColorRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-)
+var rootLogger zerolog.Logger
 
 func Init() {
 	level := viper.GetString(constants.EnvLogLevel)
@@ -29,9 +24,10 @@ func Init() {
 }
 
 // createStdoutWriter creates a writer for stdout based on the configured log format.
+// S3 log collection requires JSON lines with workflowID; console format is skipped there.
 func createStdoutWriter() io.Writer {
 	format := viper.GetString(constants.EnvLogFormat)
-	if strings.EqualFold(format, "console") {
+	if strings.EqualFold(format, "console") && storagemode.Get() != constants.StorageModeS3 {
 		return zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339,
@@ -109,8 +105,4 @@ func logArgs(event *zerolog.Event, v ...interface{}) {
 	default:
 		event.Msgf("%s", v...)
 	}
-}
-
-func StripANSI(s string) string {
-	return ansiColorRegex.ReplaceAllString(s, "")
 }

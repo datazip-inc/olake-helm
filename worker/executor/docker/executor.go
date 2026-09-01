@@ -10,9 +10,11 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
@@ -65,9 +67,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
-		hostOutputDir := utils.GetHostOutputDir(workdir)
-		hostConfig.Mounts = []mount.Mount{
-			{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+		switch storagemode.Get() {
+		case constants.StorageModeS3:
+			// Connector must reach MinIO/S3 on the same Docker network as the worker.
+			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
+		default:
+			hostOutputDir := utils.GetHostOutputDir(workdir)
+			hostConfig.Mounts = []mount.Mount{
+				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+			}
 		}
 	}
 

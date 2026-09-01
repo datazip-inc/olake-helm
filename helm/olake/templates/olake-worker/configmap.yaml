@@ -15,7 +15,9 @@ data:
   
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
+  {{- if eq (include "olake.storageMode" .) "nfs" }}
   OLAKE_STORAGE_PVC_NAME: {{ include "olake.sharedStoragePVC" . | quote }}
+  {{- end }}
 
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}

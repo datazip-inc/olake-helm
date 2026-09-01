@@ -90,6 +90,9 @@ func RunSyncWorkflow(ctx workflow.Context, args interface{}) (result *types.Exec
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	req.WorkflowID = workflow.GetInfo(ctx).WorkflowExecution.ID
+	// Schedule args are baked with the stable schedule workflow ID; rewrite paths to the
+	// unique execution ID Temporal assigned this run (required for S3 object keys).
+	utils.RefreshConnectorArgs(req, false)
 
 	var activity, cleanupActivity string
 	switch req.Command {

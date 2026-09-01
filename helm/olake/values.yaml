@@ -109,6 +109,11 @@ global:
   #     RUN_MODE: "production"
   env: {}
 
+  # -- Local storage mode for job config and log files
+  #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
+  #   - "nfs": NFS shared volume (DEPRECATED — support will be removed soon)
+  localStorageMode: "nfs"
+
 # OLake UI - Main application
 olakeUI:
   # -- Number of OLake UI replicas
@@ -312,7 +317,65 @@ olakeWorker:
       level: info
       format: console
 
-# Storage configuration for shared data exchange between pods
+# S3 Log File Storage (used when global.localStorageMode is "s3")
+s3LogFileStorage:
+  # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
+  #   - true:  deploy built-in MinIO (endpoint and credentials are managed by the chart)
+  #   - false: hosted / external S3 (AWS S3, external MinIO, GCS S3 API, etc.)
+  enabled: true
+  # -- S3-compatible endpoint override. Auto-set when enabled: true. Required for external MinIO.
+  endpoint: ""
+  bucket: "olake"
+  region: "us-east-1"
+  prefix: ""
+  # -- Static credentials secret (required for external S3/MinIO when role.enabled is false)
+  # kubectl create secret generic s3-log-file-storage-secret \
+  #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+  #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+  existingSecret: ""
+  auth:
+    # -- MinIO root credentials when enabled: true (also used as OLAKE_S3_* keys)
+    rootUser: "olake"
+    rootPassword: "password"
+  persistence:
+    # -- Backing volume size for in-cluster MinIO (uses global.storageClass when set)
+    size: 20Gi
+  image:
+    repository: minio/minio
+    tag: RELEASE.2025-04-03T14-56-28Z
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+
+  # -- Tolerations for pod assignment
+  tolerations: []
+
+  # -- Affinity settings for pod assignment
+  affinity: {}
+
+  # -- Additional pod annotations
+  podAnnotations: {}
+
+  # -- Additional pod labels
+  podLabels: {}
+
+  # -- MinIO resource requirements (optional overrides)
+  # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
+  resources: {}
+
+  role:
+    # -- Use IAM role for hosted S3 auth (EKS IRSA). When true, existingSecret is not required.
+    enabled: false
+    # Cloud provider IAM role association for hosted S3 log storage.
+    # Examples:
+    #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
+    #   GCP Workload Identity: iam.gke.io/gcp-service-account: "olake-s3-log-storage@project.iam.gserviceaccount.com"
+    #   Azure Workload Identity: azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
+    annotations: {}
+
+# DEPRECATED: NFS shared storage. Currently the default component. Support will be removed soon.
+# Migrate to S3: set global.localStorageMode: "s3" and configure s3LogFileStorage.
+# Still used when global.localStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.
@@ -631,6 +694,7 @@ elasticsearch:
 fusion:
   # -- Enable Fusion (Amoro) components.
   # Set to false to disable all Fusion resources.
+  # Fusion requires NFS/RWX shared storage and is not supported when global.localStorageMode is s3.
   enabled: false
 
   # -- Service Account configuration

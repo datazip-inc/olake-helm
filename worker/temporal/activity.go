@@ -46,13 +46,13 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 			return nil, err
 		}
 
-		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
+		if err := utils.UpdateConfigForClearDestination(ctx, jobDetails, req); err != nil {
 			return nil, err
 		}
 	}
 
 	// base telemetry payload for non-sync commands; old CLI versions just ignore the file
-	telemetry.WriteConfigs(req, telemetry.BasePayload(req))
+	telemetry.WriteConfigs(req, telemetry.BasePayload(ctx, req))
 
 	return a.executor.Execute(ctx, req)
 }
@@ -68,7 +68,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// Update the configs with latest
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		telemetry.TrackSyncEvent(telemetry.BasePayload(req), telemetry.TelemetryEventFailed, "")
+		telemetry.TrackSyncEvent(telemetry.BasePayload(ctx, req), telemetry.TelemetryEventFailed, "")
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
@@ -81,13 +81,13 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 
 	// update the configs with latest job details first - this refreshes req.Version from
 	// the DB, since req may carry a stale version from when a recurring schedule was created
-	utils.UpdateConfigWithJobDetails(jobDetails, req)
+	utils.UpdateConfigWithJobDetails(ctx, jobDetails, req)
 
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)
 	runCount := telemetry.GetOrIncrementSyncRunCount(ctx, a.tempClient, req, attempt)
 	cliTelemetry := telemetry.SupportsCLITelemetry(req.Version)
-	payload := telemetry.BuildPayload(req, jobDetails, runCount)
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, runCount)
 	telemetry.WriteConfigs(req, payload)
 
 	// Remove --state flag if state is empty
@@ -147,7 +147,7 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	payload := telemetry.BuildPayload(req, jobDetails, telemetry.ReadSyncRunCount(req.JobID))
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, telemetry.ReadSyncRunCount(ctx, req.JobID))
 
 	switch status {
 	case syncStatusSuccess:
@@ -183,7 +183,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		return err
 	}
 
-	utils.RevertUpdatesInSchedule(req)
+	utils.RefreshConnectorArgs(req, true)
 
 	// update the schedule
 	workflowID, scheduleID := utils.SyncWorkflowAndScheduleID(req.ProjectID, req.JobID)

@@ -18,6 +18,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
@@ -141,6 +142,52 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
+	var volumeMounts []corev1.VolumeMount
+	var volumes []corev1.Volume
+	if storagemode.Get() == constants.StorageModeNFS {
+		volumes = []corev1.Volume{{
+			Name: "job-storage",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: k.config.PVCName,
+				},
+			},
+		}}
+		volumeMounts = []corev1.VolumeMount{{
+			Name:      "job-storage",
+			MountPath: "/mnt/config",
+			SubPath:   subDir,
+		}}
+	}
+
+	envFrom := []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: constants.GlobalEnvConfigMap,
+				},
+				Optional: ptr.To(true),
+			},
+		},
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: constants.WorkersConfigMap,
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+	if storagemode.Get() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
+		envFrom = append(envFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: k.config.S3CredentialsSecret,
+				},
+			},
+		})
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      k.sanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
@@ -180,17 +227,11 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			SecurityContext: k.config.SecurityContext,
 			Containers: []corev1.Container{
 				{
-					Name:    "connector",
-					Image:   imageName,
-					Command: []string{},
-					Args:    req.Args,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "job-storage",
-							MountPath: "/mnt/config",
-							SubPath:   subDir,
-						},
-					},
+					Name:         "connector",
+					Image:        imageName,
+					Command:      []string{},
+					Args:         req.Args,
+					VolumeMounts: volumeMounts,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceMemory: k.parseQuantity("256Mi"),
@@ -204,32 +245,14 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							Value: req.WorkflowID,
 						},
 						{
-							Name:  "OLAKE_SECRET_KEY",
+							Name:  constants.EnvSecretKey,
 							Value: k.config.SecretKey,
 						},
 					},
-					EnvFrom: []corev1.EnvFromSource{
-						{
-							ConfigMapRef: &corev1.ConfigMapEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "olake-global-env",
-								},
-								Optional: ptr.To(true),
-							},
-						},
-					},
+					EnvFrom: envFrom,
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "job-storage",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: k.config.PVCName,
-						},
-					},
-				},
-			},
+			Volumes: volumes,
 		},
 	}
 
@@ -239,8 +262,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
 
-	// Add liveness probe for long-running sync operations
-	if slices.Contains(constants.AsyncCommands, req.Command) {
+	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
+	if slices.Contains(constants.AsyncCommands, req.Command) && storagemode.Get() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

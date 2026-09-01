@@ -21,7 +21,8 @@
 -   **Temporal**: Workflow orchestration engine managing data ingestion pipeline lifecycle
 -   **PostgreSQL**: Primary data store for both OLake application and Temporal
 -   **Elasticsearch**: Advanced visibility and search capabilities for Temporal
--   **NFS Server**(Optional): Self-managed in-cluster NFS server with dynamic provisioning for shared storage
+-   **S3 Storage**(Optional): S3-compatible storage for job config and log files. Uses in-cluster MinIO by default, or an external S3-compatible endpoint (AWS S3, MinIO, GCS S3 API, etc.)
+-   **NFS Server**(Optional): Self-managed in-cluster NFS server with dynamic provisioning for shared storage. **DEPRECATED** — NFS support will be removed soon. Migrate to S3 (`global.localStorageMode: s3`).
 
 ## Prerequisites
 
@@ -249,6 +250,38 @@ global:
 ```
 
 ### Shared Storage Configuration
+
+OLake requires **one** shared storage backend for job config and log files: **S3** or **NFS**. Only one is used at a time, selected with `global.localStorageMode`. NFS (`nfs`) is currently the default but is **deprecated** and will be removed soon. Migrate to S3 by setting `global.localStorageMode: s3` and configuring `s3LogFileStorage`. Fusion is currently not supported with S3.
+
+OLake can store job config and log files in S3-compatible storage. For production, a hosted S3-compatible service such as AWS S3, GCS (S3 API), or an existing MinIO cluster should be used. This is achieved by disabling the built-in MinIO and providing an existing bucket. An example is given below:
+
+```yaml
+global:
+  localStorageMode: "s3"
+
+s3LogFileStorage:
+  # 1. The development MinIO server is disabled
+  enabled: false
+
+  # 2. Hosted / external S3 bucket
+  bucket: "olake"
+  region: "us-east-1"
+  existingSecret: "s3-log-file-storage-secret"
+```
+
+Create the credentials secret before installing:
+
+```bash
+kubectl create secret generic s3-log-file-storage-secret \
+  --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+  --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+```
+
+For IAM role auth (EKS IRSA) instead of static keys, set `s3LogFileStorage.role.enabled: true` and add role annotations. `existingSecret` is not required in that case.
+
+**Note:** For development and quick starts, in-cluster MinIO is included and used when `s3LogFileStorage.enabled: true`. This provides an out-of-the-box S3 solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
+
+**⚠️ Fusion:** Fusion requires NFS/RWX shared storage and is not supported when `global.localStorageMode` is `s3`. Set `fusion.enabled: false` to use S3 storage.
 
 The OLake application components (UI, Worker, and Activity Pods) require a shared ReadWriteMany (RWX) volume for **coordinating pipeline state and metadata**.
 
