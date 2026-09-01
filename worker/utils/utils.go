@@ -152,10 +152,8 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 		switch storagemode.Get() {
 		case constants.StorageModeS3:
 			data, err = ReadFileFromS3(ctx, "", req.TempPath, true)
-		case constants.StorageModeNFS:
-			data, err = ReadFileFromNFS(GetConfigDir(), req.TempPath)
 		default:
-			return fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
+			data, err = ReadFileFromNFS(GetConfigDir(), req.TempPath)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to read streams file: %s", err)
@@ -190,10 +188,8 @@ func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command typ
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		stateFile, err = ReadFileFromS3(ctx, workDir, "state.json", true)
-	case constants.StorageModeNFS:
-		stateFile, err = ReadFileFromNFS(workDir, "state.json")
 	default:
-		return "", fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
+		stateFile, err = ReadFileFromNFS(workDir, "state.json")
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
@@ -222,7 +218,7 @@ func GetTelemetryUserID(ctx context.Context) string {
 			return ""
 		}
 		return data
-	case constants.StorageModeNFS:
+	default:
 		telemetryPath := filepath.Join(GetConfigDir(), constants.TelemetryUserIDPath)
 
 		userID, err := os.ReadFile(telemetryPath)
@@ -231,9 +227,6 @@ func GetTelemetryUserID(ctx context.Context) string {
 			return ""
 		}
 		return string(userID)
-	default:
-		logger.Errorf("unsupported storage mode for telemetry user ID: %s", storagemode.Get())
-		return ""
 	}
 }
 
@@ -254,7 +247,7 @@ func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		return workflowConnectorLogsExistInS3(ctx, workdir)
-	case constants.StorageModeNFS:
+	default:
 		logDir := filepath.Join(workdir, "logs")
 		entries, err := os.ReadDir(logDir)
 		if err != nil {
@@ -269,8 +262,6 @@ func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
 				}
 			}
 		}
-		return false
-	default:
 		return false
 	}
 }
@@ -338,10 +329,8 @@ func connectorConfigPath(command types.Command, workflowID, filename string) str
 			key = path.Join(prefix, key)
 		}
 		return fmt.Sprintf("s3://%s/%s", bucket, key)
-	case constants.StorageModeNFS:
-		// Workflow dir is mounted at /mnt/config (K8s subPath or Docker bind mount).
-		return path.Join(constants.ContainerMountDir, filename)
 	default:
+		// Workflow dir is mounted at /mnt/config (K8s subPath or Docker bind mount).
 		return path.Join(constants.ContainerMountDir, filename)
 	}
 }
@@ -470,9 +459,7 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), io.Discard, func() error {
 			return releaseCollectors(ctx)
 		}, lastLogSeq)
-	case constants.StorageModeNFS:
-		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
 	default:
-		return ctx, nil, nil
+		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
 	}
 }

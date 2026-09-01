@@ -47,6 +47,9 @@ func setDefaults() {
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 
+	// Storage defaults (matches UI: unset OLAKE_STORAGE_MODE → nfs)
+	viper.SetDefault(constants.EnvStorageMode, constants.StorageModeNFS)
+
 	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
 	viper.SetDefault("DB_PORT", 5432)
@@ -62,7 +65,6 @@ func requiredEnvVars() error {
 	// Common required env vars
 	requiredEnv := []string{
 		constants.EnvCallbackURL,
-		constants.EnvStorageMode,
 	}
 
 	if viper.IsSet(constants.EnvDatabaseURL) && viper.GetString(constants.EnvDatabaseURL) != "" {
@@ -91,7 +93,7 @@ func requiredEnvVars() error {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
-	case constants.StorageModeNFS:
+	default:
 		if execEnv == string(types.Docker) {
 			requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
 		} else {

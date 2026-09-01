@@ -68,16 +68,14 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
 		switch storagemode.Get() {
-		case constants.StorageModeNFS:
-			hostOutputDir := utils.GetHostOutputDir(workdir)
-			hostConfig.Mounts = []mount.Mount{
-				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
-			}
 		case constants.StorageModeS3:
 			// Connector must reach MinIO/S3 on the same Docker network as the worker.
 			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
 		default:
-			return "", fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
+			hostOutputDir := utils.GetHostOutputDir(workdir)
+			hostConfig.Mounts = []mount.Mount{
+				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+			}
 		}
 	}
 

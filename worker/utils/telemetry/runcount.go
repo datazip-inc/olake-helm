@@ -35,10 +35,8 @@ func readCounter(ctx context.Context, path string) (jobRunCounter, bool) {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		data, err = utils.ReadFileFromS3(ctx, "", path, false)
-	case constants.StorageModeNFS:
-		data, err = utils.ReadFileFromNFS(utils.GetConfigDir(), path)
 	default:
-		return jobRunCounter{}, false
+		data, err = utils.ReadFileFromNFS(utils.GetConfigDir(), path)
 	}
 	if err != nil {
 		return jobRunCounter{}, false

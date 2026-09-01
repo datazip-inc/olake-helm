@@ -124,10 +124,8 @@ func WriteConfigFiles(ctx context.Context, workDir string, configs []types.JobCo
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		return WriteFilesToS3(ctx, workDir, configs)
-	case constants.StorageModeNFS:
-		return WriteFilesToNFS(workDir, configs)
 	default:
-		return fmt.Errorf("unsupported storage mode: %s", storagemode.Get())
+		return WriteFilesToNFS(workDir, configs)
 	}
 }
 
