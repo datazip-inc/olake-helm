@@ -312,6 +312,9 @@ func (b *PodLogBuffer) Flush(ctx context.Context) error {
 func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLineEntry) error {
 	shouldFlush, err := b.appendLine(normalizedLogLine)
 	if err != nil {
+		if flushErr := b.Flush(ctx); flushErr != nil {
+			return flushErr
+		}
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		return b.uploadTolockeds3(ctx, normalizedLogLine)
