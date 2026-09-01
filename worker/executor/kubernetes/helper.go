@@ -80,7 +80,7 @@ func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Com
 	return []corev1.Toleration{}
 }
 
-func (k *KubernetesExecutor) sanitizeName(name string) string {
+func (k *KubernetesExecutor) SanitizeName(name string) string {
 	name = strings.ToLower(name)
 
 	// Replace invalid characters with hyphens
@@ -99,7 +99,7 @@ func (k *KubernetesExecutor) sanitizeName(name string) string {
 	return name
 }
 
-func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
+func (k *KubernetesExecutor) ParseQuantity(s string) resource.Quantity {
 	q, _ := resource.ParseQuantity(s)
 	return q
 }

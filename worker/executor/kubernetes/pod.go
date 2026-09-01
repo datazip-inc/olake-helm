@@ -20,7 +20,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
-func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
+func (k *KubernetesExecutor) WaitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	log.Debug("waiting for pod to complete", "podName", podName, "timeout", timeout)
 	deadline := time.Now().Add(timeout)
@@ -44,7 +44,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		}
 
 		// Check if pod failed
-		if pod.Status.Phase == corev1.PodFailed {
+		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
 			// Check if this is a retryable infrastructure failure
 			retryableReasons := []string{"ImagePullBackOff", "ErrImagePull"}
 			if slices.Contains(retryableReasons, pod.Status.Reason) {
@@ -91,7 +91,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	return fmt.Errorf("pod timed out after %v", timeout)
 }
 
-func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (string, error) {
+func (k *KubernetesExecutor) GetPodLogs(ctx context.Context, podName string) (string, error) {
 	log := logger.Log(ctx)
 	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: "connector",
@@ -118,7 +118,7 @@ func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (st
 	return buf.String(), nil
 }
 
-func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) error {
+func (k *KubernetesExecutor) CleanupPod(ctx context.Context, podName string) error {
 	log := logger.Log(ctx)
 	log.Debug("cleaning up pod", "podName", podName, "namespace", k.namespace)
 
@@ -143,7 +143,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      k.sanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
+			Name:      k.SanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
 			Namespace: k.namespace,                    // Target namespace for pod creation
 
 			// Labels are used for querying, filtering, and organizing pods
@@ -157,7 +157,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 				"olake.io/operation-type": string(req.Command),            // sync, discover, or check
 				"olake.io/connector":      req.ConnectorType,              // mysql, postgres, etc.
 				"olake.io/job-id":         strconv.Itoa(req.JobID),        // Database job reference
-				"olake.io/workflow-id":    k.sanitizeName(req.WorkflowID), // Sanitized workflow ID
+				"olake.io/workflow-id":    k.SanitizeName(req.WorkflowID), // Sanitized workflow ID
 			},
 
 			// Annotations store metadata that doesn't affect pod selection/scheduling.
@@ -193,8 +193,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
+							corev1.ResourceMemory: k.ParseQuantity("256Mi"),
+							corev1.ResourceCPU:    k.ParseQuantity("100m"),
 						},
 						// No limits for flexibility
 					},
@@ -262,7 +262,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	return pod
 }
 
-func (k *KubernetesExecutor) createPod(ctx context.Context, podSpec *corev1.Pod) (*corev1.Pod, error) {
+func (k *KubernetesExecutor) CreatePod(ctx context.Context, podSpec *corev1.Pod) (*corev1.Pod, error) {
 	log := logger.Log(ctx)
 	result, err := k.client.CoreV1().Pods(k.namespace).Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {

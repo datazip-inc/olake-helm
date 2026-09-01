@@ -30,15 +30,15 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace         string
+	PVCName           string
+	ServiceAccount    string
+	JobServiceAccount string
+	SecretKey         string
+	BasePath          string
+	WorkerIdentity    string
+	SecurityContext   *corev1.PodSecurityContext
+	JobPodAnnotations map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -122,7 +122,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	podSpec := k.CreatePodSpec(req, workdir, imageName)
 	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
 
-	if _, err := k.createPod(ctx, podSpec); err != nil {
+	if _, err := k.CreatePod(ctx, podSpec); err != nil {
 		log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
 		return "", err
 	}
@@ -132,18 +132,18 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
-			if err := k.cleanupPod(cleanupCtx, podSpec.Name); err != nil {
+			if err := k.CleanupPod(cleanupCtx, podSpec.Name); err != nil {
 				log.Error("failed to cleanup pod", "podName", podSpec.Name, "command", req.Command, "workflowID", req.WorkflowID, "error", err)
 			}
 		}()
 	}
 
-	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
+	if err := k.WaitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
 		log.Error("pod failed to complete", "podName", podSpec.Name, "error", err)
 		return "", err
 	}
 
-	logs, err := k.getPodLogs(ctx, podSpec.Name)
+	logs, err := k.GetPodLogs(ctx, podSpec.Name)
 	if err != nil {
 		log.Error("failed to get pod logs", "podName", podSpec.Name, "error", err)
 		return "", fmt.Errorf("failed to get pod logs: %s", err)
@@ -154,10 +154,10 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 
 func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
 	log := logger.Log(ctx)
-	podName := k.sanitizeName(req.WorkflowID)
+	podName := k.SanitizeName(req.WorkflowID)
 	log.Info("cleaning up pod", "podName", podName, "workflowID", req.WorkflowID)
 
-	if err := k.cleanupPod(ctx, podName); err != nil {
+	if err := k.CleanupPod(ctx, podName); err != nil {
 		log.Error("failed to cleanup pod", "podName", podName, "error", err)
 		return fmt.Errorf("failed to cleanup pod: %s", err)
 	}
