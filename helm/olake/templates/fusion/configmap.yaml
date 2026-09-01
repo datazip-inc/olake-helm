@@ -149,4 +149,19 @@ data:
         {{- toYaml (.Values.fusion.optimizer.spark.executor.affinity | default .Values.fusion.affinity) | nindent 8 }}
       {{- end }}
 
+  {{- with .Values.fusion.plugin.metricReporters }}
+  metric-reporters.yaml: |
+    metric-reporters:
+      - name: {{ .prometheusExporter.name }}
+        enabled: {{ .prometheusExporter.enabled }}
+        properties:
+          {{ .prometheusExporter.properties | toYaml | nindent 10 | trim }}
+
+  table-runtime-factories.yaml: |
+    table-runtime-factories:
+      - name: default
+        enabled: true
+        priority: 100
+  {{- end }}
+
 {{- end }}
