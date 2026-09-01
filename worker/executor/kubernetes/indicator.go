@@ -70,6 +70,7 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 				labelIndicator: "true",
 				labelKind:      req.Kind,
 				labelCR:        req.CRName,
+				"olake.io/phase": "Failed",
 			},
 			Annotations: map[string]string{
 				annotationError: annotationSafeIndicator(req.Message),
@@ -84,7 +85,7 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 					Name:  "OLAKE_ERROR",
 					Value: msg,
 				}},
-				Command:                  []string{"sh", "-c", `printf '%s\n' "$OLAKE_ERROR" > /dev/termination-log; exit 1`},
+				Command:                  []string{"sh", "-c", `printf '%s\n' "$OLAKE_ERROR" | tee /dev/termination-log >&2; exit 1`},
 				TerminationMessagePath:   "/dev/termination-log",
 				TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 				Resources: corev1.ResourceRequirements{

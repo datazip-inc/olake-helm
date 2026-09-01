@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/moby/moby/api/types/container"
@@ -17,6 +18,10 @@ const (
 	labelIndicatorDocker    = "olake.io/indicator"
 	labelKindDocker         = "olake.io/kind"
 	labelCRDocker           = "olake.io/cr"
+	labelPhaseDocker        = "olake.io/phase"
+	// Log the error, then stay alive so the container remains visible in `docker ps`.
+	// Phase=Failed label marks it as a GitOps failure indicator (not a healthy workload).
+	indicatorDockerCmd = `printf '%s\n' "$OLAKE_ERROR" | tee /dev/termination-log >&2; exec sleep infinity`
 )
 
 func (d *DockerExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
@@ -32,7 +37,10 @@ func (d *DockerExecutor) Indicator(ctx context.Context, req *types.IndicatorRequ
 
 func (d *DockerExecutor) deleteIndicatorContainer(ctx context.Context, name string) error {
 	_, err := d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
-	return err
+	if err != nil && !errdefs.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types.IndicatorRequest) error {
@@ -41,15 +49,21 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 	// remove any existing container with the same name to update the error message
 	_, _ = d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 
+	if err := d.PullImage(ctx, indicatorDockerImage, ""); err != nil {
+		log.Error("pull indicator image failed", "image", indicatorDockerImage, "error", err)
+		return fmt.Errorf("pull indicator image %s: %w", indicatorDockerImage, err)
+	}
+
 	msg := truncateIndicatorDocker(req.Message, indicatorTerminationMax)
 	containerConfig := &container.Config{
 		Image: indicatorDockerImage,
-		Cmd:   []string{"sh", "-c", `printf '%s\n' "$OLAKE_ERROR" > /dev/termination-log; exit 1`},
+		Cmd:   []string{"sh", "-c", indicatorDockerCmd},
 		Env:   []string{fmt.Sprintf("OLAKE_ERROR=%s", msg)},
 		Labels: map[string]string{
 			labelIndicatorDocker: "true",
 			labelKindDocker:      req.Kind,
 			labelCRDocker:        req.CRName,
+			labelPhaseDocker:     "Failed",
 		},
 	}
 
