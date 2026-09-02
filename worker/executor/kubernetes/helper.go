@@ -13,22 +13,49 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
+// resolveSchedulingProfile layers the default profile (JobID 0) and the job's
+// own profile. A field the job profile leaves unset is inherited from profile
+// 0; an explicitly empty value (`nodeSelector: {}`, `tolerations: []`) clears
+// the inherited one for that job.
+//
+// The merge matters because the chart ships its own defaults as profile 0: a
+// profile that overrides only indexStorage would otherwise silently drop the
+// default scheduling constraints. Short-lived operations (spec, check,
+// discover) never carry a per-job profile and always run on profile 0.
+func (k *KubernetesExecutor) resolveSchedulingProfile(jobID int, operation types.Command) (JobSchedulingConfig, bool) {
+	resolved, _ := k.configWatcher.GetJobProfile(0)
+
+	// jobID 0 is the default profile itself and is already resolved above.
+	if jobID != 0 && slices.Contains(constants.AsyncCommands, operation) {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
+			if profile.NodeSelector != nil {
+				resolved.NodeSelector = profile.NodeSelector
+			}
+			if profile.Tolerations != nil {
+				resolved.Tolerations = profile.Tolerations
+			}
+			if profile.Affinity != nil {
+				resolved.Affinity = profile.Affinity
+			}
+		}
+	}
+
+	// A profile applies to scheduling only when it actually carries a scheduling
+	// field. The chart always emits profile 0 to hold the index defaults, so
+	// merely existing cannot be the test: that would make every deployment look
+	// profile-managed and silently retire the deprecated jobMapping path.
+	// An explicitly empty value is still a decision and counts as applying.
+	applies := resolved.NodeSelector != nil || resolved.Tolerations != nil || resolved.Affinity != nil
+
+	return resolved, applies
+}
+
 // getNodeSelectorForJob returns node selector configuration for the given jobID
 // Returns empty map if no mapping is found (graceful fallback)
 // Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
-	// Check profiles for async operations
-	if slices.Contains(constants.AsyncCommands, operation) {
-		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
-			if profile.NodeSelector != nil {
-				return profile.NodeSelector
-			}
-			return map[string]string{}
-		}
-	}
-
-	// Check default profile
-	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+	// Profiles win over the deprecated mapping whenever any profile applies.
+	if profile, exists := k.resolveSchedulingProfile(jobID, operation); exists {
 		if profile.NodeSelector != nil {
 			return profile.NodeSelector
 		}
@@ -57,23 +84,11 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 
 // GetTolerationsForJob returns tolerations for the given jobID
 func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Command) []corev1.Toleration {
-	// 1. Check specific profile
-	if slices.Contains(constants.AsyncCommands, operation) {
-		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
-			if len(profile.Tolerations) > 0 {
-				return profile.Tolerations
-			}
-			return []corev1.Toleration{}
-		}
-	}
-
-	// 2. Check default profile
-	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
+	if profile, exists := k.resolveSchedulingProfile(jobID, operation); exists {
 		if len(profile.Tolerations) > 0 {
-			logger.Debugf("using default profile tolerations")
 			return profile.Tolerations
 		}
-		logger.Debugf("default profile exists but tolerations empty")
+		logger.Debugf("profile applies to JobID %d but tolerations are empty", jobID)
 		return []corev1.Toleration{}
 	}
 
@@ -121,20 +136,10 @@ func (k *KubernetesExecutor) buildPodAnnotations(internal map[string]string) map
 // Uses NotIn operator to exclude nodes with label key-value pairs used by any mapped job.
 // Reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
 func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Command) *corev1.Affinity {
-	// Check if profile has explicit affinity
-	if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
-		if profile.Affinity != nil {
-			return profile.Affinity
-		}
-		return nil
-	}
-
-	// Check default profile
-	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
-		if profile.Affinity != nil {
-			return profile.Affinity
-		}
-		return nil
+	// An applicable profile is authoritative for placement: never fall through
+	// to the generated anti-affinity below, which could contradict it.
+	if profile, exists := k.resolveSchedulingProfile(jobID, operation); exists {
+		return profile.Affinity
 	}
 
 	// Check if job has explicit mapping

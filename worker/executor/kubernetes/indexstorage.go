@@ -41,17 +41,24 @@ func indexPVCName(jobID int) string {
 	return fmt.Sprintf("olake-index-%d", jobID)
 }
 
-// resolveIndexStorage merges the chart-wide default with the default profile
+// resolveIndexStorage layers the built-in defaults, the default profile
 // (JobID 0) and the job's own profile, in increasing order of precedence, and
-// fills in the built-in defaults so callers never re-check for empty fields.
+// fills in anything still empty so callers never re-check.
+//
+// The chart ships its defaults as profile 0, so this whole chain arrives in
+// OLAKE_JOB_PROFILES and is picked up by the ConfigMap watcher. A size change
+// therefore takes effect on the next run without restarting the worker.
 func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
-	resolved := k.config.IndexStorage
+	resolved := defaultIndexStorage()
 
 	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
 		resolved = mergeIndexStorage(resolved, profile.IndexStorage)
 	}
-	if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
-		resolved = mergeIndexStorage(resolved, profile.IndexStorage)
+	// jobID 0 is the default profile itself and is already merged above.
+	if jobID != 0 {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
+			resolved = mergeIndexStorage(resolved, profile.IndexStorage)
+		}
 	}
 
 	if resolved.Mode == "" {
