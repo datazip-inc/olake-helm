@@ -39,9 +39,6 @@ type KubernetesConfig struct {
 	WorkerIdentity    string
 	SecurityContext   *corev1.PodSecurityContext
 	JobPodAnnotations map[string]string
-	// IndexStorage is the chart-wide default for the per-job Pebble index
-	// volume, before job profile overrides are merged on top.
-	IndexStorage IndexStorageConfig
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -92,9 +89,6 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
-	// Parse the chart-wide index storage defaults
-	indexStorage := loadIndexStorage(viper.GetString(constants.EnvIndexStorage))
-
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -118,7 +112,6 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			WorkerIdentity:    workerIdenttity,
 			SecurityContext:   securityContext,
 			JobPodAnnotations: jobPodAnnotations,
-			IndexStorage:      indexStorage,
 		},
 	}, nil
 }

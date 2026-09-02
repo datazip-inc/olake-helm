@@ -36,23 +36,21 @@ data:
   # =================================================================
   # JOB PROFILES CONFIGURATION
   # =================================================================
-  {{- if .Values.global.jobProfiles }}
+  # A profile carries both scheduling (nodeSelector / tolerations / affinity)
+  # and the per-job index volume (indexStorage). Profile 0 is the default that
+  # every job inherits; a JobID profile is deep-merged over it, field by field,
+  # by the worker. Profile 0 is always emitted so `global.storageClass` reaches
+  # the index even when the user replaces jobProfiles wholesale.
+  {{- $profiles := deepCopy (.Values.global.jobProfiles | default dict) }}
+  {{- $profile0 := deepCopy (get $profiles "0" | default dict) }}
+  {{- $index0 := deepCopy (get $profile0 "indexStorage" | default dict) }}
+  {{- if not (get $index0 "storageClass") }}
+  {{- $_ := set $index0 "storageClass" (.Values.global.storageClass | default "") }}
+  {{- end }}
+  {{- $_ := set $profile0 "indexStorage" $index0 }}
+  {{- $_ := set $profiles "0" $profile0 }}
   # Converted to JSON for consistent parsing by the worker
-  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
-  {{- end }}
-  
-  # =================================================================
-  # INDEX STORAGE CONFIGURATION
-  # =================================================================
-  # Chart-wide default for the per-job Pebble index volume. Per-job overrides
-  # travel inside OLAKE_JOB_PROFILES and are deep-merged over this block.
-  {{- if .Values.global.indexStorage }}
-  {{- $indexStorage := deepCopy .Values.global.indexStorage }}
-  {{- if not $indexStorage.storageClass }}
-  {{- $_ := set $indexStorage "storageClass" (.Values.global.storageClass | default "") }}
-  {{- end }}
-  OLAKE_INDEX_STORAGE: {{ $indexStorage | toJson | quote }}
-  {{- end }}
+  OLAKE_JOB_PROFILES: {{ $profiles | toJson | quote }}
 
   # =================================================================
   # JOB SERVICE ACCOUNT CONFIGURATION

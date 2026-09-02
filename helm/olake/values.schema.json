@@ -41,7 +41,7 @@
         },
         "jobProfiles": {
           "type": "object",
-          "description": "Advanced scheduling profiles for specific JobIDs. Allows defining nodeSelector, tolerations, and affinity.",
+          "description": "Scheduling and index-storage profiles keyed by JobID. Profile \"0\" is the default every job inherits; a JobID profile is deep-merged over it field by field.",
           "patternProperties": {
             "^[0-9]+$": {
               "type": "object",
@@ -80,7 +80,7 @@
                 },
                 "indexStorage": {
                   "type": "object",
-                  "description": "Per-job index volume overrides, deep-merged over global.indexStorage.",
+                  "description": "Index volume settings for this profile. Under profile \"0\" these are the chart-wide defaults; under any other JobID they are overrides deep-merged over profile 0.",
                   "properties": {
                     "mode": {
                       "type": "string",
@@ -124,50 +124,6 @@
                 }
               },
               "additionalProperties": false
-            }
-          },
-          "additionalProperties": false
-        },
-        "indexStorage": {
-          "type": "object",
-          "description": "Chart-wide defaults for the per-job Pebble index volume mounted into sync and clear-destination pods.",
-          "properties": {
-            "mode": {
-              "type": "string",
-              "enum": ["pvc", "none"],
-              "description": "'pvc' provisions one PVC per JobID (olake-index-<JobID>); 'none' disables the index volume."
-            },
-            "size": {
-              "type": "string",
-              "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$",
-              "description": "Requested volume size, e.g. 50Gi. Grow-only; Kubernetes rejects shrinking."
-            },
-            "storageClass": {
-              "type": "string",
-              "description": "StorageClass for the index PVC. Empty falls back to global.storageClass, then the cluster default. Must be block storage."
-            },
-            "accessModes": {
-              "type": "array",
-              "description": "Access modes for the index PVC.",
-              "items": {
-                "type": "string",
-                "enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany", "ReadOnlyMany"]
-              }
-            },
-            "mountPath": {
-              "type": "string",
-              "pattern": "^/.*",
-              "description": "Mount path inside the connector container."
-            },
-            "cacheSizeMB": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Pebble block cache size in megabytes, passed to the connector as OLAKE_INDEX_DB_CACHE_SIZE. Resident memory inside the connector pod."
-            },
-            "maxOpenFiles": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
             }
           },
           "additionalProperties": false

@@ -29,6 +29,8 @@ const (
 	// IndexDirName is the persistence-root subdirectory that holds one Pebble
 	// index directory per job. Docker counterpart of the per-job index PVC.
 	IndexDirName = "index"
+	// DefaultIndexSize is the requested size of a job's index volume.
+	DefaultIndexSize = "20Gi"
 	// DefaultIndexMountPath is where the job's index volume is mounted inside the
 	// connector container, in both the kubernetes and docker executors.
 	DefaultIndexMountPath = "/var/lib/olake/index"

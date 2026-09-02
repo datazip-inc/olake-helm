@@ -26,7 +26,8 @@ type JobSchedulingConfig struct {
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
-	// IndexStorage overrides the chart-wide index volume settings for this job.
+	// IndexStorage is this profile's index volume settings. On profile 0 it is
+	// the chart-wide default; on any other JobID it overrides that default.
 	// Co-located with scheduling because the volume's zone and the profile's
 	// scheduling constraints mutually constrain each other.
 	IndexStorage *IndexStorageConfig `json:"indexStorage,omitempty"`
@@ -178,8 +179,6 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 const (
 	indexStorageModePVC  = "pvc"
 	indexStorageModeNone = "none"
-
-	defaultIndexStorageSize = "50Gi"
 )
 
 // IndexStorageConfig describes the per-job block volume that holds the Pebble
@@ -205,32 +204,19 @@ type IndexStorageConfig struct {
 	MaxOpenFiles int `json:"maxOpenFiles,omitempty"`
 }
 
-// loadIndexStorage parses the chart-wide OLAKE_INDEX_STORAGE JSON string.
-// An empty or malformed value yields the built-in defaults rather than
-// disabling the index volume, so a bad edit cannot silently start running
-// syncs without their index.
-func loadIndexStorage(raw string) IndexStorageConfig {
-	defaults := IndexStorageConfig{
+// defaultIndexStorage returns the built-in index settings. They are the base
+// every profile is merged onto, and they stand on their own when the chart
+// emits no default profile at all - a missing profile must not silently start
+// running syncs without their index.
+func defaultIndexStorage() IndexStorageConfig {
+	return IndexStorageConfig{
 		Mode:         indexStorageModePVC,
-		Size:         defaultIndexStorageSize,
+		Size:         constants.DefaultIndexSize,
 		MountPath:    constants.DefaultIndexMountPath,
 		AccessModes:  []string{string(corev1.ReadWriteOnce)},
 		CacheSizeMB:  constants.DefaultIndexCacheSizeMB,
 		MaxOpenFiles: constants.DefaultIndexMaxOpenFiles,
 	}
-
-	if strings.TrimSpace(raw) == "" {
-		logger.Debugf("no OLAKE_INDEX_STORAGE found, using built-in index storage defaults")
-		return defaults
-	}
-
-	var parsed IndexStorageConfig
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		logger.Errorf("failed to parse OLAKE_INDEX_STORAGE as json: %s. using built-in defaults", err)
-		return defaults
-	}
-
-	return mergeIndexStorage(defaults, &parsed)
 }
 
 // mergeIndexStorage deep-merges override onto base per key, so a job that only

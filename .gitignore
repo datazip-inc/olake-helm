@@ -34,3 +34,6 @@ temp/
 
 # Ignore DevSpace cache and log folder
 .devspace/
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+CLAUDE.local.md
