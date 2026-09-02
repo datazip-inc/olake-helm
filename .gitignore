@@ -34,3 +34,5 @@ temp/
 
 # Ignore DevSpace cache and log folder
 .devspace/
+.cocoindex_code/
+CLAUDE.local.md
