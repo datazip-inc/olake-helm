@@ -2,8 +2,8 @@ package kubernetes
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -29,10 +30,6 @@ type indexVolume struct {
 	cacheSizeMB  int
 	maxOpenFiles int
 }
-
-// errIndexRBAC marks a claim operation the worker is not permitted to perform.
-// It is handled rather than returned to the caller: see ensureIndexVolume.
-var errIndexRBAC = errors.New("not permitted to manage index PVCs")
 
 // indexPVCName returns the deterministic per-job claim name. It keys on JobID
 // only - never on the operation - so every async run of a job mounts the same
@@ -52,6 +49,14 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 
 	if profile, exists := k.configWatcher.GetJobProfile(0); exists {
 		resolved = mergeIndexStorage(resolved, profile.IndexStorage)
+
+		// existingClaim names one specific volume, so it is never inherited.
+		// On profile 0 it would point every job at the same claim, and a
+		// ReadWriteOnce volume would then serialise every sync in the deployment.
+		if resolved.ExistingClaim != "" {
+			logger.Warnf("ignoring indexStorage.existingClaim %q on profile 0: it is only honoured on a specific JobID profile", resolved.ExistingClaim)
+			resolved.ExistingClaim = ""
+		}
 	}
 	// jobID 0 is the default profile itself and is already merged above.
 	if jobID != 0 {
@@ -91,24 +96,8 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 		return nil, err
 	}
 
-	// A per-job claim needs a real JobID to key on. Running the pod anyway would
-	// write the index to the container's writable layer and lose it, so this
-	// fails the run instead of degrading silently.
-	if jobID <= 0 {
-		return nil, fmt.Errorf("cannot provision an index volume for %s: invalid JobID %d", operation, jobID)
-	}
-
-	claimName, err := k.ensureIndexPVC(ctx, jobID, cfg)
+	claimName, err := k.resolveIndexClaim(ctx, jobID, operation, cfg)
 	if err != nil {
-		// A worker that upgraded ahead of its RBAC cannot manage claims. The
-		// index is derived state that the connector rebuilds when it is absent,
-		// so the run continues without it rather than breaking every sync until
-		// an operator notices. Loud, repeated, and recoverable.
-		if errors.Is(err, errIndexRBAC) {
-			log.Warn("running without an index volume; the connector will rebuild its index every run until this is fixed",
-				"jobID", jobID, "error", err)
-			return nil, nil
-		}
 		return nil, err
 	}
 
@@ -118,6 +107,51 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 		cacheSizeMB:  cfg.CacheSizeMB,
 		maxOpenFiles: cfg.MaxOpenFiles,
 	}, nil
+}
+
+// resolveIndexClaim returns the claim to mount: the operator's own when
+// existingClaim names one, otherwise the per-job claim the worker manages.
+func (k *KubernetesExecutor) resolveIndexClaim(ctx context.Context, jobID int, operation types.Command, cfg IndexStorageConfig) (string, error) {
+	if cfg.ExistingClaim != "" {
+		return k.useExistingClaim(ctx, jobID, cfg.ExistingClaim)
+	}
+
+	// Only the worker-managed path writes metadata onto a claim, so only it has
+	// to reject metadata the API server would refuse.
+	if err := validateIndexMetadata(cfg, jobID); err != nil {
+		return "", err
+	}
+
+	// A per-job claim needs a real JobID to key on. Running the pod anyway would
+	// write the index to the container's writable layer and lose it, so this
+	// fails the run instead of degrading silently.
+	if jobID <= 0 {
+		return "", fmt.Errorf("cannot provision an index volume for %s: invalid JobID %d", operation, jobID)
+	}
+
+	return k.ensureIndexPVC(ctx, jobID, cfg)
+}
+
+// useExistingClaim mounts a claim the operator created and the worker does not
+// own. Nothing about it is created, expanded or labelled here. It is checked for
+// existence because mounting a claim that is absent leaves the pod Pending until
+// the activity times out, which hides the cause.
+func (k *KubernetesExecutor) useExistingClaim(ctx context.Context, jobID int, name string) (string, error) {
+	log := logger.Log(ctx)
+
+	claim, err := k.client.CoreV1().PersistentVolumeClaims(k.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", fmt.Errorf("indexStorage.existingClaim %q for job %d does not exist in namespace %s", name, jobID, k.namespace)
+		}
+		return "", indexClaimError("get", name, err)
+	}
+	if claim.DeletionTimestamp != nil {
+		return "", fmt.Errorf("indexStorage.existingClaim %q for job %d is being deleted; wait for it to disappear or point at another claim", name, jobID)
+	}
+
+	log.Info("using existing index PVC", "pvcName", name, "jobID", jobID)
+	return name, nil
 }
 
 // validateIndexMountPath rejects a mount path that would break the pod rather
@@ -144,17 +178,36 @@ func validateIndexMountPath(mountPath string, jobID int) error {
 	return nil
 }
 
-// indexClaimError describes a failed claim operation, adding the fix when the
-// worker simply is not allowed to perform it. Releases installed with
-// `useStandardResources: false` keep their RBAC behind a pre-install hook that
-// `helm upgrade` does not re-run, so an upgraded worker can be left without the
-// persistentvolumeclaims verbs the chart now grants.
+// validateIndexMetadata rejects label and annotation keys the API server would
+// reject anyway, so the run fails naming the offending key instead of surfacing
+// as a generic claim failure at create time.
+func validateIndexMetadata(cfg IndexStorageConfig, jobID int) error {
+	for key, value := range cfg.Labels {
+		if errs := validation.IsQualifiedName(key); len(errs) > 0 {
+			return fmt.Errorf("invalid indexStorage.labels key %q for job %d: %s", key, jobID, strings.Join(errs, "; "))
+		}
+		if errs := validation.IsValidLabelValue(value); len(errs) > 0 {
+			return fmt.Errorf("invalid indexStorage.labels value %q for key %q on job %d: %s", value, key, jobID, strings.Join(errs, "; "))
+		}
+	}
+	// Annotation values are unconstrained; only the key is a qualified name.
+	for key := range cfg.Annotations {
+		if errs := validation.IsQualifiedName(key); len(errs) > 0 {
+			return fmt.Errorf("invalid indexStorage.annotations key %q for job %d: %s", key, jobID, strings.Join(errs, "; "))
+		}
+	}
+	return nil
+}
+
+// indexClaimError describes a failed claim operation. A 403 gets an extra hint
+// because it has two very different causes - the Role missing the verb, or a
+// cluster policy rejecting the claim - and only the server's own message
+// distinguishes them, so it is always carried through.
 func indexClaimError(action, name string, err error) error {
 	if apierrors.IsForbidden(err) {
-		return fmt.Errorf("%w: failed to %s index PVC %s. The olake-workers Role is missing "+
-			"persistentvolumeclaims permissions. Re-apply the chart RBAC with `helm upgrade` "+
-			"(useStandardResources: true), or add [get, create, update] on persistentvolumeclaims "+
-			"to the Role by hand", errIndexRBAC, action, name)
+		return fmt.Errorf("failed to %s index PVC %s: %s. The worker needs [get, create, update] on "+
+			"persistentvolumeclaims; if instead an admission policy rejected the claim, the message above "+
+			"names the rule and indexStorage.labels/annotations are how to satisfy it", action, name, err)
 	}
 	return fmt.Errorf("failed to %s index PVC %s: %s", action, name, err)
 }
@@ -210,16 +263,20 @@ func (k *KubernetesExecutor) buildIndexPVC(name string, jobID int, cfg IndexStor
 		accessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 	}
 
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "olake",
+		"app.kubernetes.io/component":  "index-storage",
+		"app.kubernetes.io/managed-by": "olake-workers",
+	}
+	maps.Copy(labels, cfg.Labels)
+	labels["olake.io/job-id"] = fmt.Sprintf("%d", jobID)
+
 	claim := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: k.namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       "olake",
-				"app.kubernetes.io/component":  "index-storage",
-				"app.kubernetes.io/managed-by": "olake-workers",
-				"olake.io/job-id":              fmt.Sprintf("%d", jobID),
-			},
+			Name:        name,
+			Namespace:   k.namespace,
+			Labels:      labels,
+			Annotations: cfg.Annotations,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: accessModes,

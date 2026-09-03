@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -202,6 +203,16 @@ type IndexStorageConfig struct {
 	CacheSizeMB int `json:"cacheSizeMB,omitempty"`
 	// MaxOpenFiles caps the file descriptors Pebble keeps open, per stream.
 	MaxOpenFiles int `json:"maxOpenFiles,omitempty"`
+	// Labels are merged into the index PVC. They override the worker's
+	// app.kubernetes.io/* defaults, so a cluster whose label policy demands
+	// different values can satisfy it; only olake.io/job-id is reserved.
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations are applied to the index PVC, for backup tooling and the like.
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// ExistingClaim names a PVC the operator created. When set the worker mounts
+	// it as-is and creates nothing, so Size, StorageClass, AccessModes, Labels
+	// and Annotations do not apply to that job.
+	ExistingClaim string `json:"existingClaim,omitempty"`
 }
 
 // defaultIndexStorage returns the built-in index settings. They are the base
@@ -248,5 +259,25 @@ func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	if override.MaxOpenFiles != 0 {
 		merged.MaxOpenFiles = override.MaxOpenFiles
 	}
+	if override.ExistingClaim != "" {
+		merged.ExistingClaim = override.ExistingClaim
+	}
+	// Unlike every field above, these merge per key rather than replacing: a job
+	// that adds one label must not drop the cluster-wide labels set on profile 0,
+	// which an admission policy may require for the claim to be created at all.
+	merged.Labels = mergeStringMaps(base.Labels, override.Labels)
+	merged.Annotations = mergeStringMaps(base.Annotations, override.Annotations)
+	return merged
+}
+
+// mergeStringMaps returns base with override applied on top, per key. Returns nil
+// when both are empty so the claim carries no empty map.
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(base)+len(override))
+	maps.Copy(merged, base)
+	maps.Copy(merged, override)
 	return merged
 }

@@ -48,136 +48,40 @@ global:
   # Maps JobID (integer) to specific node labels for pod scheduling (NodeSelector only).
   jobMapping: {}
 
-  # -- JobID-based scheduling and storage profiles for the pods created by
-  # olake-workers. Covers both where a job runs (nodeSelector, tolerations,
-  # affinity) and the index volume it runs with (indexStorage).
+  # -- JobID-based scheduling and index-storage profiles for the job pods created
+  # by olake-workers. Profile 0 is the default every job inherits; a JobID profile
+  # is deep-merged over it field by field (labels and annotations merge per key,
+  # every other field is replaced), so set only what differs. Short-lived
+  # operations (spec, check, discover) always use profile 0 and get no index volume.
+  # Unset fields fall back to the worker defaults: mode pvc, 20Gi, cluster default
+  # StorageClass, /var/lib/olake/index, ReadWriteOnce, cacheSizeMB 512, maxOpenFiles 1000.
+  # Sizing, disk type, AZ pinning and attachment limits: see README, "Per-Job Index Storage".
   #
-  # Profile "0" is the DEFAULT profile and carries the chart's own settings.
-  # Every job inherits it. A profile for a specific JobID is deep-merged OVER
-  # profile 0 field by field, so a job that overrides only `size` keeps the
-  # default storageClass, mountPath and scheduling, and a job that overrides
-  # only `nodeSelector` keeps the default index settings. Add a JobID and set
-  # only what differs - do not restate the whole profile.
-  #
-  # Omitting a field inherits it from profile 0. Setting it to an explicitly
-  # empty value (`nodeSelector: {}`, `tolerations: []`) clears the inherited one
-  # for that job.
-  #
-  # Short-lived operations (spec, check, discover) always run on profile 0 and
-  # never get an index volume.
-  #
-  # Overrides `jobMapping` if both are defined for the same JobID.
-  #
-  # Example - job 123 runs on GPU nodes with a bigger index and keeps every
-  # other default:
   #   jobProfiles:
-  #     123:
+  #     0:                                # default for every job
+  #       indexStorage:
+  #         mode: pvc                     # "pvc" provisions olake-index-<JobID>; "none" disables it
+  #         size: 50Gi                    # grow-only; needs allowVolumeExpansion on the StorageClass
+  #         storageClass: "gp3"           # block storage only, never NFS/EFS; "" uses global.storageClass
+  #         accessModes: [ReadWriteOnce]  # block storage is single-attach
+  #         mountPath: /var/lib/olake/index
+  #         cacheSizeMB: 512              # Pebble block cache, PER STREAM
+  #         maxOpenFiles: 1000            # SSTable file descriptors, PER STREAM
+  #         labels: {}                    # extra labels on the PVC
+  #         annotations: {}               # extra annotations on the PVC, for backup tooling
+  #     123:                              # one job; unset fields inherit profile 0
   #       nodeSelector:
-  #         node-type: "gpu"
+  #         topology.kubernetes.io/zone: "ap-south-1a"
   #       tolerations:
   #         - key: "spot"
   #           operator: "Exists"
   #           effect: "NoSchedule"
   #       indexStorage:
   #         size: 100Gi
-  jobProfiles:
-    # -- Default profile. Applies to every job unless a JobID overrides a field.
-    # Removing this key does not disable the index: the worker falls back to the
-    # same built-in defaults. It does drop the `global.storageClass` fallback.
-    0:
-      # -- Scheduling defaults for all job pods. Unset means standard scheduling.
-      # nodeSelector:
-      #   node-type: "standard"
-      # tolerations:
-      #   - key: "spot"
-      #     operator: "Exists"
-      #     effect: "NoSchedule"
-      # affinity: {}
-      # -- Per-job block volume holding the Pebble index used by the Iceberg
-      # positional-delete / deletion-vector write path.
-      #
-      # olake-workers provisions one PVC per job (`olake-index-<JobID>`) on the job's
-      # first async run and mounts it into every later run of that job. The claim is
-      # keyed on JobID only, so a job's `sync` and `clear-destination` pods mount the
-      # SAME volume and therefore open the same index. Short-lived operations (spec,
-      # check, discover) never get one.
-      #
-      # The PVC is never deleted by the worker: rebuilding the index is expensive, so
-      # it outlives the pods that use it. Remove it with `kubectl delete pvc olake-index-<JobID>`.
-      #
-      # IMPORTANT (AZ pinning): a ReadWriteOnce block volume (AWS EBS, GCP zonal PD,
-      # Azure LRS disk) is pinned to one availability zone by the CSI driver. Every
-      # later pod for that job MUST schedule in that zone or it stays Pending with
-      # `volume node affinity conflict`. Keep the job profile's nodeSelector /
-      # affinity consistent with the volume's zone. For zone-free block storage use
-      # GCP regional PD (`replication-type: regional-pd`) or Azure ZRS
-      # (`skuName: Premium_ZRS`) via `storageClass`; AWS EBS has no multi-AZ option.
-      #
-      indexStorage:
-        # -- "pvc" provisions one PVC per job; "none" runs jobs without an index
-        # volume, which is the opt-out when upgrading a deployment with many jobs.
-        mode: pvc
-
-        # -- Requested volume size. Growing it is applied on the job's next run and
-        # requires `allowVolumeExpansion: true` on the StorageClass. Kubernetes
-        # rejects shrinking; the worker logs a warning and keeps the current size.
-        #
-        # AZURE BILLING: Premium and Standard SSD managed disks are billed by tier,
-        # not by requested size. 50Gi lands in the P10/E10 tier and is billed as
-        # 128 GiB per job. Pick a tier boundary (32Gi, 64Gi, 128Gi) or use a
-        # per-GiB SKU such as PremiumV2_LRS to avoid paying for unused capacity.
-        size: 50Gi
-
-        # -- StorageClass for the index PVC. Empty falls back to `global.storageClass`,
-        # then to the cluster default. Must be block storage: the index needs POSIX
-        # locking and reliable fsync, so NFS / EFS / Azure Files are not suitable.
-        #
-        # SET THIS EXPLICITLY IN PRODUCTION. The index is an LSM store whose write
-        # path is fsync-bound, and most cluster defaults are far too slow for it:
-        #
-        #   Cloud  Default class    What you get at 50Gi     Use instead
-        #   ---------------------------------------------------------------------
-        #   EKS    gp2              150 IOPS (3 IOPS/GiB)    gp3 (3000 IOPS floor)
-        #   AKS    managed-csi      ~500 IOPS (E10 tier)     managed-csi-premium
-        #                                                    or Premium_LRS
-        #   GKE    standard         ~37 write IOPS (HDD!)    pd-balanced / pd-ssd
-        #
-        # On AWS also consider a StorageClass with `encrypted: "true"`: gp2/gp3 are
-        # unencrypted unless EBS encryption-by-default is enabled on the account.
-        storageClass: ""
-
-        # -- Access modes for the index PVC. Block storage is single-attach.
-        #
-        # CONCURRENCY LIMIT: each running sync attaches its own disk, and every node
-        # has a cap on attached disks. Azure is the tightest - Standard_D4s_v3 allows
-        # 8 data disks, D8s_v3 allows 16; AWS Nitro instances share roughly 28
-        # attachments between EBS volumes and ENIs; GKE allows 16-128 by machine
-        # type. Beyond the cap, further sync pods stay Pending with
-        # `node(s) exceed max volume count` until a slot frees up. Size nodes for the
-        # number of syncs you expect to run at once.
-        accessModes:
-          - ReadWriteOnce
-
-        # -- Mount path inside the connector container. The connector creates the
-        # per-stream directories underneath it.
-        mountPath: /var/lib/olake/index
-
-        # -- Pebble block cache size in megabytes, PER STREAM, passed to the
-        # connector as OLAKE_INDEX_DB_CACHE_SIZE.
-        #
-        # MEMORY: the connector opens one index database per selected stream, each
-        # with its own cache, so a job with 10 streams holds ~10x this value
-        # resident - 5 GB at the default. Connector pods request 256Mi and set no
-        # limit, so such a pod uses far more than it requests; on a busy node that
-        # shows up as memory pressure and evicted neighbours rather than a clean
-        # OOMKill. Scale this down for wide jobs, or give connector pods a memory
-        # request that matches streams x cacheSizeMB.
-        cacheSizeMB: 512
-
-        # -- Maximum SSTable file descriptors Pebble keeps open, PER STREAM, passed
-        # to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES. Multiplied by the
-        # number of streams it must stay below the container's nofile limit.
-        maxOpenFiles: 1000
+  #         existingClaim: ""             # mount this PVC instead of provisioning one. Per-JobID
+  #                                       # only, never inherited from profile 0. size/storageClass/
+  #                                       # accessModes/labels/annotations are ignored for this job
+  jobProfiles: {}
 
   # -- Service account configuration for job pods created by olake-workers
   # Used for cloud provider IAM integration (AWS IRSA, GCP Workload Identity, Azure Workload Identity)

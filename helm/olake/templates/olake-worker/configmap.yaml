@@ -44,6 +44,9 @@ data:
   {{- $profiles := deepCopy (.Values.global.jobProfiles | default dict) }}
   {{- $profile0 := deepCopy (get $profiles "0" | default dict) }}
   {{- $index0 := deepCopy (get $profile0 "indexStorage" | default dict) }}
+  {{- if get $index0 "existingClaim" }}
+  {{- fail "global.jobProfiles.0.indexStorage.existingClaim is not supported. existingClaim names one specific volume, so it belongs on a JobID profile; on profile 0 every job would mount the same claim and a ReadWriteOnce volume would serialise every sync." }}
+  {{- end }}
   {{- if not (get $index0 "storageClass") }}
   {{- $_ := set $index0 "storageClass" (.Values.global.storageClass | default "") }}
   {{- end }}

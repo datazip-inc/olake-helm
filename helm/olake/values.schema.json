@@ -118,6 +118,20 @@
                       "type": "integer",
                       "minimum": 1,
                       "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
+                    },
+                    "labels": {
+                      "type": "object",
+                      "description": "Labels merged into the index PVC. These override the worker's app.kubernetes.io/* defaults; only olake.io/job-id is reserved. Merged per key with profile 0 rather than replacing it.",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "description": "Annotations applied to the index PVC, for backup tooling and similar. Merged per key with profile 0 rather than replacing it.",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "existingClaim": {
+                      "type": "string",
+                      "description": "Name of an existing PVC to mount instead of provisioning one. Only honoured on a specific JobID profile, never on profile 0. When set, size, storageClass, accessModes, labels and annotations are ignored for that job."
                     }
                   },
                   "additionalProperties": false
