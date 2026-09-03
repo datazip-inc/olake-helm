@@ -31,6 +31,14 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps", "secrets"]
   verbs: ["get", "list", "watch"]
+# Per-job index volumes (olake-index-<JobID>): created on a job's first async run
+# and expanded when the resolved `jobProfiles.<JobID>.indexStorage.size` grows.
+# `update` is what makes that expansion possible; `patch` is deliberately not
+# granted, and the worker uses Update accordingly. No delete verb - the index is
+# expensive to rebuild, so claims are removed manually.
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "create", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

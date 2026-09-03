@@ -48,31 +48,39 @@ global:
   # Maps JobID (integer) to specific node labels for pod scheduling (NodeSelector only).
   jobMapping: {}
 
-  # -- JobID-based scheduling profiles for pods created by olake-workers
-  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity).
-  # Overrides `jobMapping` if both are defined for the same JobID.
+  # -- JobID-based scheduling and index-storage profiles for the job pods created
+  # by olake-workers. Profile 0 is the default every job inherits; a JobID profile
+  # is deep-merged over it field by field (labels and annotations merge per key,
+  # every other field is replaced), so set only what differs. Short-lived
+  # operations (spec, check, discover) always use profile 0 and get no index volume.
+  # Unset fields fall back to the worker defaults: mode pvc, 20Gi, cluster default
+  # StorageClass, /var/lib/olake/index, ReadWriteOnce, cacheSizeMB 512, maxOpenFiles 1000.
+  # Sizing, disk type, AZ pinning and attachment limits: see README, "Per-Job Index Storage".
   #
-  # Special Key "0": Defines the DEFAULT profile for all short-lived jobs (test, discover, spec)
-  # and any Sync jobs not mapped to a specific profile.
-  #
-  # Example:
   #   jobProfiles:
-  #     0:    # Default Profile
+  #     0:                                # default for every job
+  #       indexStorage:
+  #         mode: pvc                     # "pvc" provisions olake-index-<JobID>; "none" disables it
+  #         size: 50Gi                    # grow-only; needs allowVolumeExpansion on the StorageClass
+  #         storageClass: "gp3"           # block storage only, never NFS/EFS; "" uses global.storageClass
+  #         accessModes: [ReadWriteOnce]  # block storage is single-attach
+  #         mountPath: /var/lib/olake/index
+  #         cacheSizeMB: 512              # Pebble block cache, PER STREAM
+  #         maxOpenFiles: 1000            # SSTable file descriptors, PER STREAM
+  #         labels: {}                    # extra labels on the PVC
+  #         annotations: {}               # extra annotations on the PVC, for backup tooling
+  #     123:                              # one job; unset fields inherit profile 0
   #       nodeSelector:
-  #         node-type: "standard"
+  #         topology.kubernetes.io/zone: "ap-south-1a"
   #       tolerations:
   #         - key: "spot"
   #           operator: "Exists"
   #           effect: "NoSchedule"
-  #     123:                 # Specific Job Profile
-  #       affinity:
-  #         nodeAffinity:
-  #           requiredDuringSchedulingIgnoredDuringExecution:
-  #             nodeSelectorTerms:
-  #               - matchExpressions:
-  #                 - key: "gpu"
-  #                   operator: "In"
-  #                   values: ["true"]
+  #       indexStorage:
+  #         size: 100Gi
+  #         existingClaim: ""             # mount this PVC instead of provisioning one. Per-JobID
+  #                                       # only, never inherited from profile 0. size/storageClass/
+  #                                       # accessModes/labels/annotations are ignored for this job
   jobProfiles: {}
 
   # -- Service account configuration for job pods created by olake-workers

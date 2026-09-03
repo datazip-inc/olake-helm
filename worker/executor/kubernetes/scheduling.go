@@ -3,8 +3,10 @@ package kubernetes
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -25,6 +27,11 @@ type JobSchedulingConfig struct {
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
+	// IndexStorage is this profile's index volume settings. On profile 0 it is
+	// the chart-wide default; on any other JobID it overrides that default.
+	// Co-located with scheduling because the volume's zone and the profile's
+	// scheduling constraints mutually constrain each other.
+	IndexStorage *IndexStorageConfig `json:"indexStorage,omitempty"`
 }
 
 func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) error {
@@ -167,4 +174,110 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 	}
 
 	return result
+}
+
+// Index storage modes and the defaults applied when a field is left unset.
+const (
+	indexStorageModePVC  = "pvc"
+	indexStorageModeNone = "none"
+)
+
+// IndexStorageConfig describes the per-job block volume that holds the Pebble
+// index used by the direct positional-delete / deletion-vector write path.
+// The same volume is mounted by every async operation of a job (sync and
+// clear-destination), so both see the same index.
+type IndexStorageConfig struct {
+	// Mode selects whether the worker provisions a per-job PVC ("pvc") or the
+	// job runs without an index volume ("none").
+	Mode string `json:"mode,omitempty"`
+	// Size is the requested volume size. Growing it is applied on the next run;
+	// Kubernetes rejects shrinking.
+	Size string `json:"size,omitempty"`
+	// StorageClass is a passthrough to the PVC. Empty uses the cluster default.
+	StorageClass string `json:"storageClass,omitempty"`
+	// AccessModes defaults to ReadWriteOnce, which block storage requires.
+	AccessModes []string `json:"accessModes,omitempty"`
+	// MountPath is where the volume is mounted inside the connector container.
+	MountPath string `json:"mountPath,omitempty"`
+	// CacheSizeMB is the Pebble block cache size in megabytes, per stream.
+	CacheSizeMB int `json:"cacheSizeMB,omitempty"`
+	// MaxOpenFiles caps the file descriptors Pebble keeps open, per stream.
+	MaxOpenFiles int `json:"maxOpenFiles,omitempty"`
+	// Labels are merged into the index PVC. They override the worker's
+	// app.kubernetes.io/* defaults, so a cluster whose label policy demands
+	// different values can satisfy it; only olake.io/job-id is reserved.
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations are applied to the index PVC, for backup tooling and the like.
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// ExistingClaim names a PVC the operator created. When set the worker mounts
+	// it as-is and creates nothing, so Size, StorageClass, AccessModes, Labels
+	// and Annotations do not apply to that job.
+	ExistingClaim string `json:"existingClaim,omitempty"`
+}
+
+// defaultIndexStorage returns the built-in index settings. They are the base
+// every profile is merged onto, and they stand on their own when the chart
+// emits no default profile at all - a missing profile must not silently start
+// running syncs without their index.
+func defaultIndexStorage() IndexStorageConfig {
+	return IndexStorageConfig{
+		Mode:         indexStorageModePVC,
+		Size:         constants.DefaultIndexSize,
+		MountPath:    constants.DefaultIndexMountPath,
+		AccessModes:  []string{string(corev1.ReadWriteOnce)},
+		CacheSizeMB:  constants.DefaultIndexCacheSizeMB,
+		MaxOpenFiles: constants.DefaultIndexMaxOpenFiles,
+	}
+}
+
+// mergeIndexStorage deep-merges override onto base per key, so a job that only
+// overrides `size` keeps the inherited storageClass, mountPath and the rest.
+func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) IndexStorageConfig {
+	if override == nil {
+		return base
+	}
+
+	merged := base
+	if override.Mode != "" {
+		merged.Mode = override.Mode
+	}
+	if override.Size != "" {
+		merged.Size = override.Size
+	}
+	if override.StorageClass != "" {
+		merged.StorageClass = override.StorageClass
+	}
+	if len(override.AccessModes) > 0 {
+		merged.AccessModes = override.AccessModes
+	}
+	if override.MountPath != "" {
+		merged.MountPath = override.MountPath
+	}
+	if override.CacheSizeMB != 0 {
+		merged.CacheSizeMB = override.CacheSizeMB
+	}
+	if override.MaxOpenFiles != 0 {
+		merged.MaxOpenFiles = override.MaxOpenFiles
+	}
+	if override.ExistingClaim != "" {
+		merged.ExistingClaim = override.ExistingClaim
+	}
+	// Unlike every field above, these merge per key rather than replacing: a job
+	// that adds one label must not drop the cluster-wide labels set on profile 0,
+	// which an admission policy may require for the claim to be created at all.
+	merged.Labels = mergeStringMaps(base.Labels, override.Labels)
+	merged.Annotations = mergeStringMaps(base.Annotations, override.Annotations)
+	return merged
+}
+
+// mergeStringMaps returns base with override applied on top, per key. Returns nil
+// when both are empty so the claim carries no empty map.
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(base)+len(override))
+	maps.Copy(merged, base)
+	maps.Copy(merged, override)
+	return merged
 }
