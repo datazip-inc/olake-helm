@@ -70,13 +70,18 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 
 // ensureIndexVolume resolves the index storage config for a job and makes sure
 // the backing claim exists. It returns nil when the job gets no index volume:
-// short-lived operations (spec, check, discover) never carry one, and neither
-// does mode "none".
-func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command) (*indexVolume, error) {
+// short-lived operations (spec, check, discover) never carry one, a job that
+// did not ask for one never carries one, and neither does mode "none".
+func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command, indexRequired bool) (*indexVolume, error) {
 	log := logger.Log(ctx)
 
 	// Only sync and clear-destination touch the Iceberg index.
 	if !slices.Contains(constants.AsyncCommands, operation) {
+		return nil, nil
+	}
+
+	if !indexRequired {
+		log.Debug("job did not request an index volume", "jobID", jobID)
 		return nil, nil
 	}
 

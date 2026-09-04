@@ -121,7 +121,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 
 	// Provision the per-job index volume before the pod that mounts it.
-	indexVolume, err := k.ensureIndexVolume(ctx, req.JobID, req.Command)
+	indexVolume, err := k.ensureIndexVolume(ctx, req.JobID, req.Command, req.IndexRequired)
 	if err != nil {
 		log.Error("failed to prepare index volume", "jobID", req.JobID, "command", req.Command, "error", err)
 		return "", err

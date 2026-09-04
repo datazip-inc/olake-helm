@@ -46,6 +46,15 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 			return nil, err
 		}
 
+		// Clear-destination shares a job's index volume with its syncs, so it has
+		// to read the same flag from the same row or the two would disagree about
+		// a claim they both mount.
+		indexRequired, err := jobDetails.IndexRequired()
+		if err != nil {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidAdvanceSettings", err)
+		}
+		req.IndexRequired = indexRequired
+
 		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
 			return nil, err
 		}
@@ -74,6 +83,14 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	if req.ConnectorType == "" {
 		utils.UpdateSyncRequestForLegacy(jobDetails, req)
 	}
+
+	// The index volume is opt-in per job, so a deployment whose jobs do not use
+	// the Iceberg delete path provisions no storage at all.
+	indexRequired, err := jobDetails.IndexRequired()
+	if err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidAdvanceSettings", err)
+	}
+	req.IndexRequired = indexRequired
 
 	// update the configs with latest job details
 	utils.UpdateConfigWithJobDetails(jobDetails, req)

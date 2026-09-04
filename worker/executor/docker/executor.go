@@ -56,7 +56,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		return "", err
 	}
 
-	indexMount, err := d.ensureIndexMount(req.JobID, req.Command)
+	indexMount, err := d.ensureIndexMount(req.JobID, req.Command, req.IndexRequired)
 	if err != nil {
 		log.Error("failed to prepare index directory", "jobID", req.JobID, "error", err)
 		return "", err
@@ -144,7 +144,8 @@ func setEnvDefault(envVars map[string]string, key string, value int) {
 }
 
 // ensureIndexMount returns the bind mount that carries a job's Pebble index, or
-// nil when the operation has no index (spec, check, discover).
+// nil when the job gets none: short-lived operations (spec, check, discover)
+// never have one, and neither does a job that did not ask for it.
 //
 // The workdir handed to a run is derived from the Temporal workflow ID, which
 // carries the schedule fire time, so it is a fresh directory on every sync. An
@@ -153,8 +154,13 @@ func setEnvDefault(envVars map[string]string, key string, value int) {
 // the index gets its own persistence-root directory, keyed on JobID alone: a
 // job's sync and clear-destination runs then open the same index, matching the
 // per-job claim the kubernetes executor mounts.
-func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command) (*mount.Mount, error) {
+func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, indexRequired bool) (*mount.Mount, error) {
 	if !slices.Contains(constants.AsyncCommands, operation) {
+		return nil, nil
+	}
+
+	// Opt-in per job, exactly as in the kubernetes executor.
+	if !indexRequired {
 		return nil, nil
 	}
 
