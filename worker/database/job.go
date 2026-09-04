@@ -54,25 +54,37 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
+	jobTable := db.tables["job"]
+	hasSelectedStreams, err := columnExists(cctx, db, jobTable, "selected_streams_config")
+	if err != nil {
+		log.Error("failed to check selected_streams_config column", "jobID", jobId, "error", err)
+		return types.JobData{}, fmt.Errorf("failed to check selected_streams_config column: %w", err)
+	}
+	selectedStreamsExpr := "CAST(NULL AS TEXT)"
+	if hasSelectedStreams {
+		selectedStreamsExpr = "j.selected_streams_config"
+	}
+
 	query := fmt.Sprintf(`
-			SELECT j.name, j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type,
+			SELECT j.name, j.streams_config, %s, j.state, j.project_id, s.config, d.config, s.version, s.type,
 				j.frequency, j.created_at, d.version, s.name, d.name
 			FROM %q j
 			JOIN %q s ON j.source_id = s.id
 			JOIN %q d ON j.dest_id = d.id
 			WHERE j.id = $1`,
-		db.tables["job"], db.tables["source"], db.tables["dest"])
+		selectedStreamsExpr, jobTable, db.tables["source"], db.tables["dest"])
 
 	rows := db.client.QueryRowContext(cctx, query, jobId)
 
 	var jobData types.JobData
-	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
+	var selectedStreams sql.NullString
+	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
 		&jobData.Frequency, &jobData.CreatedAt, &jobData.DestinationVersion, &jobData.SourceName, &jobData.DestinationName); err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
-	if schemaConfig.Valid {
-		jobData.Schema = schemaConfig.String
+	if selectedStreams.Valid {
+		jobData.SelectedStreams = selectedStreams.String
 	}
 
 	if err := decryptJobData(&jobData); err != nil {
