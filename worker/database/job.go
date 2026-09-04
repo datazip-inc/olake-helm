@@ -54,46 +54,20 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	jobTable := db.tables["job"]
-	sourceTable := db.tables["source"]
-	destTable := db.tables["dest"]
+	query := fmt.Sprintf(`
+			SELECT j.name, j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type,
+				j.frequency, j.created_at, d.version, s.name, d.name
+			FROM %q j
+			JOIN %q s ON j.source_id = s.id
+			JOIN %q d ON j.dest_id = d.id
+			WHERE j.id = $1`,
+		db.tables["job"], db.tables["source"], db.tables["dest"])
 
-	hasSchemaConfig, err := columnExists(cctx, db, jobTable, "schema_config")
-	if err != nil {
-		log.Error("failed to check schema_config column", "jobID", jobId, "error", err)
-		return types.JobData{}, fmt.Errorf("failed to check schema_config column: %w", err)
-	}
+	rows := db.client.QueryRowContext(cctx, query, jobId)
 
 	var jobData types.JobData
-	var schemaConfig sql.NullString
-
-	// TODO: make column-exist check and query dynamic to handle more fields which future may add
-	if hasSchemaConfig {
-		query := fmt.Sprintf(`
-			SELECT j.name, j.streams_config, j.schema_config, j.state, j.project_id, s.config, d.config, s.version, s.type
-			FROM %q j
-			JOIN %q s ON j.source_id = s.id
-			JOIN %q d ON j.dest_id = d.id
-			WHERE j.id = $1`,
-			jobTable, sourceTable, destTable)
-		err = db.client.QueryRowContext(cctx, query, jobId).Scan(
-			&jobData.JobName, &jobData.Streams, &schemaConfig, &jobData.State,
-			&jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
-		)
-	} else {
-		query := fmt.Sprintf(`
-			SELECT j.name, j.streams_config, j.state, j.project_id, s.config, d.config, s.version, s.type
-			FROM %q j
-			JOIN %q s ON j.source_id = s.id
-			JOIN %q d ON j.dest_id = d.id
-			WHERE j.id = $1`,
-			jobTable, sourceTable, destTable)
-		err = db.client.QueryRowContext(cctx, query, jobId).Scan(
-			&jobData.JobName, &jobData.Streams, &jobData.State,
-			&jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
-		)
-	}
-	if err != nil {
+	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
+		&jobData.Frequency, &jobData.CreatedAt, &jobData.DestinationVersion, &jobData.SourceName, &jobData.DestinationName); err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}

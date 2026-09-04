@@ -105,7 +105,8 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
+// ApplyConfigUpdates overwrites req.Configs entries named in updates, and adds addIfMissing entries only if not already present.
+func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
 	existing := make(map[string]int)
 	for i, config := range req.Configs {
 		existing[config.Name] = i
@@ -260,6 +261,13 @@ func WorkflowAlreadyLaunched(workdir string) bool {
 // WorkflowHash returns a deterministic hash string for a given workflowID
 func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+// SyncWorkflowAndScheduleID returns a job's base sync workflow ID and its
+// schedule ID
+func SyncWorkflowAndScheduleID(projectID string, jobID int) (string, string) {
+	workflowID := fmt.Sprintf("sync-%s-%d", projectID, jobID)
+	return workflowID, fmt.Sprintf("schedule-%s", workflowID)
 }
 
 // GetTemporalNamespace returns the configured namespace when TEMPORAL_EXTERNAL is true,
