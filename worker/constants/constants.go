@@ -27,9 +27,9 @@ const (
 	DefaultFilePermissions = 0644
 
 	StateFlag           = "--state"
-	SelectedStreamsFlag = "--selected_streams"
+	SelectedStreamsFlag = "--selected-streams"
 
-	// MinSelectedStreamsSplitVersion is the minimum source connector version that supports --selected_streams.
+	// MinSelectedStreamsSplitVersion is the minimum source connector version that supports --selected-streams.
 	// TODO: set to the actual release version before merge.
 	MinSelectedStreamsSplitVersion = "v0.8.0"
 )

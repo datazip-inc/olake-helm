@@ -142,7 +142,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 			updates["selected_streams.json"] = selectedStreams
 			req.Args = AppendSelectedStreamsFlag(req.Args)
 		} else {
-			logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobData.Version, constants.MinSelectedStreamsSplitVersion)
+			logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected-streams", jobData.Version, constants.MinSelectedStreamsSplitVersion)
 		}
 	}
 
@@ -174,7 +174,7 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 				updates["selected_streams.json"] = selectedStreams
 				req.Args = AppendSelectedStreamsFlag(req.Args)
 			} else {
-				logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobDetails.Version, constants.MinSelectedStreamsSplitVersion)
+				logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected-streams", jobDetails.Version, constants.MinSelectedStreamsSplitVersion)
 			}
 		}
 
@@ -373,7 +373,7 @@ func IsStateEmpty(state string) bool {
 	return state == "" || state == "{}"
 }
 
-// AppendSelectedStreamsFlag adds --selected_streams /mnt/config/selected_streams.json
+// AppendSelectedStreamsFlag adds --selected-streams /mnt/config/selected_streams.json
 // when selected_streams_config is present and the flag is not already on the arg list.
 func AppendSelectedStreamsFlag(arguments []string) []string {
 	// already present
