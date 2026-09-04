@@ -17,6 +17,7 @@ const (
 	PostSyncActivity                = "PostSyncActivity"
 	PostClearActivity               = "PostClearActivity"
 	SendWebhookNotificationActivity = "SendWebhookNotificationActivity"
+	IndicatorActivity               = "IndicatorActivity"
 )
 
 // syncStatus tells PostSyncActivity how the sync actually finished.

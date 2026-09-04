@@ -29,7 +29,7 @@ func CompareAtLeast(version, minVersion string) bool {
 	return semver.Compare(version, minVersion) >= 0
 }
 
-// UseSelectedStreamsSplit reports whether selected_streams_config should be mounted and --selected_streams passed.
+// UseSelectedStreamsSplit reports whether selected_streams_config should be mounted and --selected-streams passed.
 func UseSelectedStreamsSplit(version string) bool {
 	return CompareAtLeast(version, constants.MinSelectedStreamsSplitVersion)
 }

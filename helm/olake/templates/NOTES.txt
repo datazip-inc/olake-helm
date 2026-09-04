@@ -62,6 +62,15 @@
 2. Configure data sources and destinations
 3. Setup Jobs to start syncing
 
+{{- if .Values.gitops.enabled }}
+
+🔄 GITOPS:
+   Embedded reconciler enabled (GITOPS_ENABLED=true).
+   - Managed objects: labelled ConfigMaps (see examples/gitops/)
+   - Docs: helm/olake/docs/gitops.md
+   - Failure indicators: worker-owned Pods (Temporal IndicatorWorkflow)
+{{- end }}
+
 For more information, visit: https://olake.io/docs
 
 Happy data processing! 🚀
