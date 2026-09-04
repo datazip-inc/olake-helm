@@ -137,7 +137,21 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	ApplyConfigUpdates(req, updates, nil)
+	if selectedStreams := strings.TrimSpace(jobData.SelectedStreams); selectedStreams != "" {
+		if UseSelectedStreamsSplit(jobData.Version) {
+			updates["selected_streams.json"] = selectedStreams
+			req.Args = AppendSelectedStreamsFlag(req.Args)
+		} else {
+			logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobData.Version, constants.MinSelectedStreamsSplitVersion)
+		}
+	}
+
+	addIfMissing := make(map[string]string)
+	if !viper.GetBool(constants.EnvTelemetryDisabled) {
+		addIfMissing["user_id.txt"] = GetTelemetryUserID()
+	}
+
+	ApplyConfigUpdates(req, updates, addIfMissing)
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -153,6 +167,15 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 			"destination.json": jobDetails.Destination,
 			"state.json":       jobDetails.State,
 			"streams.json":     string(data),
+		}
+
+		if selectedStreams := strings.TrimSpace(jobDetails.SelectedStreams); selectedStreams != "" {
+			if UseSelectedStreamsSplit(jobDetails.Version) {
+				updates["selected_streams.json"] = selectedStreams
+				req.Args = AppendSelectedStreamsFlag(req.Args)
+			} else {
+				logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobDetails.Version, constants.MinSelectedStreamsSplitVersion)
+			}
 		}
 
 		ApplyConfigUpdates(req, updates, nil)
@@ -348,6 +371,17 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 func IsStateEmpty(state string) bool {
 	state = strings.TrimSpace(state)
 	return state == "" || state == "{}"
+}
+
+// AppendSelectedStreamsFlag adds --selected_streams /mnt/config/selected_streams.json
+// when selected_streams_config is present and the flag is not already on the arg list.
+func AppendSelectedStreamsFlag(arguments []string) []string {
+	// already present
+	if slices.Contains(arguments, constants.SelectedStreamsFlag) {
+		return arguments
+	}
+
+	return append(arguments, constants.SelectedStreamsFlag, "/mnt/config/selected_streams.json")
 }
 
 // RemoveFlagFromArgs returns a new slice with the given flag
