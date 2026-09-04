@@ -26,12 +26,12 @@ const (
 	DefaultDirPermissions  = 0755
 	DefaultFilePermissions = 0644
 
-	StateFlag  = "--state"
-	SchemaFlag = "--schema"
+	StateFlag           = "--state"
+	SelectedStreamsFlag = "--selected_streams"
 
-	// MinSchemaSplitVersion is the minimum source connector version that supports --schema.
+	// MinSelectedStreamsSplitVersion is the minimum source connector version that supports --selected_streams.
 	// TODO: set to the actual release version before merge.
-	MinSchemaSplitVersion = "v0.8.0"
+	MinSelectedStreamsSplitVersion = "v0.8.0"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}

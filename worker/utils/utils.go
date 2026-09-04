@@ -105,7 +105,8 @@ func GetWorkerEnvVars() map[string]string {
 	return vars
 }
 
-func applyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
+// ApplyConfigUpdates overwrites req.Configs entries named in updates, and adds addIfMissing entries only if not already present.
+func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, addIfMissing map[string]string) {
 	existing := make(map[string]int)
 	for i, config := range req.Configs {
 		existing[config.Name] = i
@@ -136,12 +137,12 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	if schemaConfig := strings.TrimSpace(jobData.Schema); schemaConfig != "" {
-		if UseSchemaSplit(jobData.Version) {
-			updates["schema.json"] = schemaConfig
-			req.Args = AppendSchemaFlag(req.Args)
+	if selectedStreams := strings.TrimSpace(jobData.SelectedStreams); selectedStreams != "" {
+		if UseSelectedStreamsSplit(jobData.Version) {
+			updates["selected_streams.json"] = selectedStreams
+			req.Args = AppendSelectedStreamsFlag(req.Args)
 		} else {
-			logger.Warnf("schema_config present but source version %s is below %s; skipping --schema", jobData.Version, constants.MinSchemaSplitVersion)
+			logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobData.Version, constants.MinSelectedStreamsSplitVersion)
 		}
 	}
 
@@ -150,7 +151,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		addIfMissing["user_id.txt"] = GetTelemetryUserID()
 	}
 
-	applyConfigUpdates(req, updates, addIfMissing)
+	ApplyConfigUpdates(req, updates, addIfMissing)
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -168,16 +169,16 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 			"streams.json":     string(data),
 		}
 
-		if schemaConfig := strings.TrimSpace(jobDetails.Schema); schemaConfig != "" {
-			if UseSchemaSplit(jobDetails.Version) {
-				updates["schema.json"] = schemaConfig
-				req.Args = AppendSchemaFlag(req.Args)
+		if selectedStreams := strings.TrimSpace(jobDetails.SelectedStreams); selectedStreams != "" {
+			if UseSelectedStreamsSplit(jobDetails.Version) {
+				updates["selected_streams.json"] = selectedStreams
+				req.Args = AppendSelectedStreamsFlag(req.Args)
 			} else {
-				logger.Warnf("schema_config present but source version %s is below %s; skipping --schema", jobDetails.Version, constants.MinSchemaSplitVersion)
+				logger.Warnf("selected_streams_config present but source version %s is below %s; skipping --selected_streams", jobDetails.Version, constants.MinSelectedStreamsSplitVersion)
 			}
 		}
 
-		applyConfigUpdates(req, updates, nil)
+		ApplyConfigUpdates(req, updates, nil)
 	}
 
 	return nil
@@ -260,6 +261,13 @@ func WorkflowAlreadyLaunched(workdir string) bool {
 // WorkflowHash returns a deterministic hash string for a given workflowID
 func WorkflowHash(workflowID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workflowID)))
+}
+
+// SyncWorkflowAndScheduleID returns a job's base sync workflow ID and its
+// schedule ID
+func SyncWorkflowAndScheduleID(projectID string, jobID int) (string, string) {
+	workflowID := fmt.Sprintf("sync-%s-%d", projectID, jobID)
+	return workflowID, fmt.Sprintf("schedule-%s", workflowID)
 }
 
 // GetTemporalNamespace returns the configured namespace when TEMPORAL_EXTERNAL is true,
@@ -365,15 +373,15 @@ func IsStateEmpty(state string) bool {
 	return state == "" || state == "{}"
 }
 
-// AppendSchemaFlag adds --schema /mnt/config/schema.json when schema_config is
-// present and the flag is not already on the arg list.
-func AppendSchemaFlag(arguments []string) []string {
+// AppendSelectedStreamsFlag adds --selected_streams /mnt/config/selected_streams.json
+// when selected_streams_config is present and the flag is not already on the arg list.
+func AppendSelectedStreamsFlag(arguments []string) []string {
 	// already present
-	if slices.Contains(arguments, constants.SchemaFlag) {
+	if slices.Contains(arguments, constants.SelectedStreamsFlag) {
 		return arguments
 	}
 
-	return append(arguments, constants.SchemaFlag, "/mnt/config/schema.json")
+	return append(arguments, constants.SelectedStreamsFlag, "/mnt/config/selected_streams.json")
 }
 
 // RemoveFlagFromArgs returns a new slice with the given flag

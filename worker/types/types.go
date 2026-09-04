@@ -30,15 +30,20 @@ type LoggingConfig struct {
 }
 
 type JobData struct {
-	JobName     string
-	ProjectID   string
-	Source      string
-	Destination string
-	Streams     string
-	Schema      string
-	State       string
-	Version     string
-	Driver      string
+	JobName            string
+	ProjectID          string
+	Source             string
+	Destination        string
+	Streams            string
+	SelectedStreams    string
+	State              string
+	Version            string // source version
+	Driver             string
+	Frequency          string
+	CreatedAt          time.Time
+	DestinationVersion string
+	SourceName         string
+	DestinationName    string
 }
 
 type WebhookNotificationArgs struct {
