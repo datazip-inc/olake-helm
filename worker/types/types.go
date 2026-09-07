@@ -35,14 +35,19 @@ type LoggingConfig struct {
 }
 
 type JobData struct {
-	JobName     string
-	ProjectID   string
-	Source      string
-	Destination string
-	Streams     string
-	State       string
-	Version     string
-	Driver      string
+	JobName            string
+	ProjectID          string
+	Source             string
+	Destination        string
+	Streams            string
+	State              string
+	Version            string // source version
+	Driver             string
+	Frequency          string
+	CreatedAt          time.Time
+	DestinationVersion string
+	SourceName         string
+	DestinationName    string
 	// AdvancedSettings is the job's advanced_settings jsonb column, read as text.
 	// Empty when the column is NULL.
 	AdvancedSettings string
