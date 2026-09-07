@@ -165,7 +165,7 @@ func permanentSchedulingFailure(message string) string {
 		strings.Contains(message, "waiting for volume to be created"),
 		strings.Contains(message, "no persistent volumes available for this claim"):
 		return fmt.Sprintf("%s. The index volume was never provisioned: check that the cluster has a default "+
-			"StorageClass (or set indexStorage.storageClass), that its CSI driver is installed, and that the "+
+			"StorageClass (or set jobIndexes.default.storageClass), that its CSI driver is installed, and that the "+
 			"storage quota is not exhausted", message)
 	}
 	return ""

@@ -36,24 +36,30 @@ data:
   # =================================================================
   # JOB PROFILES CONFIGURATION
   # =================================================================
-  # A profile carries both scheduling (nodeSelector / tolerations / affinity)
-  # and the per-job index volume (indexStorage). Profile 0 is the default that
-  # every job inherits; a JobID profile is deep-merged over it, field by field,
-  # by the worker. Profile 0 is always emitted so `global.storageClass` reaches
-  # the index even when the user replaces jobProfiles wholesale.
-  {{- $profiles := deepCopy (.Values.global.jobProfiles | default dict) }}
-  {{- $profile0 := deepCopy (get $profiles "0" | default dict) }}
-  {{- $index0 := deepCopy (get $profile0 "indexStorage" | default dict) }}
-  {{- if get $index0 "existingClaim" }}
-  {{- fail "global.jobProfiles.0.indexStorage.existingClaim is not supported. existingClaim names one specific volume, so it belongs on a JobID profile; on profile 0 every job would mount the same claim and a ReadWriteOnce volume would serialise every sync." }}
-  {{- end }}
-  {{- if not (get $index0 "storageClass") }}
-  {{- $_ := set $index0 "storageClass" (.Values.global.storageClass | default "") }}
-  {{- end }}
-  {{- $_ := set $profile0 "indexStorage" $index0 }}
-  {{- $_ := set $profiles "0" $profile0 }}
+  # A profile carries pod scheduling only (nodeSelector / tolerations / affinity).
+  # Profile 0 is the default every job inherits; a JobID profile is deep-merged
+  # over it field by field by the worker. Index volumes are configured separately,
+  # in the top-level `jobIndexes` block below.
+  {{- if .Values.global.jobProfiles }}
   # Converted to JSON for consistent parsing by the worker
-  OLAKE_JOB_PROFILES: {{ $profiles | toJson | quote }}
+  OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
+  {{- end }}
+
+  # =================================================================
+  # JOB INDEX STORAGE CONFIGURATION
+  # =================================================================
+  # `default` holds the index settings every job starts from; entries under
+  # `jobs` are deep-merged over it field by field by the worker. Always rendered
+  # so `global.storageClass` reaches the index even when the block is empty. A
+  # job only gets a volume when its `index_required` advanced setting is true,
+  # whatever is configured here.
+  {{- $indexes := deepCopy (.Values.jobIndexes | default dict) }}
+  {{- $indexDefault := deepCopy (get $indexes "default" | default dict) }}
+  {{- if not (get $indexDefault "storageClass") }}
+  {{- $_ := set $indexDefault "storageClass" (.Values.global.storageClass | default "") }}
+  {{- end }}
+  {{- $_ := set $indexes "default" $indexDefault }}
+  OLAKE_JOB_INDEXES: {{ $indexes | toJson | quote }}
 
   # =================================================================
   # JOB SERVICE ACCOUNT CONFIGURATION

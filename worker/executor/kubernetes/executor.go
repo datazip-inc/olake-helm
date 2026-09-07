@@ -30,15 +30,15 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace         string
-	PVCName           string
-	ServiceAccount    string
-	JobServiceAccount string
-	SecretKey         string
-	BasePath          string
-	WorkerIdentity    string
-	SecurityContext   *corev1.PodSecurityContext
-	JobPodAnnotations map[string]string
+	Namespace          string
+	PVCName            string
+	ServiceAccount     string
+	JobServiceAccount  string
+	SecretKey          string
+	BasePath           string
+	WorkerIdentity     string
+	SecurityContext    *corev1.PodSecurityContext
+	JobPodAnnotations  map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {

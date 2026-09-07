@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -17,7 +16,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
-	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
@@ -66,14 +64,11 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	envVars := utils.GetWorkerEnvVars()
 	if indexMount != nil {
 		// Set rather than append: the worker's own environment is propagated
-		// above and may already carry this key, and the mount target is the
-		// only value that is correct for this container.
+		// above and may already carry these keys, and only the values below are
+		// correct for this container.
 		envVars[constants.EnvIndexDBDir] = indexMount.Target
-
-		// Index tuning has no per-job configuration in docker mode, so the
-		// worker's own environment wins when it sets these.
-		setEnvDefault(envVars, constants.EnvIndexDBCacheSize, constants.DefaultIndexCacheSizeMB)
-		setEnvDefault(envVars, constants.EnvIndexDBMaxOpenFiles, constants.DefaultIndexMaxOpenFiles)
+		envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
+		envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
 	}
 
 	var envs []string
@@ -136,13 +131,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	return string(output), nil
 }
 
-// setEnvDefault fills in a value only when the key carries nothing usable.
-func setEnvDefault(envVars map[string]string, key string, value int) {
-	if strings.TrimSpace(envVars[key]) == "" {
-		envVars[key] = strconv.Itoa(value)
-	}
-}
-
 // ensureIndexMount returns the bind mount that carries a job's Pebble index, or
 // nil when the job gets none: short-lived operations (spec, check, discover)
 // never have one, and neither does a job that did not ask for it.
@@ -164,18 +152,6 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 		return nil, nil
 	}
 
-	// A per-job directory needs a real JobID to key on. Running without one would
-	// either share a single index across jobs or lose it with the container, so
-	// this fails the run rather than degrading silently.
-	if jobID <= 0 {
-		return nil, fmt.Errorf("cannot prepare an index directory for %s: invalid JobID %d", operation, jobID)
-	}
-
-	target := strings.TrimSpace(viper.GetString(constants.EnvIndexDBDir))
-	if target == "" {
-		target = constants.DefaultIndexMountPath
-	}
-
 	indexDir := filepath.Join(utils.GetConfigDir(), constants.IndexDirName, fmt.Sprintf("olake-index-%d", jobID))
 	if err := os.MkdirAll(indexDir, constants.DefaultDirPermissions); err != nil {
 		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
@@ -184,7 +160,7 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 	return &mount.Mount{
 		Type:   mount.TypeBind,
 		Source: utils.GetHostOutputDir(indexDir),
-		Target: target,
+		Target: constants.DefaultIndexMountPath,
 	}, nil
 }
 
