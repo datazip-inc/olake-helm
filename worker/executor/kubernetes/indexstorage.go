@@ -287,6 +287,11 @@ type JobIndexes struct {
 	Jobs    map[int]IndexStorageConfig `json:"jobs"`
 }
 
+// LoadJobIndexes parses OLAKE_JOB_INDEXES. The default block and every job entry
+// are decoded on their own so a malformed entry costs only itself: the other
+// jobs keep their configured settings, and a half-decoded default never reaches
+// the jobs that inherit from it. Only a syntax error in the surrounding json is
+// fatal, since nothing can be recovered from it.
 func LoadJobIndexes(raw string) JobIndexes {
 	loaded := JobIndexes{Jobs: map[int]IndexStorageConfig{}}
 	if strings.TrimSpace(raw) == "" {
@@ -294,13 +299,38 @@ func LoadJobIndexes(raw string) JobIndexes {
 		return loaded
 	}
 
-	if err := json.Unmarshal([]byte(raw), &loaded); err != nil {
-		logger.Errorf("partially ignoring OLAKE_JOB_INDEXES: %s", err)
+	// Job keys stay strings until they are parsed one at a time, and each entry
+	// stays raw until it is decoded on its own. Unmarshalling straight into
+	// JobIndexes leaves a bad entry partially applied instead of skipped.
+	var wire struct {
+		Default json.RawMessage            `json:"default"`
+		Jobs    map[string]json.RawMessage `json:"jobs"`
 	}
-	// "jobs": null decodes to a nil map, which the rest of the worker reads from
-	// as if it were empty - but only a non-nil map stays safe to write to later.
-	if loaded.Jobs == nil {
-		loaded.Jobs = map[int]IndexStorageConfig{}
+	if err := json.Unmarshal([]byte(raw), &wire); err != nil {
+		logger.Errorf("failed to parse OLAKE_JOB_INDEXES as json: %s", err)
+		return loaded
+	}
+
+	if len(wire.Default) > 0 {
+		if err := json.Unmarshal(wire.Default, &loaded.Default); err != nil {
+			logger.Errorf("ignoring jobIndexes.default: %s", err)
+			loaded.Default = IndexStorageConfig{}
+		}
+	}
+
+	for key, value := range wire.Jobs {
+		jobID, err := strconv.Atoi(key)
+		if err != nil {
+			logger.Warnf("ignoring jobIndexes.jobs key %q: expected a JobID", key)
+			continue
+		}
+
+		var cfg IndexStorageConfig
+		if err := json.Unmarshal(value, &cfg); err != nil {
+			logger.Errorf("ignoring jobIndexes.jobs entry %d: %s", jobID, err)
+			continue
+		}
+		loaded.Jobs[jobID] = cfg
 	}
 
 	logger.Infof("job index settings loaded: %d job entries", len(loaded.Jobs))
