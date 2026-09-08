@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,9 +33,6 @@ type indexVolume struct {
 	maxOpenFiles int
 }
 
-// indexPVCName returns the deterministic per-job claim name. It keys on JobID
-// only - never on the operation - so every async run of a job mounts the same
-// volume.
 func indexPVCName(jobID int) string {
 	return fmt.Sprintf("olake-index-%d", jobID)
 }
@@ -49,14 +47,6 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 	base := k.configWatcher.GetDefaultJobIndex()
 	resolved := mergeIndexStorage(defaultIndexStorage(), &base)
 
-	// existingClaim names one specific volume, so it is never inherited. Under
-	// `default` it would point every job at the same claim, and a ReadWriteOnce
-	// volume would then serialise every sync in the deployment.
-	if resolved.ExistingClaim != "" {
-		logger.Warnf("ignoring jobIndexes.default.existingClaim %q: it is only honoured under jobIndexes.jobs", resolved.ExistingClaim)
-		resolved.ExistingClaim = ""
-	}
-
 	if entry, exists := k.configWatcher.GetJobIndex(jobID); exists {
 		resolved = mergeIndexStorage(resolved, &entry)
 	}
@@ -66,9 +56,9 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 
 // ensureIndexVolume resolves the index storage config for a job and makes sure
 // the backing claim exists. It returns nil when the job gets no index volume:
-// short-lived operations (spec, check, discover) never carry one, a job that
-// did not ask for one never carries one, and neither does mode "none".
-func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command, indexRequired bool) (*indexVolume, error) {
+// short-lived operations (spec, check, discover) never carry one, and neither
+// does a job that did not ask for one.
+func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command, indexRequired bool, heartbeat func(context.Context, ...interface{})) (*indexVolume, error) {
 	log := logger.Log(ctx)
 
 	// Only sync and clear-destination touch the Iceberg index.
@@ -83,21 +73,11 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 
 	cfg := k.resolveIndexStorage(jobID)
 
-	switch cfg.Mode {
-	case indexStorageModeNone:
-		log.Debug("index storage disabled for job", "jobID", jobID)
-		return nil, nil
-	case indexStorageModePVC:
-	default:
-		return nil, fmt.Errorf("unknown jobIndexes mode %q for job %d (expected %q or %q)",
-			cfg.Mode, jobID, indexStorageModePVC, indexStorageModeNone)
-	}
-
 	if err := validateIndexMountPath(cfg.MountPath, jobID); err != nil {
 		return nil, err
 	}
 
-	claimName, err := k.resolveIndexClaim(ctx, jobID, cfg)
+	claimName, err := k.resolveIndexClaim(ctx, jobID, cfg, heartbeat)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +92,12 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 
 // resolveIndexClaim returns the claim to mount: the operator's own when
 // existingClaim names one, otherwise the per-job claim the worker manages.
-func (k *KubernetesExecutor) resolveIndexClaim(ctx context.Context, jobID int, cfg IndexStorageConfig) (string, error) {
+func (k *KubernetesExecutor) resolveIndexClaim(ctx context.Context, jobID int, cfg IndexStorageConfig, heartbeat func(context.Context, ...interface{})) (string, error) {
 	if cfg.ExistingClaim != "" {
 		return k.useExistingClaim(ctx, jobID, cfg.ExistingClaim)
 	}
 
-	return k.ensureIndexPVC(ctx, jobID, cfg)
+	return k.ensureIndexPVC(ctx, jobID, cfg, heartbeat)
 }
 
 // useExistingClaim mounts a claim the operator created and the worker does not
@@ -134,6 +114,7 @@ func (k *KubernetesExecutor) useExistingClaim(ctx context.Context, jobID int, na
 		}
 		return "", indexClaimError("get", name, err)
 	}
+
 	if claim.DeletionTimestamp != nil {
 		return "", fmt.Errorf("jobIndexes existingClaim %q for job %d is being deleted; wait for it to disappear or point at another claim", name, jobID)
 	}
@@ -180,7 +161,7 @@ func indexClaimError(action, name string, err error) error {
 // ensureIndexPVC creates the per-job claim on first use and is a no-op on every
 // later run. The claim is never deleted here: it outlives the pods that use it
 // so the index survives between runs.
-func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg IndexStorageConfig) (string, error) {
+func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg IndexStorageConfig, heartbeat func(context.Context, ...interface{})) (string, error) {
 	log := logger.Log(ctx)
 	name := indexPVCName(jobID)
 	claims := k.client.CoreV1().PersistentVolumeClaims(k.namespace)
@@ -198,7 +179,9 @@ func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg 
 			return "", fmt.Errorf("index PVC %s is being deleted; wait for it to disappear and re-run, "+
 				"or remove its finalizers - the next run will provision a fresh volume and rebuild the index", name)
 		}
-		k.expandIndexPVC(ctx, existing, requested)
+		if err := k.expandIndexPVC(ctx, existing, requested, heartbeat); err != nil {
+			return "", err
+		}
 		return name, nil
 	}
 	if !apierrors.IsNotFound(err) {
@@ -269,47 +252,146 @@ func (k *KubernetesExecutor) buildIndexPVC(name string, jobID int, cfg IndexStor
 // when the claim is created and left alone afterwards. Nothing is deleted here
 // either, since discarding a bound claim would discard the index with it.
 //
-// Failure is logged, not returned. Expansion needs allowVolumeExpansion on the
-// StorageClass, and not growing is no reason to fail a sync the existing volume
-// can still serve.
-func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev1.PersistentVolumeClaim, requested resource.Quantity) {
+// Failure is returned rather than logged. A sync that is given a volume smaller
+// than the one it was configured with runs until it fills the disk, so failing
+// here costs one run and failing later costs the whole sync.
+//
+// A shrink is still only a warning: Kubernetes cannot do it, and the volume
+// already on disk is larger than what was asked for, so the run is unaffected.
+func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev1.PersistentVolumeClaim, requested resource.Quantity, heartbeat func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
-
+	claims := k.client.CoreV1().PersistentVolumeClaims(k.namespace)
 	current := existing.Spec.Resources.Requests[corev1.ResourceStorage]
+
+	// The size to wait for is what the spec asks, not what this run asks: an
+	// expansion a previous run requested and never saw finish leaves the spec
+	// ahead of the volume, and that run is the one that must not start early.
+	target := current
 	switch requested.Cmp(current) {
-	case 0:
-		return
+	case 1:
+		patch := existing.DeepCopy()
+		if patch.Spec.Resources.Requests == nil {
+			patch.Spec.Resources.Requests = corev1.ResourceList{}
+		}
+
+		patch.Spec.Resources.Requests[corev1.ResourceStorage] = requested
+		if _, err := claims.Update(ctx, patch, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("failed to expand index PVC %s from %s to %s: %s. Expansion needs "+
+				"allowVolumeExpansion: true on the volume's StorageClass, and [get, update] on "+
+				"persistentvolumeclaims; set jobIndexes size back to %s to run on the volume as it is",
+				existing.Name, current.String(), requested.String(), err, current.String())
+		}
+
+		log.Info("expanding index PVC", "pvcName", existing.Name, "from", current.String(), "to", requested.String())
+		target = requested
 	case -1:
 		log.Warn("index PVC shrink requested but Kubernetes does not support it; keeping the current size",
 			"pvcName", existing.Name, "current", current.String(), "configured", requested.String())
-		return
 	}
 
-	patch := existing.DeepCopy()
-	if patch.Spec.Resources.Requests == nil {
-		patch.Spec.Resources.Requests = corev1.ResourceList{}
-	}
-	patch.Spec.Resources.Requests[corev1.ResourceStorage] = requested
-	if _, err := k.client.CoreV1().PersistentVolumeClaims(k.namespace).Update(ctx, patch, metav1.UpdateOptions{}); err != nil {
-		log.Warn("failed to expand index PVC; continuing with the current size",
-			"pvcName", existing.Name, "current", current.String(), "configured", requested.String(), "error", err)
-		return
-	}
+	return k.waitForIndexResize(ctx, existing.Name, target, heartbeat)
+}
 
-	log.Info("expanded index PVC", "pvcName", existing.Name, "from", current.String(), "to", requested.String())
+// waitForIndexResize blocks until the CSI driver has grown the backing device,
+// so a sync never starts on a volume still at the old size.
+//
+// It deliberately does not wait for the filesystem to be grown as well. That
+// half runs in kubelet, during the volume mount of a pod - the very pod this
+// function runs before - so waiting for it here would block on a mount that
+// cannot happen until the wait ends. Reaching FileSystemResizePending is
+// therefore success: the pod's own mount completes it, and the pod stays in
+// ContainerCreating until it does.
+func (k *KubernetesExecutor) waitForIndexResize(ctx context.Context, name string, target resource.Quantity, heartbeat func(context.Context, ...interface{})) error {
+	log := logger.Log(ctx)
+	deadline := time.Now().Add(constants.IndexResizeTimeout)
+
+	var lastMessage string
+	for {
+		if heartbeat != nil {
+			heartbeat(ctx, fmt.Sprintf("waiting for index volume %s to reach %s", name, target.String()))
+		}
+
+		claim, err := k.client.CoreV1().PersistentVolumeClaims(k.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return indexClaimError("get", name, err)
+		}
+
+		// An unbound claim has no volume to grow. Its size is applied when the
+		// StorageClass provisions it, which under WaitForFirstConsumer only
+		// happens once the pod this runs before exists - so waiting here would
+		// block on a binding this function is what stands in the way of. A claim
+		// that stays unbound is caught later, when the pod cannot be scheduled.
+		if claim.Status.Phase != corev1.ClaimBound {
+			log.Debug("index PVC is not bound yet; its size applies when it is provisioned", "pvcName", name)
+			return nil
+		}
+
+		capacity := claim.Status.Capacity[corev1.ResourceStorage]
+		if capacity.Cmp(target) >= 0 {
+			return nil
+		}
+
+		resizing, message := indexResizeCondition(claim)
+		if !resizing && message != "" {
+			log.Info("index volume grown; the pod's mount will resize its filesystem", "pvcName", name, "status", message)
+			return nil
+		}
+
+		if message != "" && message != lastMessage {
+			log.Info("waiting for index PVC expansion", "pvcName", name, "status", message)
+			lastMessage = message
+		}
+
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("index PVC %s did not grow from %s to %s within %v (last status: %q). "+
+				"Check that a CSI resizer is running for its StorageClass and that the storage quota is not "+
+				"exhausted; set jobIndexes size back to %s to run on the volume as it is",
+				name, capacity.String(), target.String(), constants.IndexResizeTimeout, lastMessage, capacity.String())
+		}
+
+		select {
+		case <-time.After(constants.IndexResizePollInterval):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// indexResizeCondition reports how far an expansion has got: whether the driver
+// is still growing the device, and the message to show while it does. A
+// FileSystemResizePending claim reports resizing false with a message, which is
+// as far as this worker can take it before the pod exists.
+func indexResizeCondition(claim *corev1.PersistentVolumeClaim) (bool, string) {
+	for _, condition := range claim.Status.Conditions {
+		if condition.Status != corev1.ConditionTrue {
+			continue
+		}
+
+		switch condition.Type {
+		case corev1.PersistentVolumeClaimFileSystemResizePending:
+			message := condition.Message
+			if message == "" {
+				message = string(corev1.PersistentVolumeClaimFileSystemResizePending)
+			}
+			return false, message
+		case corev1.PersistentVolumeClaimResizing:
+			message := condition.Message
+			if message == "" {
+				message = string(corev1.PersistentVolumeClaimResizing)
+			}
+			return true, message
+		}
+	}
+	return false, ""
 }
 
 // JobIndexes is the parsed jobIndexes block: the settings every job starts from,
 // and the per-JobID entries that are deep-merged over them.
 type JobIndexes struct {
-	Default IndexStorageConfig
-	Jobs    map[int]IndexStorageConfig
+	Default IndexStorageConfig         `json:"default"`
+	Jobs    map[int]IndexStorageConfig `json:"jobs"`
 }
 
-// LoadJobIndexes parses OLAKE_JOB_INDEXES. The default entry and each job entry
-// are decoded on their own so one malformed entry costs only itself: failing the
-// whole block would silently move every job back to the built-in defaults,
-// including its StorageClass, with nothing but a log line to say so.
 func LoadJobIndexes(raw string) JobIndexes {
 	loaded := JobIndexes{Jobs: map[int]IndexStorageConfig{}}
 	if strings.TrimSpace(raw) == "" {
@@ -317,9 +399,9 @@ func LoadJobIndexes(raw string) JobIndexes {
 		return loaded
 	}
 
-	// Job keys stay strings until they are parsed one at a time. Decoding
-	// straight into map[int] would fail the whole block on a single key that is
-	// not a number or overflows int.
+	// Job keys stay strings until they are parsed one at a time, and each entry
+	// stays raw until it is decoded on its own, so a malformed entry is skipped
+	// instead of being partially applied to the jobs around it.
 	var wire struct {
 		Default json.RawMessage            `json:"default"`
 		Jobs    map[string]json.RawMessage `json:"jobs"`
@@ -355,20 +437,11 @@ func LoadJobIndexes(raw string) JobIndexes {
 	return loaded
 }
 
-// Index storage modes and the defaults applied when a field is left unset.
-const (
-	indexStorageModePVC  = "pvc"
-	indexStorageModeNone = "none"
-)
-
 // IndexStorageConfig describes the per-job block volume that holds the Pebble
 // index used by the direct positional-delete / deletion-vector write path.
 // The same volume is mounted by every async operation of a job (sync and
 // clear-destination), so both see the same index.
 type IndexStorageConfig struct {
-	// Mode selects whether the worker provisions a per-job PVC ("pvc") or the
-	// job runs without an index volume ("none").
-	Mode string `json:"mode,omitempty"`
 	// Size is the requested volume size. Growing it is applied on the next run;
 	// Kubernetes rejects shrinking.
 	Size string `json:"size,omitempty"`
@@ -394,13 +467,8 @@ type IndexStorageConfig struct {
 	ExistingClaim string `json:"existingClaim,omitempty"`
 }
 
-// defaultIndexStorage returns the built-in index settings. They are the base
-// jobIndexes is merged onto, and they stand on their own when the chart emits no
-// default entry at all, so a job that asked for an index always gets a usable
-// one rather than a claim with no size or mount path.
 func defaultIndexStorage() IndexStorageConfig {
 	return IndexStorageConfig{
-		Mode:         indexStorageModePVC,
 		Size:         constants.DefaultIndexSize,
 		MountPath:    constants.DefaultIndexMountPath,
 		AccessModes:  []string{string(corev1.ReadWriteOnce)},
@@ -417,9 +485,6 @@ func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	}
 
 	merged := base
-	if override.Mode != "" {
-		merged.Mode = override.Mode
-	}
 	if override.Size != "" {
 		merged.Size = override.Size
 	}
@@ -445,6 +510,7 @@ func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	// that adds one label must not drop the cluster-wide labels set on profile 0,
 	// which an admission policy may require for the claim to be created at all.
 	merged.Labels = mergeStringMaps(base.Labels, override.Labels)
+	// TODO: labels and annotations are not updated in already created PVCs
 	merged.Annotations = mergeStringMaps(base.Annotations, override.Annotations)
 	return merged
 }

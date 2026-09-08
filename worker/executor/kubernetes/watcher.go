@@ -160,7 +160,8 @@ func (w *ConfigMapWatcher) GetJobIndex(jobID int) (IndexStorageConfig, bool) {
 }
 
 // cloneIndexStorage copies the maps and slices inside an entry so a caller
-// merging into the result cannot mutate the settings every other job reads.
+// cannot write through the returned value into the settings the watcher
+// serves to every other job.
 func cloneIndexStorage(entry IndexStorageConfig) IndexStorageConfig {
 	if entry.AccessModes != nil {
 		entry.AccessModes = slices.Clone(entry.AccessModes)

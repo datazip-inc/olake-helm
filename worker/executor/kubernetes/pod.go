@@ -30,7 +30,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	// that will not resolve on its own, and the last reason reported, so a
 	// transient stall is visible in the worker log without repeating every poll.
 	var unschedulableSince time.Time
-	var lastUnschedulable string
+	var lastUnschedulableMessage string
 
 	for time.Now().Before(deadline) {
 		// Record heartbeat to enable cancellation detection if heartbeat function is provided
@@ -53,10 +53,10 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			// Surface every scheduling rejection once. Recoverable ones - a node
 			// at its volume attachment limit, a cluster waiting on the
 			// autoscaler - otherwise look like an unexplained stall.
-			if message != "" && message != lastUnschedulable {
+			if message != "" && message != lastUnschedulableMessage {
 				log.Warn("pod is waiting to be scheduled", "podName", podName, "reason", message)
 			}
-			lastUnschedulable = message
+			lastUnschedulableMessage = message
 
 			if reason := permanentSchedulingFailure(message); reason != "" {
 				if unschedulableSince.IsZero() {
@@ -145,10 +145,14 @@ func unschedulableMessage(pod *corev1.Pod) string {
 // an empty string otherwise.
 //
 // Recoverable rejections are deliberately NOT matched, because they do resolve
-// on their own: a cluster at capacity while the autoscaler adds nodes, a
-// `Multi-Attach error` while the previous node's volume detaches, and a node at
-// its per-instance volume attachment limit (`exceed max volume count`) while
-// other pods finish.
+// on their own: a cluster at capacity while the autoscaler adds nodes, and a
+// node at its per-instance volume attachment limit (`exceed max volume count`)
+// while other pods finish.
+//
+// Attachment failures never reach here at all. A `Multi-Attach error` is raised
+// against a pod the scheduler has already placed, so PodScheduled is True, the
+// pod sits in ContainerCreating, and unschedulableMessage returns "". Detecting
+// those means reading FailedAttachVolume events, not this message.
 func permanentSchedulingFailure(message string) string {
 	switch {
 	// The index volume is a zone-pinned block device, so a job whose scheduling

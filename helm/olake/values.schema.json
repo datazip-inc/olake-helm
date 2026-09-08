@@ -107,11 +107,6 @@
     "indexStorage": {
       "type": "object",
       "properties": {
-        "mode": {
-          "type": "string",
-          "enum": ["pvc", "none"],
-          "description": "'pvc' provisions one PVC per JobID (olake-index-<JobID>); 'none' disables the index volume."
-        },
         "size": {
           "type": "string",
           "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$",
@@ -156,7 +151,7 @@
         },
         "existingClaim": {
           "type": "string",
-          "description": "Name of an existing PVC to mount instead of provisioning one. Only honoured under \"jobs\"; under \"default\" it is ignored with a warning, since it would point every job at one volume. When set, size, storageClass, accessModes, labels and annotations are ignored for that job."
+          "description": "Name of an existing PVC to mount instead of provisioning one."
         }
       },
       "additionalProperties": false

@@ -32,12 +32,20 @@ const (
 	// DefaultIndexSize is the requested size of a job's index volume.
 	DefaultIndexSize = "20Gi"
 	// DefaultIndexMountPath is where the job's index volume is mounted inside the
-	// connector container, in both the kubernetes and docker executors.
+	// driver container, in both the kubernetes and docker executors.
 	DefaultIndexMountPath = "/var/lib/olake/index"
 	// DefaultIndexCacheSizeMB is the Pebble block cache size, in megabytes.
 	DefaultIndexCacheSizeMB = 512
 	// DefaultIndexMaxOpenFiles caps the file descriptors Pebble keeps open.
 	DefaultIndexMaxOpenFiles = 1000
+	// IndexResizeTimeout bounds the wait for the controller half of an index
+	// volume expansion - the CSI driver growing the backing device. The node
+	// half, growing the filesystem, only runs once a pod mounts the volume and
+	// is therefore never waited for here.
+	IndexResizeTimeout = time.Minute * 10
+	// IndexResizePollInterval is how often the claim is re-read while it grows.
+	// Well inside the activity heartbeat timeout, which the wait keeps alive.
+	IndexResizePollInterval = time.Second * 5
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755

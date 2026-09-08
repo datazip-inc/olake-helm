@@ -63,12 +63,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	// Environment variables propagation
 	envVars := utils.GetWorkerEnvVars()
 	if indexMount != nil {
-		// Set rather than append: the worker's own environment is propagated
-		// above and may already carry these keys, and only the values below are
-		// correct for this container.
 		envVars[constants.EnvIndexDBDir] = indexMount.Target
-		envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
-		envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
+
+		if envVars[constants.EnvIndexDBCacheSize] == "" {
+			envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
+		}
+
+		if envVars[constants.EnvIndexDBMaxOpenFiles] == "" {
+			envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
+		}
 	}
 
 	var envs []string

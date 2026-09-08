@@ -36,10 +36,6 @@ data:
   # =================================================================
   # JOB PROFILES CONFIGURATION
   # =================================================================
-  # A profile carries pod scheduling only (nodeSelector / tolerations / affinity).
-  # Profile 0 is the default every job inherits; a JobID profile is deep-merged
-  # over it field by field by the worker. Index volumes are configured separately,
-  # in the top-level `jobIndexes` block below.
   {{- if .Values.global.jobProfiles }}
   # Converted to JSON for consistent parsing by the worker
   OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
