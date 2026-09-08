@@ -32,9 +32,6 @@ type indexVolume struct {
 	maxOpenFiles int
 }
 
-// indexPVCName returns the deterministic per-job claim name. It keys on JobID
-// only - never on the operation - so every async run of a job mounts the same
-// volume.
 func indexPVCName(jobID int) string {
 	return fmt.Sprintf("olake-index-%d", jobID)
 }
@@ -49,14 +46,6 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 	base := k.configWatcher.GetDefaultJobIndex()
 	resolved := mergeIndexStorage(defaultIndexStorage(), &base)
 
-	// existingClaim names one specific volume, so it is never inherited. Under
-	// `default` it would point every job at the same claim, and a ReadWriteOnce
-	// volume would then serialise every sync in the deployment.
-	if resolved.ExistingClaim != "" {
-		logger.Warnf("ignoring jobIndexes.default.existingClaim %q: it is only honoured under jobIndexes.jobs", resolved.ExistingClaim)
-		resolved.ExistingClaim = ""
-	}
-
 	if entry, exists := k.configWatcher.GetJobIndex(jobID); exists {
 		resolved = mergeIndexStorage(resolved, &entry)
 	}
@@ -66,8 +55,8 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 
 // ensureIndexVolume resolves the index storage config for a job and makes sure
 // the backing claim exists. It returns nil when the job gets no index volume:
-// short-lived operations (spec, check, discover) never carry one, a job that
-// did not ask for one never carries one, and neither does mode "none".
+// short-lived operations (spec, check, discover) never carry one, and neither
+// does a job that did not ask for one.
 func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command, indexRequired bool) (*indexVolume, error) {
 	log := logger.Log(ctx)
 
@@ -82,16 +71,6 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 	}
 
 	cfg := k.resolveIndexStorage(jobID)
-
-	switch cfg.Mode {
-	case indexStorageModeNone:
-		log.Debug("index storage disabled for job", "jobID", jobID)
-		return nil, nil
-	case indexStorageModePVC:
-	default:
-		return nil, fmt.Errorf("unknown jobIndexes mode %q for job %d (expected %q or %q)",
-			cfg.Mode, jobID, indexStorageModePVC, indexStorageModeNone)
-	}
 
 	if err := validateIndexMountPath(cfg.MountPath, jobID); err != nil {
 		return nil, err
@@ -134,6 +113,7 @@ func (k *KubernetesExecutor) useExistingClaim(ctx context.Context, jobID int, na
 		}
 		return "", indexClaimError("get", name, err)
 	}
+
 	if claim.DeletionTimestamp != nil {
 		return "", fmt.Errorf("jobIndexes existingClaim %q for job %d is being deleted; wait for it to disappear or point at another claim", name, jobID)
 	}
@@ -289,6 +269,7 @@ func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev
 	if patch.Spec.Resources.Requests == nil {
 		patch.Spec.Resources.Requests = corev1.ResourceList{}
 	}
+
 	patch.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 	if _, err := k.client.CoreV1().PersistentVolumeClaims(k.namespace).Update(ctx, patch, metav1.UpdateOptions{}); err != nil {
 		log.Warn("failed to expand index PVC; continuing with the current size",
@@ -302,14 +283,10 @@ func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev
 // JobIndexes is the parsed jobIndexes block: the settings every job starts from,
 // and the per-JobID entries that are deep-merged over them.
 type JobIndexes struct {
-	Default IndexStorageConfig
-	Jobs    map[int]IndexStorageConfig
+	Default IndexStorageConfig         `json:"default"`
+	Jobs    map[int]IndexStorageConfig `json:"jobs"`
 }
 
-// LoadJobIndexes parses OLAKE_JOB_INDEXES. The default entry and each job entry
-// are decoded on their own so one malformed entry costs only itself: failing the
-// whole block would silently move every job back to the built-in defaults,
-// including its StorageClass, with nothing but a log line to say so.
 func LoadJobIndexes(raw string) JobIndexes {
 	loaded := JobIndexes{Jobs: map[int]IndexStorageConfig{}}
 	if strings.TrimSpace(raw) == "" {
@@ -317,58 +294,24 @@ func LoadJobIndexes(raw string) JobIndexes {
 		return loaded
 	}
 
-	// Job keys stay strings until they are parsed one at a time. Decoding
-	// straight into map[int] would fail the whole block on a single key that is
-	// not a number or overflows int.
-	var wire struct {
-		Default json.RawMessage            `json:"default"`
-		Jobs    map[string]json.RawMessage `json:"jobs"`
+	if err := json.Unmarshal([]byte(raw), &loaded); err != nil {
+		logger.Errorf("partially ignoring OLAKE_JOB_INDEXES: %s", err)
 	}
-	if err := json.Unmarshal([]byte(raw), &wire); err != nil {
-		logger.Errorf("failed to parse OLAKE_JOB_INDEXES as json: %s", err)
-		return loaded
-	}
-
-	if len(wire.Default) > 0 {
-		if err := json.Unmarshal(wire.Default, &loaded.Default); err != nil {
-			logger.Errorf("ignoring jobIndexes.default: %s", err)
-			loaded.Default = IndexStorageConfig{}
-		}
-	}
-
-	for key, value := range wire.Jobs {
-		jobID, err := strconv.Atoi(key)
-		if err != nil {
-			logger.Warnf("ignoring jobIndexes.jobs key %q: expected a JobID", key)
-			continue
-		}
-
-		var cfg IndexStorageConfig
-		if err := json.Unmarshal(value, &cfg); err != nil {
-			logger.Errorf("ignoring jobIndexes.jobs entry %d: %s", jobID, err)
-			continue
-		}
-		loaded.Jobs[jobID] = cfg
+	// "jobs": null decodes to a nil map, which the rest of the worker reads from
+	// as if it were empty - but only a non-nil map stays safe to write to later.
+	if loaded.Jobs == nil {
+		loaded.Jobs = map[int]IndexStorageConfig{}
 	}
 
 	logger.Infof("job index settings loaded: %d job entries", len(loaded.Jobs))
 	return loaded
 }
 
-// Index storage modes and the defaults applied when a field is left unset.
-const (
-	indexStorageModePVC  = "pvc"
-	indexStorageModeNone = "none"
-)
-
 // IndexStorageConfig describes the per-job block volume that holds the Pebble
 // index used by the direct positional-delete / deletion-vector write path.
 // The same volume is mounted by every async operation of a job (sync and
 // clear-destination), so both see the same index.
 type IndexStorageConfig struct {
-	// Mode selects whether the worker provisions a per-job PVC ("pvc") or the
-	// job runs without an index volume ("none").
-	Mode string `json:"mode,omitempty"`
 	// Size is the requested volume size. Growing it is applied on the next run;
 	// Kubernetes rejects shrinking.
 	Size string `json:"size,omitempty"`
@@ -394,13 +337,8 @@ type IndexStorageConfig struct {
 	ExistingClaim string `json:"existingClaim,omitempty"`
 }
 
-// defaultIndexStorage returns the built-in index settings. They are the base
-// jobIndexes is merged onto, and they stand on their own when the chart emits no
-// default entry at all, so a job that asked for an index always gets a usable
-// one rather than a claim with no size or mount path.
 func defaultIndexStorage() IndexStorageConfig {
 	return IndexStorageConfig{
-		Mode:         indexStorageModePVC,
 		Size:         constants.DefaultIndexSize,
 		MountPath:    constants.DefaultIndexMountPath,
 		AccessModes:  []string{string(corev1.ReadWriteOnce)},
@@ -417,9 +355,6 @@ func mergeIndexStorage(base IndexStorageConfig, override *IndexStorageConfig) In
 	}
 
 	merged := base
-	if override.Mode != "" {
-		merged.Mode = override.Mode
-	}
 	if override.Size != "" {
 		merged.Size = override.Size
 	}
