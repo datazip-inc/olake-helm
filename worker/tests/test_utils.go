@@ -77,7 +77,7 @@ const (
 	// Install Playwright and dependencies
 	installPlaywrightCmd = `
         cd /mnt/ui/ui &&
-        pnpm install --allow-build=esbuild &&
+        pnpm --allow-build=esbuild add -D @playwright/test &&
         pnpm exec playwright install --with-deps chromium
     `
 
