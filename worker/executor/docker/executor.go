@@ -63,12 +63,24 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	// Environment variables propagation
 	envVars := utils.GetWorkerEnvVars()
 	if indexMount != nil {
-		// Set rather than append: the worker's own environment is propagated
-		// above and may already carry these keys, and only the values below are
-		// correct for this container.
+		// The mount target is the only path the connector can open its index at,
+		// so this is set from the mount and not merely defaulted. An absolute
+		// value inherited from the worker's environment already decided that
+		// target in ensureIndexMount, so the environment still wins here; a
+		// relative or empty one is dropped, because it would put the index in the
+		// container's writable layer.
 		envVars[constants.EnvIndexDBDir] = indexMount.Target
-		envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
-		envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
+
+		// Tuning works the same way. Docker mode has no per-job settings, so the
+		// worker's environment is the only place to set these and it wins; the
+		// constants only fill in, so that a job behaves the same here as it does
+		// under the kubernetes executor.
+		if envVars[constants.EnvIndexDBCacheSize] == "" {
+			envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
+		}
+		if envVars[constants.EnvIndexDBMaxOpenFiles] == "" {
+			envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
+		}
 	}
 
 	var envs []string
@@ -157,10 +169,20 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
 	}
 
+	// Docker mode has no per-job index settings, so the worker's environment is
+	// the only place to move the mount away from the default path; the constant
+	// only fills in. It has to be the mount target and not just the connector's
+	// OLAKE_INDEX_DB_DIR, otherwise the driver opens its index at a path the
+	// volume is not mounted on and writes it to the container's writable layer.
+	target := constants.DefaultIndexMountPath
+	if dir := os.Getenv(constants.EnvIndexDBDir); filepath.IsAbs(dir) {
+		target = filepath.Clean(dir)
+	}
+
 	return &mount.Mount{
 		Type:   mount.TypeBind,
 		Source: utils.GetHostOutputDir(indexDir),
-		Target: constants.DefaultIndexMountPath,
+		Target: target,
 	}, nil
 }
 
