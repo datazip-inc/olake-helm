@@ -36,8 +36,8 @@ type indexVolume struct {
 // job's own entry, in increasing order of precedence. Every field is populated
 // by the base, so callers never re-check for empties.
 func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
-	base := k.configWatcher.GetDefaultJobIndex()
-	resolved := mergeIndexStorage(defaultIndexStorage(), base)
+	override := k.configWatcher.GetDefaultJobIndex()
+	resolved := mergeIndexStorage(defaultIndexStorage(), override)
 
 	if entry, exists := k.configWatcher.GetJobIndex(jobID); exists {
 		resolved = mergeIndexStorage(resolved, entry)
@@ -160,9 +160,11 @@ func (k *KubernetesExecutor) ensureIndexPVC(ctx context.Context, jobID int, cfg 
 			return "", fmt.Errorf("index PVC %s is being deleted; wait for it to disappear and re-run, "+
 				"or remove its finalizers - the next run will provision a fresh volume and rebuild the index", name)
 		}
+
 		if err := k.expandIndexPVC(ctx, existing, requested, heartbeat); err != nil {
 			return "", err
 		}
+
 		return name, nil
 	}
 	if !apierrors.IsNotFound(err) {
@@ -330,19 +332,24 @@ func (k *KubernetesExecutor) waitForIndexResize(ctx context.Context, name string
 // indexResizeCondition reports whether the driver is still growing the device,
 // and the message to show while it does.
 func indexResizeCondition(claim *corev1.PersistentVolumeClaim) (bool, string) {
+	var resizing string
 	for _, condition := range claim.Status.Conditions {
 		if condition.Status != corev1.ConditionTrue {
 			continue
 		}
 
 		switch condition.Type {
+		// Kubernetes leaves Resizing set alongside this one, so a pending
+		// filesystem resize wins wherever both appear rather than whichever the
+		// API server happens to list first: the driver has already grown the
+		// device, and only the pod's own mount can finish the rest.
 		case corev1.PersistentVolumeClaimFileSystemResizePending:
 			return false, cmp.Or(condition.Message, string(condition.Type))
 		case corev1.PersistentVolumeClaimResizing:
-			return true, cmp.Or(condition.Message, string(condition.Type))
+			resizing = cmp.Or(condition.Message, string(condition.Type))
 		}
 	}
-	return false, ""
+	return resizing != "", resizing
 }
 
 // JobIndexes is the parsed jobIndexes block: the settings every job starts from,
