@@ -27,10 +27,10 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	deadline := time.Now().Add(timeout)
 
 	// Tracks how long the pod has been rejected by the scheduler for a reason
-	// that will not resolve on its own, and the last reason reported, so a
+	// that will not resolve on its own, and the last condition reported, so a
 	// transient stall is visible in the worker log without repeating every poll.
 	var unschedulableSince time.Time
-	var lastUnschedulableMessage string
+	var lastSchedulingCondition string
 
 	for time.Now().Before(deadline) {
 		// Record heartbeat to enable cancellation detection if heartbeat function is provided
@@ -48,23 +48,27 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		// above keeps the Temporal activity alive with it. Turn the hang into a
 		// failure with an actionable message.
 		if pod.Status.Phase == corev1.PodPending {
-			message := unschedulableMessage(pod)
+			reason, message := unschedulableCondition(pod)
 
-			// Surface every scheduling rejection once. Recoverable ones - a node
-			// at its volume attachment limit, a cluster waiting on the
-			// autoscaler - otherwise look like an unexplained stall.
-			if message != "" && message != lastUnschedulableMessage {
-				log.Warn("pod is waiting to be scheduled", "podName", podName, "reason", message)
+			// Surface every scheduling rejection once, keyed on the reason rather
+			// than the message: a gated pod carries a reason and often no message
+			// at all, and it is the state most in need of a log line, since
+			// nothing else in this loop will ever act on it. Recoverable
+			// rejections - a node at its volume attachment limit, a cluster
+			// waiting on the autoscaler - otherwise look like an unexplained
+			// stall too.
+			if condition := reason + ": " + message; reason != "" && condition != lastSchedulingCondition {
+				log.Warn("pod is waiting to be scheduled", "podName", podName, "reason", reason, "detail", message)
+				lastSchedulingCondition = condition
 			}
-			lastUnschedulableMessage = message
 
-			if reason := permanentSchedulingFailure(message); reason != "" {
+			if failure := permanentSchedulingFailure(reason, message); failure != "" {
 				if unschedulableSince.IsZero() {
 					unschedulableSince = time.Now()
 				} else if time.Since(unschedulableSince) > constants.UnschedulableGracePeriod {
-					log.Error("pod permanently unschedulable", "podName", podName, "reason", reason)
+					log.Error("pod permanently unschedulable", "podName", podName, "reason", failure)
 					return fmt.Errorf("%w: pod %s could not be scheduled for %v: %s",
-						constants.ErrExecutionFailed, podName, constants.UnschedulableGracePeriod, reason)
+						constants.ErrExecutionFailed, podName, constants.UnschedulableGracePeriod, failure)
 				}
 			} else {
 				unschedulableSince = time.Time{}
@@ -127,22 +131,33 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	return fmt.Errorf("pod timed out after %v", timeout)
 }
 
-// unschedulableMessage returns the scheduler's explanation for a pod it could
-// not place, or an empty string when scheduling is not the reason it is Pending.
-func unschedulableMessage(pod *corev1.Pod) string {
+// unschedulableCondition returns why a pod has not been scheduled, as the
+// reason and the explanation the scheduler attached to it. Both are empty when
+// the pod is not waiting on scheduling at all.
+//
+// Kubernetes sets three reasons on PodScheduled=False - Unschedulable,
+// SchedulingGated and SchedulerError - and all three are returned. Reading only
+// the first of them left a pod carrying spec.schedulingGates invisible: the
+// scheduler never attempts it, so it stays Pending for as long as the run is
+// allowed to last. The message is not enough on its own to tell them apart, and
+// a gated pod may carry none, so callers branch on the reason.
+func unschedulableCondition(pod *corev1.Pod) (string, string) {
 	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodScheduled &&
-			condition.Status == corev1.ConditionFalse &&
-			condition.Reason == corev1.PodReasonUnschedulable {
-			return condition.Message
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			return condition.Reason, condition.Message
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// permanentSchedulingFailure turns a scheduler message into an actionable reason
-// when it describes a condition that no amount of waiting will fix, and returns
-// an empty string otherwise.
+// permanentSchedulingFailure turns a scheduler rejection into an actionable
+// reason when it describes a condition that no amount of waiting will fix, and
+// returns an empty string otherwise.
+//
+// Only the scheduler's own rejections qualify. A SchedulingGated pod is waiting
+// for the controller that gated it to lift the gate, which is the entire point
+// of a gate, and a SchedulerError is an internal error the scheduler retries -
+// so neither is ever permanent here, however long it lasts.
 //
 // Recoverable rejections are deliberately NOT matched, because they do resolve
 // on their own: a cluster at capacity while the autoscaler adds nodes, and a
@@ -153,7 +168,11 @@ func unschedulableMessage(pod *corev1.Pod) string {
 // against a pod the scheduler has already placed, so PodScheduled is True, the
 // pod sits in ContainerCreating, and unschedulableMessage returns "". Detecting
 // those means reading FailedAttachVolume events, not this message.
-func permanentSchedulingFailure(message string) string {
+func permanentSchedulingFailure(reason, message string) string {
+	if reason != corev1.PodReasonUnschedulable {
+		return ""
+	}
+
 	switch {
 	// The index volume is a zone-pinned block device, so a job whose scheduling
 	// constraints no longer intersect its volume's zone can never be placed.
