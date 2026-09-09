@@ -279,7 +279,7 @@ func (k *KubernetesExecutor) waitForIndexResize(ctx context.Context, name string
 	log := logger.Log(ctx)
 	deadline := time.Now().Add(constants.IndexResizeTimeout)
 
-	var lastMessage string
+	var lastStatus string
 	for {
 		if heartbeat != nil {
 			heartbeat(ctx, fmt.Sprintf("waiting for index volume %s to reach %s", name, target.String()))
@@ -303,22 +303,26 @@ func (k *KubernetesExecutor) waitForIndexResize(ctx context.Context, name string
 			return nil
 		}
 
-		resizing, message := indexResizeCondition(claim)
-		if !resizing && message != "" {
-			log.Info("index volume grown; the pod's mount will resize its filesystem", "pvcName", name, "status", message)
+		state, status := indexResizeProgress(claim)
+		switch state {
+		case indexResizeFailed:
+			return fmt.Errorf("index PVC %s cannot grow from %s to %s: %s. Set jobIndexes size back to %s "+
+				"to run on the volume as it is", name, capacity.String(), target.String(), status, capacity.String())
+		case indexResizeMountPending:
+			log.Info("index volume grown; the pod's mount will resize its filesystem", "pvcName", name, "status", status)
 			return nil
 		}
 
-		if message != "" && message != lastMessage {
-			log.Info("waiting for index PVC expansion", "pvcName", name, "status", message)
-			lastMessage = message
+		if status != "" && status != lastStatus {
+			log.Info("waiting for index PVC expansion", "pvcName", name, "status", status)
+			lastStatus = status
 		}
 
 		if !time.Now().Before(deadline) {
 			return fmt.Errorf("index PVC %s did not grow from %s to %s within %v (last status: %q). "+
 				"Check that a CSI resizer is running for its StorageClass and that the storage quota is not "+
 				"exhausted; set jobIndexes size back to %s to run on the volume as it is",
-				name, capacity.String(), target.String(), constants.IndexResizeTimeout, lastMessage, capacity.String())
+				name, capacity.String(), target.String(), constants.IndexResizeTimeout, lastStatus, capacity.String())
 		}
 
 		select {
@@ -329,27 +333,60 @@ func (k *KubernetesExecutor) waitForIndexResize(ctx context.Context, name string
 	}
 }
 
-// indexResizeCondition reports whether the driver is still growing the device,
-// and the message to show while it does.
-func indexResizeCondition(claim *corev1.PersistentVolumeClaim) (bool, string) {
-	var resizing string
+// indexResizeState is how far an expansion has got, as far as the claim says.
+// The values are ranked: where a claim reports several at once, the highest
+// wins, so nothing depends on the order the API server lists them in.
+type indexResizeState int
+
+const (
+	// indexResizeUnknown - the claim says nothing about an expansion.
+	indexResizeUnknown indexResizeState = iota
+	// indexResizeGrowing - the driver is still growing the device.
+	indexResizeGrowing
+	// indexResizeMountPending - the device is grown and only a pod's mount can
+	// resize the filesystem on top of it.
+	indexResizeMountPending
+	// indexResizeFailed - the expansion cannot succeed.
+	indexResizeFailed
+)
+
+// indexResizeProgress reads how far an expansion has got, with the driver's own
+// wording for it. allocatedResourceStatuses is authoritative on the clusters
+// that maintain it; the conditions are the fallback for those that do not, and
+// Kubernetes leaves several of them set at once - a device that is grown keeps
+// Resizing alongside FileSystemResizePending - so every condition is read and ranked.
+func indexResizeProgress(claim *corev1.PersistentVolumeClaim) (indexResizeState, string) {
+	switch status := claim.Status.AllocatedResourceStatuses[corev1.ResourceStorage]; status {
+	case corev1.PersistentVolumeClaimControllerResizeInfeasible, corev1.PersistentVolumeClaimNodeResizeInfeasible:
+		return indexResizeFailed, string(status)
+	case corev1.PersistentVolumeClaimControllerResizeInProgress:
+		return indexResizeGrowing, string(status)
+	case corev1.PersistentVolumeClaimNodeResizePending, corev1.PersistentVolumeClaimNodeResizeInProgress:
+		return indexResizeMountPending, string(status)
+	}
+
+	state, message := indexResizeUnknown, ""
+	record := func(candidate indexResizeState, condition corev1.PersistentVolumeClaimCondition) {
+		if candidate > state {
+			state, message = candidate, cmp.Or(condition.Message, string(condition.Type))
+		}
+	}
+
 	for _, condition := range claim.Status.Conditions {
 		if condition.Status != corev1.ConditionTrue {
 			continue
 		}
 
 		switch condition.Type {
-		// Kubernetes leaves Resizing set alongside this one, so a pending
-		// filesystem resize wins wherever both appear rather than whichever the
-		// API server happens to list first: the driver has already grown the
-		// device, and only the pod's own mount can finish the rest.
+		case corev1.PersistentVolumeClaimControllerResizeError:
+			record(indexResizeFailed, condition)
 		case corev1.PersistentVolumeClaimFileSystemResizePending:
-			return false, cmp.Or(condition.Message, string(condition.Type))
+			record(indexResizeMountPending, condition)
 		case corev1.PersistentVolumeClaimResizing:
-			resizing = cmp.Or(condition.Message, string(condition.Type))
+			record(indexResizeGrowing, condition)
 		}
 	}
-	return resizing != "", resizing
+	return state, message
 }
 
 // JobIndexes is the parsed jobIndexes block: the settings every job starts from,
