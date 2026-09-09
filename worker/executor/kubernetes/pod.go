@@ -50,13 +50,9 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		if pod.Status.Phase == corev1.PodPending {
 			reason, message := unschedulableCondition(pod)
 
-			// Surface every scheduling rejection once, keyed on the reason rather
-			// than the message: a gated pod carries a reason and often no message
-			// at all, and it is the state most in need of a log line, since
-			// nothing else in this loop will ever act on it. Recoverable
-			// rejections - a node at its volume attachment limit, a cluster
-			// waiting on the autoscaler - otherwise look like an unexplained
-			// stall too.
+			// Keyed on the reason, not the message: a gated pod often carries no
+			// message, and nothing else in this loop acts on it, so this line is
+			// all that makes it visible.
 			if condition := reason + ": " + message; reason != "" && condition != lastSchedulingCondition {
 				log.Warn("pod is waiting to be scheduled", "podName", podName, "reason", reason, "detail", message)
 				lastSchedulingCondition = condition
@@ -132,15 +128,12 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 }
 
 // unschedulableCondition returns why a pod has not been scheduled, as the
-// reason and the explanation the scheduler attached to it. Both are empty when
-// the pod is not waiting on scheduling at all.
+// reason and the explanation attached to it. Both are empty when the pod is not
+// waiting on scheduling.
 //
-// Kubernetes sets three reasons on PodScheduled=False - Unschedulable,
-// SchedulingGated and SchedulerError - and all three are returned. Reading only
-// the first of them left a pod carrying spec.schedulingGates invisible: the
-// scheduler never attempts it, so it stays Pending for as long as the run is
-// allowed to last. The message is not enough on its own to tell them apart, and
-// a gated pod may carry none, so callers branch on the reason.
+// All three reasons Kubernetes sets on PodScheduled=False are returned, not just
+// Unschedulable: a pod carrying spec.schedulingGates is never attempted by the
+// scheduler and would otherwise stay Pending, invisibly, for the whole run.
 func unschedulableCondition(pod *corev1.Pod) (string, string) {
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
@@ -151,23 +144,17 @@ func unschedulableCondition(pod *corev1.Pod) (string, string) {
 }
 
 // permanentSchedulingFailure turns a scheduler rejection into an actionable
-// reason when it describes a condition that no amount of waiting will fix, and
-// returns an empty string otherwise.
+// reason when no amount of waiting will fix it, and returns an empty string
+// otherwise.
 //
-// Only the scheduler's own rejections qualify. A SchedulingGated pod is waiting
-// for the controller that gated it to lift the gate, which is the entire point
-// of a gate, and a SchedulerError is an internal error the scheduler retries -
-// so neither is ever permanent here, however long it lasts.
+// Only Unschedulable qualifies: a gate exists so another controller can lift it,
+// and a SchedulerError is retried. Recoverable rejections are deliberately not
+// matched either - a cluster waiting on the autoscaler, or a node at its volume
+// attachment limit (`exceed max volume count`) while other pods finish.
 //
-// Recoverable rejections are deliberately NOT matched, because they do resolve
-// on their own: a cluster at capacity while the autoscaler adds nodes, and a
-// node at its per-instance volume attachment limit (`exceed max volume count`)
-// while other pods finish.
-//
-// Attachment failures never reach here at all. A `Multi-Attach error` is raised
-// against a pod the scheduler has already placed, so PodScheduled is True, the
-// pod sits in ContainerCreating, and unschedulableMessage returns "". Detecting
-// those means reading FailedAttachVolume events, not this message.
+// Attachment failures never reach here at all: a `Multi-Attach error` is raised
+// against an already-placed pod, so PodScheduled is True and the condition this
+// reads is absent. Catching those means reading FailedAttachVolume events.
 func permanentSchedulingFailure(reason, message string) string {
 	if reason != corev1.PodReasonUnschedulable {
 		return ""

@@ -54,12 +54,9 @@ type JobData struct {
 }
 
 // IndexRequired reports whether the job asked for the per-job Pebble index
-// volume, via `index_required` in its advanced settings. A job with no advanced
-// settings, or none carrying the key, does not get one.
-//
-// A blob that is not a JSON object is an error rather than a false: a job that
-// asked for an index and lost it to a typo would otherwise rebuild its index on
-// every run with nothing to say why.
+// volume, via `index_required` in its advanced settings. Unparseable settings
+// are an error rather than a false: a job that asked for an index and lost it to
+// a typo would otherwise rebuild the index every run with nothing to say why.
 func (j JobData) IndexRequired() (bool, error) {
 	if strings.TrimSpace(j.AdvancedSettings) == "" {
 		return false, nil

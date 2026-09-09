@@ -13,7 +13,7 @@ const (
 	DefaultSyncTimeout       = time.Hour * 24 * 30
 	// UnschedulableGracePeriod is how long a pod may stay Pending for a reason
 	// that cannot resolve itself before the run is failed. Generous enough to
-	// absorb a slow volume detach from a dead node (~6 minutes worst case).
+	// absorb a slow volume detach from a dead node.
 	UnschedulableGracePeriod = time.Minute * 10
 	TaskQueue                = "OLAKE_DOCKER_TASK_QUEUE"
 	OperationTypeKey         = "OperationType"
@@ -38,13 +38,10 @@ const (
 	DefaultIndexCacheSizeMB = 512
 	// DefaultIndexMaxOpenFiles caps the file descriptors Pebble keeps open.
 	DefaultIndexMaxOpenFiles = 1000
-	// IndexResizeTimeout bounds the wait for the controller half of an index
-	// volume expansion - the CSI driver growing the backing device. The node
-	// half, growing the filesystem, only runs once a pod mounts the volume and
-	// is therefore never waited for here.
+	// IndexResizeTimeout bounds the wait for the CSI driver to grow the backing
+	// device. The filesystem half runs at pod mount and is never waited for.
 	IndexResizeTimeout = time.Minute * 10
 	// IndexResizePollInterval is how often the claim is re-read while it grows.
-	// Well inside the activity heartbeat timeout, which the wait keeps alive.
 	IndexResizePollInterval = time.Second * 5
 
 	// File and directory permissions

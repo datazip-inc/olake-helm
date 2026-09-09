@@ -135,23 +135,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 }
 
 // ensureIndexMount returns the bind mount that carries a job's Pebble index, or
-// nil when the job gets none: short-lived operations (spec, check, discover)
-// never have one, and neither does a job that did not ask for it.
+// nil when the job gets none.
 //
-// The workdir handed to a run is derived from the Temporal workflow ID, which
-// carries the schedule fire time, so it is a fresh directory on every sync. An
-// index kept there would be rebuilt each run, and one written to a path with no
-// mount at all lives only in the container's writable layer. Both are lost, so
-// the index gets its own persistence-root directory, keyed on JobID alone: a
-// job's sync and clear-destination runs then open the same index, matching the
-// per-job claim the kubernetes executor mounts.
+// The workdir is derived from the Temporal workflow ID and so is fresh on every
+// run, which would rebuild the index each time. The index instead gets its own
+// persistence-root directory keyed on JobID alone, matching the per-job claim
+// the kubernetes executor mounts.
 func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, indexRequired bool) (*mount.Mount, error) {
-	if !slices.Contains(constants.AsyncCommands, operation) {
-		return nil, nil
-	}
-
-	// Opt-in per job, exactly as in the kubernetes executor.
-	if !indexRequired {
+	// Opt-in per job, and only for the operations that touch the index.
+	if !slices.Contains(constants.AsyncCommands, operation) || !indexRequired {
 		return nil, nil
 	}
 
