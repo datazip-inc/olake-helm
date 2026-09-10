@@ -312,6 +312,12 @@ spec:
               containerPort: 1260
             - name: optimizing
               containerPort: 1261
+            {{- if .Values.fusion.plugin.metricReporters }}
+            {{- if .Values.fusion.plugin.metricReporters.prometheusExporter.enabled }}
+            - name: prometheus
+              containerPort: {{ .Values.fusion.plugin.metricReporters.prometheusExporter.properties.port }}
+            {{- end }}
+            {{- end }}
           volumeMounts:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/config.yaml
@@ -322,6 +328,16 @@ spec:
             - name: fusion-config
               mountPath: /usr/local/amoro/conf/executor-pod-template.yaml
               subPath: executor-pod-template.yaml
+            {{- if or .Values.fusion.plugin.metricReporters }}
+            - name: fusion-config
+              mountPath: /usr/local/amoro/conf/plugins/metric-reporters.yaml
+              readOnly: true
+              subPath: metric-reporters.yaml
+            - name: fusion-config
+              mountPath: /usr/local/amoro/conf/plugins/table-runtime-factories.yaml
+              readOnly: true
+              subPath: table-runtime-factories.yaml
+            {{- end }}
             - name: spark-binaries
               mountPath: /opt/spark
             - name: shared-storage
