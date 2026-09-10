@@ -66,7 +66,7 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	}
 
 	query := fmt.Sprintf(`
-			SELECT j.name, j.streams_config, %s, j.state, j.project_id, s.config, d.config, s.version, s.type,
+			SELECT j.name, j.streams_config, %s, j.state, j.project_id, s.config, d.config, s.version, s.type, COALESCE(j.advanced_settings::text, ''),
 				j.frequency, j.created_at, d.version, s.name, d.name
 			FROM %q j
 			JOIN %q s ON j.source_id = s.id
@@ -78,7 +78,7 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 
 	var jobData types.JobData
 	var selectedStreams sql.NullString
-	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver,
+	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver, &jobData.AdvancedSettings,
 		&jobData.Frequency, &jobData.CreatedAt, &jobData.DestinationVersion, &jobData.SourceName, &jobData.DestinationName); err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
