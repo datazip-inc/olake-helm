@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"go.temporal.io/sdk/client"
 )
 
@@ -20,15 +22,22 @@ type jobRunCounter struct {
 	Ineligible bool `json:"ineligible,omitempty"`
 }
 
-// jobCounterPath: <persistent-dir>/telemetry/job-counters/<job_id>, next to telemetry/user_id.
+// jobCounterPath returns the relative path to the job counter file
 func jobCounterPath(jobID int) string {
-	return filepath.Join(utils.GetConfigDir(), "telemetry", "job-counters", fmt.Sprintf("%d", jobID))
+	return filepath.Join("telemetry", "job-counters", fmt.Sprintf("%d", jobID))
 }
 
 // readCounter returns (counter, true) if a counter file exists and parses;
 // (zero value, false) if it's missing, unreadable, or unparsable.
-func readCounter(path string) (jobRunCounter, bool) {
-	data, err := utils.ReadFile(path)
+func readCounter(ctx context.Context, path string) (jobRunCounter, bool) {
+	var data string
+	var err error
+	switch storagemode.Get() {
+	case constants.StorageModeS3:
+		data, err = utils.ReadFileFromS3(ctx, "", path, false)
+	default:
+		data, err = utils.ReadFileFromNFS(utils.GetConfigDir(), path)
+	}
 	if err != nil {
 		return jobRunCounter{}, false
 	}
@@ -39,12 +48,12 @@ func readCounter(path string) (jobRunCounter, bool) {
 	return c, true
 }
 
-func writeCounter(path string, c jobRunCounter) {
+func writeCounter(ctx context.Context, path string, c jobRunCounter) {
 	data, err := json.Marshal(c)
 	if err != nil {
 		return
 	}
-	_ = utils.WriteFile(path, data)
+	_ = utils.WriteConfigFiles(ctx, utils.GetConfigDir(), []types.JobConfig{{Name: path, Data: string(data)}})
 }
 
 // GetOrIncrementSyncRunCount returns which run number this sync is for the
@@ -61,14 +70,14 @@ func GetOrIncrementSyncRunCount(ctx context.Context, tempClient client.Client, r
 	path := jobCounterPath(req.JobID)
 
 	if attempt > 1 {
-		c, ok := readCounter(path)
+		c, ok := readCounter(ctx, path)
 		if !ok || c.Ineligible {
 			return 0
 		}
 		return c.RunCount
 	}
 
-	c, ok := readCounter(path)
+	c, ok := readCounter(ctx, path)
 	switch {
 	case !ok:
 		numActions, err := scheduleActionCount(ctx, tempClient, req)
@@ -77,7 +86,7 @@ func GetOrIncrementSyncRunCount(ctx context.Context, tempClient client.Client, r
 			return 0
 		}
 		if numActions > 1 {
-			writeCounter(path, jobRunCounter{Ineligible: true})
+			writeCounter(ctx, path, jobRunCounter{Ineligible: true})
 			return 0
 		}
 		c = jobRunCounter{RunCount: 1}
@@ -87,7 +96,7 @@ func GetOrIncrementSyncRunCount(ctx context.Context, tempClient client.Client, r
 		c.RunCount++
 	}
 
-	writeCounter(path, c)
+	writeCounter(ctx, path, c)
 	return c.RunCount
 }
 
@@ -110,8 +119,8 @@ func scheduleActionCount(ctx context.Context, tempClient client.Client, req *typ
 
 // ReadSyncRunCount reads without incrementing - reports the same ordinal
 // TrackSyncStarted already assigned this run.
-func ReadSyncRunCount(jobID int) int {
-	c, ok := readCounter(jobCounterPath(jobID))
+func ReadSyncRunCount(ctx context.Context, jobID int) int {
+	c, ok := readCounter(ctx, jobCounterPath(jobID))
 	if !ok || c.Ineligible {
 		return 0
 	}

@@ -1,4 +1,4 @@
-{{- if .Values.nfsServer.enabled }}
+{{- if and .Values.nfsServer.enabled (eq (include "olake.storageMode" .) "nfs") }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:

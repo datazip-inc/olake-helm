@@ -9,3 +9,8 @@ data:
   {{- range $key, $value := .Values.global.env }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
+  {{- $storageMode := include "olake.storageMode" . }}
+  OLAKE_STORAGE_MODE: {{ $storageMode | quote }}
+  {{- if eq $storageMode "s3" }}
+  {{- include "olake.storageEnv" . | nindent 2 }}
+  {{- end }}

@@ -6,6 +6,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -46,6 +47,9 @@ func setDefaults() {
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 
+	// Storage defaults (matches UI: unset OLAKE_STORAGE_MODE → nfs)
+	viper.SetDefault(constants.EnvStorageMode, constants.StorageModeNFS)
+
 	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
 	viper.SetDefault("DB_PORT", 5432)
@@ -77,21 +81,24 @@ func requiredEnvVars() error {
 	// k8s required
 	k8sRequiredEnv := []string{
 		constants.EnvNamespace,
-		constants.EnvStoragePVCName,
 		constants.EnvPodName,
 		constants.EnvKubernetesServiceHost,
 	}
 
-	// Docker required
-	dockerRequiredEnv := []string{
-		constants.EnvHostPersistentDir,
+	execEnv := utils.GetExecutorEnvironment()
+	if execEnv == string(types.Kubernetes) {
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
 	}
 
-	execEnv := utils.GetExecutorEnvironment()
-	if execEnv == string(types.Docker) {
-		requiredEnv = append(requiredEnv, dockerRequiredEnv...)
-	} else {
-		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+	switch storagemode.Get() {
+	case constants.StorageModeS3:
+		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
+	default:
+		if execEnv == string(types.Docker) {
+			requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
+		} else {
+			requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
+		}
 	}
 
 	var missing []string

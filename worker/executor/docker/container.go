@@ -248,13 +248,10 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
 
-	// If container is running, adopt and wait for completion
+	// If container is running, adopt it and let Execute wait with the log collector.
 	if state.Exists && state.Running {
 		log.Info("adopting running container", "workflowID", req.WorkflowID, "containerName", containerName)
-		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
-			return nil, err
-		}
-		state = d.getContainerState(ctx, containerName, req.WorkflowID)
+		return &types.Result{OK: true}, nil
 	}
 
 	// If container exists and exited, treat as finished: cleanup and return status
@@ -278,7 +275,7 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	}
 
 	// First launch path: only if we never launched and nothing is running
-	if !utils.WorkflowAlreadyLaunched(workDir) {
+	if !utils.WorkflowAlreadyLaunched(ctx, workDir) {
 		return &types.Result{OK: true}, nil
 	}
 

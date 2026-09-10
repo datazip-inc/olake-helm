@@ -30,15 +30,16 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace           string
+	PVCName             string
+	S3CredentialsSecret string
+	ServiceAccount      string
+	JobServiceAccount   string
+	SecretKey           string
+	BasePath            string
+	WorkerIdentity      string
+	SecurityContext     *corev1.PodSecurityContext
+	JobPodAnnotations   map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -63,6 +64,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	// Get config from environment
 	namespace := viper.GetString(constants.EnvNamespace)
 	pvcName := viper.GetString(constants.EnvStoragePVCName)
+	s3CredentialsSecret := viper.GetString(constants.EnvS3CredentialsSecret)
 	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	secretKey := viper.GetString(constants.EnvSecretKey)
@@ -103,15 +105,16 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		namespace:     namespace,
 		configWatcher: watcher,
 		config: &KubernetesConfig{
-			Namespace:         namespace,
-			PVCName:           pvcName,
-			ServiceAccount:    serviceAccount,
-			JobServiceAccount: jobServiceAccount,
-			SecretKey:         secretKey,
-			BasePath:          basePath,
-			WorkerIdentity:    workerIdenttity,
-			SecurityContext:   securityContext,
-			JobPodAnnotations: jobPodAnnotations,
+			Namespace:           namespace,
+			PVCName:             pvcName,
+			S3CredentialsSecret: s3CredentialsSecret,
+			ServiceAccount:      serviceAccount,
+			JobServiceAccount:   jobServiceAccount,
+			SecretKey:           secretKey,
+			BasePath:            basePath,
+			WorkerIdentity:      workerIdenttity,
+			SecurityContext:     securityContext,
+			JobPodAnnotations:   jobPodAnnotations,
 		},
 	}, nil
 }
