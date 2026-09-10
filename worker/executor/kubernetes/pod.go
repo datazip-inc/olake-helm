@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,12 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	log.Debug("waiting for pod to complete", "podName", podName, "timeout", timeout)
 	deadline := time.Now().Add(timeout)
 
+	// Tracks how long the pod has been rejected by the scheduler for a reason
+	// that will not resolve on its own, and the last condition reported, so a
+	// transient stall is visible in the worker log without repeating every poll.
+	var unschedulableSince time.Time
+	var lastSchedulingCondition string
+
 	for time.Now().Before(deadline) {
 		// Record heartbeat to enable cancellation detection if heartbeat function is provided
 		if heartbeatFunc != nil {
@@ -35,6 +42,35 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		if err != nil {
 			log.Error("failed to get pod status", "podName", podName, "error", err)
 			return fmt.Errorf("failed to get pod status: %s", err)
+		}
+
+		// A pod that cannot be scheduled stays Pending forever, and the heartbeat
+		// above keeps the Temporal activity alive with it. Turn the hang into a
+		// failure with an actionable message.
+		if pod.Status.Phase == corev1.PodPending {
+			reason, message := unschedulableCondition(pod)
+
+			// Keyed on the reason, not the message: a gated pod often carries no
+			// message, and nothing else in this loop acts on it, so this line is
+			// all that makes it visible.
+			if condition := reason + ": " + message; reason != "" && condition != lastSchedulingCondition {
+				log.Warn("pod is waiting to be scheduled", "podName", podName, "reason", reason, "detail", message)
+				lastSchedulingCondition = condition
+			}
+
+			if failure := permanentSchedulingFailure(reason, message); failure != "" {
+				if unschedulableSince.IsZero() {
+					unschedulableSince = time.Now()
+				} else if time.Since(unschedulableSince) > constants.UnschedulableGracePeriod {
+					log.Error("pod permanently unschedulable", "podName", podName, "reason", failure)
+					return fmt.Errorf("%w: pod %s could not be scheduled for %v: %s",
+						constants.ErrExecutionFailed, podName, constants.UnschedulableGracePeriod, failure)
+				}
+			} else {
+				unschedulableSince = time.Time{}
+			}
+		} else {
+			unschedulableSince = time.Time{}
 		}
 
 		// Check if pod completed successfully
@@ -91,6 +127,60 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	return fmt.Errorf("pod timed out after %v", timeout)
 }
 
+// unschedulableCondition returns why a pod has not been scheduled, as the
+// reason and the explanation attached to it. Both are empty when the pod is not
+// waiting on scheduling.
+//
+// All three reasons Kubernetes sets on PodScheduled=False are returned, not just
+// Unschedulable: a pod carrying spec.schedulingGates is never attempted by the
+// scheduler and would otherwise stay Pending, invisibly, for the whole run.
+func unschedulableCondition(pod *corev1.Pod) (string, string) {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			return condition.Reason, condition.Message
+		}
+	}
+	return "", ""
+}
+
+// permanentSchedulingFailure turns a scheduler rejection into an actionable
+// reason when no amount of waiting will fix it, and returns an empty string
+// otherwise.
+//
+// Only Unschedulable qualifies: a gate exists so another controller can lift it,
+// and a SchedulerError is retried. Recoverable rejections are deliberately not
+// matched either - a cluster waiting on the autoscaler, or a node at its volume
+// attachment limit (`exceed max volume count`) while other pods finish.
+//
+// Attachment failures never reach here at all: a `Multi-Attach error` is raised
+// against an already-placed pod, so PodScheduled is True and the condition this
+// reads is absent. Catching those means reading FailedAttachVolume events.
+func permanentSchedulingFailure(reason, message string) string {
+	if reason != corev1.PodReasonUnschedulable {
+		return ""
+	}
+
+	switch {
+	// The index volume is a zone-pinned block device, so a job whose scheduling
+	// constraints no longer intersect its volume's zone can never be placed.
+	case strings.Contains(message, "volume node affinity conflict"):
+		return fmt.Sprintf("%s. The job's index volume is pinned to one availability zone; "+
+			"align the job profile's nodeSelector/affinity with that zone, or discard the volume to rebuild the index elsewhere", message)
+
+	// Nothing is provisioning the claim. Usually a cluster with no default
+	// StorageClass, or no CSI driver installed for it - on EKS the
+	// aws-ebs-csi-driver addon is not present by default. Also covers a
+	// provisioner that keeps failing, for example on an exhausted disk quota.
+	case strings.Contains(message, "unbound immediate PersistentVolumeClaims"),
+		strings.Contains(message, "waiting for volume to be created"),
+		strings.Contains(message, "no persistent volumes available for this claim"):
+		return fmt.Sprintf("%s. The index volume was never provisioned: check that the cluster has a default "+
+			"StorageClass (or set jobIndexes.default.storageClass), that its CSI driver is installed, and that the "+
+			"storage quota is not exhausted", message)
+	}
+	return ""
+}
+
 func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (string, error) {
 	log := logger.Log(ctx)
 	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, &corev1.PodLogOptions{
@@ -138,7 +228,9 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 	return nil
 }
 
-func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string) *corev1.Pod {
+// CreatePodSpec builds the connector pod. indexVolume is nil for operations that
+// carry no Pebble index (spec, check, discover) or when index storage is disabled.
+func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string, indexVolume *indexVolume) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
 	pod := &corev1.Pod{
@@ -231,6 +323,40 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 				},
 			},
 		},
+	}
+
+	// Mount the per-job index volume. The claim is keyed on JobID alone, so a
+	// job's sync and clear-destination runs open the same Pebble index.
+	if indexVolume != nil {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "index-storage",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: indexVolume.claimName,
+				},
+			},
+		})
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      "index-storage",
+			MountPath: indexVolume.mountPath,
+		})
+		// Mounting the volume is not enough: the driver opens its Pebble index at
+		// the path this variable names. Without it the index is written to the
+		// container's writable layer and lost when the pod is deleted.
+		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env,
+			corev1.EnvVar{
+				Name:  constants.EnvIndexDBDir,
+				Value: indexVolume.mountPath,
+			},
+			corev1.EnvVar{
+				Name:  constants.EnvIndexDBCacheSize,
+				Value: strconv.Itoa(indexVolume.cacheSizeMB),
+			},
+			corev1.EnvVar{
+				Name:  constants.EnvIndexDBMaxOpenFiles,
+				Value: strconv.Itoa(indexVolume.maxOpenFiles),
+			},
+		)
 	}
 
 	// Set ServiceAccountName only if configured (non-empty)
