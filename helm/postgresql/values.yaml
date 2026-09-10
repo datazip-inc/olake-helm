@@ -1,0 +1,102 @@
+# Default values for the postgresql chart.
+#
+# Shared dependency of the `olake` and `fusion` charts. Both alias it to
+# `postgresql`, so these keys are configured as `postgresql.*` from either
+# parent's values file, exactly as before the split.
+#
+# Parents keep their own `postgresql.external` block for pointing at a database
+# this chart did not create; those keys are read by the parent's templates and
+# ignored here.
+
+# -- Deploy PostgreSQL. When false this chart renders nothing and the parent is
+# expected to use its `postgresql.external` configuration instead.
+enabled: true
+
+# -- Base name the credentials secret is built from.
+# Kept at "olake" so the secret keeps the name it already has in live clusters.
+# The fusion chart overrides this to "fusion".
+nameOverride: "olake"
+
+# -- Fully override the secret name base, ignoring nameOverride and the release name
+fullnameOverride: ""
+
+# -- Override the namespace that resources are deployed into
+namespaceOverride: ""
+
+# -- Cluster DNS domain, used to build the host published in the secret
+clusterDomain: cluster.local
+
+# -- Name of the StatefulSet and its headless Service.
+# Load bearing: the StatefulSet's volume claim is `postgresql-storage-<name>-0`,
+# so changing this on an existing install strands the database volume. A second
+# instance in the same namespace must override it (the fusion chart does).
+serviceName: "postgresql"
+
+# -- Value of the `app.kubernetes.io/component` label.
+# Part of the StatefulSet selector, which Kubernetes treats as immutable -
+# changing it makes `helm upgrade` fail on an existing install.
+componentLabel: "database"
+
+# -- Use an existing secret instead of the one this chart creates
+existingSecret: ""
+
+# -- Create the secret as a standard resource rather than a Helm hook.
+# Mirrors the parent chart's own `useStandardResources` flag; set both together.
+useStandardResources: true
+
+# -- Databases to record in the secret, as `<secret key>: <database name>`.
+# One PostgreSQL instance backs several components, so the secret carries a key
+# per consumer rather than a single database name.
+databases:
+  database: temporal
+  fusion_database: fusion
+
+# -- Key from `databases` used as POSTGRES_DB when the server first initialises
+primaryDatabaseKey: "database"
+
+# -- Authentication configuration
+auth:
+  # -- PostgreSQL super user name
+  postgresUser: "temporal"
+  # -- PostgreSQL super user password
+  postgresPassword: "temporal"
+  # -- sslmode recorded in the secret
+  sslMode: "disable"
+
+# -- PostgreSQL image configuration
+image:
+  repository: library/postgres
+  tag: "14-alpine"
+  pullPolicy: Always
+
+# -- Persistent volume for PostgreSQL data
+persistence:
+  # -- Size of persistent volume for PostgreSQL data
+  size: 8Gi
+
+# -- Extra annotations for the PostgreSQL Service
+service:
+  annotations: {}
+
+# -- Pod scheduling constraints
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}
+securityContext: {}
+
+# -- PostgreSQL resource requirements (optional overrides)
+# Defaults: requests: memory=512Mi, cpu=500m
+resources: {}
+
+# -- Probe overrides, merged over the chart defaults
+readinessProbe: {}
+livenessProbe: {}
+
+# -- Global configuration, propagated by Helm from whichever chart installs this one
+global:
+  imagePullSecrets: []
+  storageClass: ""
+  podAnnotations: {}
+  env: {}

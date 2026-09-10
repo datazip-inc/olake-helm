@@ -1,0 +1,19 @@
+apiVersion: v2
+name: nfs-server
+description: In-cluster NFS server and the shared ReadWriteMany claim used by the OLake and Fusion charts
+type: application
+version: 0.0.1
+appVersion: "4.0.8"
+home: https://github.com/datazip-inc/olake-helm
+sources:
+  - https://github.com/datazip-inc/olake-helm
+keywords:
+  - nfs
+  - storage
+  - readwritemany
+  - kubernetes
+  - olake
+maintainers:
+  - name: Team OLake
+    email: hello@olake.io
+dependencies: []

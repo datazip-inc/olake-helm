@@ -1,0 +1,110 @@
+# Default values for the nfs-server chart.
+#
+# This chart is a shared dependency of both the `olake` and `fusion` charts. It
+# deploys an in-cluster NFS server with dynamic provisioning and always creates
+# the shared ReadWriteMany claim that Fusion and the OLake worker mount.
+#
+# Both parents alias this chart to `nfsServer`, so these keys are configured as
+# `nfsServer.*` from either parent's values file, exactly as before the split.
+
+# -- Base name used when building resource names.
+# Kept at "olake" so resource names are byte-identical to the ones the olake
+# chart created before this chart was split out. The NFS StatefulSet, Service,
+# ServiceAccount, ClusterRole and ClusterRoleBinding all carry
+# `helm.sh/resource-policy: keep`, so renaming them would orphan the live
+# objects on upgrade. The fusion chart overrides this to "fusion".
+nameOverride: "olake"
+
+# -- Fully override the resource name base, ignoring nameOverride and the release name
+fullnameOverride: ""
+
+# -- Override the namespace that resources are deployed into
+namespaceOverride: ""
+
+# -- Global configuration, propagated by Helm from whichever chart installs this one
+global:
+  # -- Global image pull secrets for private container registries
+  imagePullSecrets: []
+  # -- StorageClass for the NFS server's own backing volume
+  storageClass: ""
+  # -- Global environment values. CONTAINER_REGISTRY_BASE redirects image pulls
+  # to a private registry mirror.
+  env: {}
+
+# -- Enable NFS server deployment with dynamic provisioning
+# IMPORTANT: NFS components are created once and persist across helm operations.
+# They will NOT be deleted on 'helm uninstall' or modified on 'helm upgrade'.
+# This ensures data persistence but requires manual management for updates.
+enabled: true
+
+# -- External storage configuration (used when enabled: false)
+# When disabled, you must provide an existing ReadWriteMany (RWX) supported StorageClass
+#
+# CLOUD PROVIDER GUIDES FOR RWX STORAGECLASS:
+#
+# AWS EFS: Use the Amazon EFS CSI driver with 'efs.csi.aws.com' provisioner
+# See: https://github.com/kubernetes-sigs/aws-efs-csi-driver
+#
+# Azure Files: Use 'azurefile' StorageClass with 'kubernetes.io/azure-file' provisioner
+# See: https://docs.microsoft.com/en-us/azure/aks/azure-files-csi
+#
+# GCP Filestore: Use Google Cloud Filestore CSI driver with 'filestore.csi.storage.gke.io' provisioner
+# See: https://cloud.google.com/filestore/docs/csi-driver
+external:
+  # -- Name for the external PVC
+  # If not provided, defaults to "olake-shared-storage"
+  # Use this to reference an existing PVC or customize the name
+  name: ""
+
+  # -- StorageClass for dynamic RWX PVC creation
+  # Required when nfsServer.enabled is false
+  # Examples: "efs-sc", "azurefile", "filestore-csi", "longhorn", "rook-cephfs"
+  storageClass: ""
+
+  # -- Size for the dynamically created external PVC
+  size: "20Gi"
+
+  # -- Delete the external PVC on helm uninstall
+  deletePVCOnUninstall: false
+
+# -- Pod scheduling constraints
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity settings for pod assignment
+affinity: {}
+
+# -- Additional pod annotations
+podAnnotations: {}
+
+# -- Additional pod labels
+podLabels: {}
+
+# -- Persistence configuration for NFS server backing storage
+persistence:
+  # -- Size of backing storage for NFS server
+  size: 20Gi
+
+# -- StorageClass configuration for dynamic provisioning
+storageClass:
+  # -- Name of the StorageClass created by NFS server
+  name: "nfs-server"
+
+# -- NFS Server resource requirements (optional overrides)
+# Defaults: requests: memory=256Mi, cpu=250m ; limits: memory=512Mi, cpu=500m
+# Example customizations:
+# resources:
+#   requests:
+#     memory: "1Gi"
+#     cpu: "750m"
+#   limits:
+#     memory: "2Gi"
+#     cpu: "1500m"
+resources: {}
+
+
+# -- Name of the shared claim. Empty keeps the historical "olake-shared-storage"
+# name; a standalone Fusion install sets this to its own claim.
+claimName: ""
