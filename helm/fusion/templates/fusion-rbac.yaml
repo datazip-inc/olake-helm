@@ -1,0 +1,29 @@
+{{- if and .Values.serviceAccount.create .Values.serviceAccount.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "fusion.fullname" . }}-optimizer
+  namespace: {{ include "fusion.namespace" . }}
+  labels:
+    {{- include "fusion.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+rules:
+  {{- include "fusion.rbac.rules" . | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "fusion.fullname" . }}-optimizer
+  namespace: {{ include "fusion.namespace" . }}
+  labels:
+    {{- include "fusion.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "fusion.fullname" . }}-optimizer
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fusion.serviceAccountName" . }}
+    namespace: {{ include "fusion.namespace" . }}
+{{- end }}

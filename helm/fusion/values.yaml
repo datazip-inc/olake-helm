@@ -1,0 +1,598 @@
+# OLake Fusion — Iceberg table maintenance and compaction service.
+#
+# Fusion is a fork of Apache Amoro (https://amoro.apache.org). It runs one
+# long-lived AMS pod (the Fusion server) which schedules compaction work onto a
+# Spark-on-Kubernetes optimizer made of:
+#   * an optimizer MASTER  — the Spark driver pod, one per optimizer
+#   * optimizer WORKERS    — the Spark executor pods, scaled by parallelism
+#
+# This chart is installed alongside the `olake` chart in the same namespace and
+# by default reuses the PostgreSQL secret and the shared-storage PVC that the
+# `olake` chart manages. All of that is overridable — see `postgresql` and
+# `sharedStorage` below.
+
+# -- Provide a name in place of fusion for `app:` labels
+nameOverride: ""
+
+# -- Provide a name to substitute for the full names of resources
+fullnameOverride: ""
+
+# -- Override the namespace that resources are deployed into
+# Defaults to the release namespace
+namespaceOverride: ""
+
+# -- Force the target Kubernetes version (detected from Helm capabilities if unset)
+kubeVersion: ""
+
+# -- Cluster DNS domain, used to build in-cluster service URIs
+clusterDomain: cluster.local
+
+# -- Global configuration.
+# These keys are intentionally identical to the `olake` chart's `global` block
+# so a single values file can drive both releases.
+global:
+  # -- Global image pull secrets for private container registries
+  # Applied to the Fusion Deployment, the Fusion ServiceAccount (and therefore
+  # to the Spark optimizer master/worker pods).
+  # NOTE: Secrets must be created separately using kubectl or other means.
+  # Examples:
+  #   imagePullSecrets:
+  #     - name: "my-registry-secret"
+  imagePullSecrets: []
+
+  # -- Global pod annotations applied to the Fusion pod and to every Spark
+  # optimizer pod (master and workers).
+  # Useful for service mesh sidecar injection (Istio, Linkerd) or other
+  # admission webhooks.
+  # Examples:
+  #   podAnnotations:
+  #     sidecar.istio.io/inject: "true"
+  podAnnotations: {}
+
+  # -- Global environment variables applied to the Fusion pod.
+  #
+  # CONTAINER_REGISTRY_BASE: registry every image in this chart is pulled from.
+  #   Defaults to registry-1.docker.io when unset.
+  #
+  # Example:
+  #   env:
+  #     CONTAINER_REGISTRY_BASE: "my-registry.example.com"
+  env: {}
+
+# -- Fusion (Amoro fork) container image
+image:
+  repository: olakego/fusion
+  tag: latest
+  pullPolicy: Always
+
+# -- Base directory of the Fusion distribution inside the container
+fusionHome: /usr/local/amoro
+
+# -- Service account used by the Fusion pod and by the Spark optimizer
+# master/worker pods
+serviceAccount:
+  # -- Create a service account for Fusion
+  create: true
+
+  # -- Service account name.
+  # If not set and `create` is true, a name is generated from the fullname template.
+  name: ""
+
+  # -- Service account annotations.
+  # Used for cloud provider IAM role association, e.g. AWS Glue catalog access:
+  #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/fusion-role"
+  #   GCP Workload Identity: iam.gke.io/gcp-service-account: "fusion@project.iam.gserviceaccount.com"
+  #   Azure Workload Identity: azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
+  annotations: {}
+
+  # -- Role / RoleBinding granting Fusion permission to schedule and manage the
+  # Spark optimizer master and worker pods in this namespace.
+  rbac:
+    # -- Create the Role and RoleBinding along with the service account
+    create: true
+
+# -- Fusion server endpoints. Every enabled entry gets its own ClusterIP Service.
+server:
+  # -- REST API and dashboard. OLake UI talks to Fusion over this port.
+  rest:
+    enabled: true
+    port: 1630
+    # -- Auth type for the REST server (`token` or `basic`)
+    restAuthType: token
+    service:
+      # -- Service type. Use NodePort or LoadBalancer for access from outside
+      # the cluster; with NodePort also set `nodePort` below.
+      type: ClusterIP
+      port: "{{ .Values.server.rest.port }}"
+      nodePort: ""
+      annotations: {}
+
+  # -- Thrift server for table services
+  table:
+    enabled: true
+    port: 1260
+    service:
+      type: ClusterIP
+      port: "{{ .Values.server.table.port }}"
+      nodePort: ""
+      annotations: {}
+
+  # -- Thrift server for optimizing services. Optimizer master pods connect back
+  # to Fusion on this port.
+  optimizing:
+    enabled: true
+    port: 1261
+    service:
+      type: ClusterIP
+      port: "{{ .Values.server.optimizing.port }}"
+      nodePort: ""
+      annotations: {}
+
+# -- Admin credentials for the Fusion dashboard and REST API.
+# When Fusion is installed next to OLake, use the same credentials as
+# `olakeUI.initUser.adminUser` in the olake chart so the UI can drive Fusion.
+auth:
+  # -- Use an existing Kubernetes secret for the admin credentials instead of
+  # the values below. The secret must contain the keys named in `secretKeys`.
+  # Example:
+  #   existingSecret: "my-fusion-admin-secret"
+  existingSecret: ""
+
+  # -- Map the keys of `existingSecret` to the required fields.
+  # Also the key names of the secret this chart creates when `existingSecret`
+  # is empty.
+  secretKeys:
+    username: "AdminUsername"
+    password: "AdminPassword"
+
+  # -- Credentials for the Fusion admin user.
+  # Used only when `existingSecret` is not provided.
+  adminUser:
+    # -- Admin username
+    username: "admin"
+
+    # -- Admin password (change this in production!)
+    password: "password"
+
+# -- PostgreSQL database backing the Fusion metastore.
+# `enabled: true` makes this chart deploy its own PostgreSQL StatefulSet, so a
+# standalone Fusion install needs nothing else. Set it to false to point Fusion
+# at any existing PostgreSQL - which is what the olake chart does, handing
+# Fusion its own PostgreSQL through `external.existingSecret`.
+postgresql:
+  # -- Deploy a PostgreSQL StatefulSet as part of this chart
+  enabled: true
+
+  # -- Base name for the credentials secret created by the postgresql dependency
+  nameOverride: "fusion"
+
+  # -- Name of the PostgreSQL StatefulSet and Service. Distinct from the olake
+  # chart's bare "postgresql" so a standalone Fusion install alongside an olake
+  # install does not collide in the same namespace.
+  serviceName: "fusion-postgresql"
+
+  # -- Label distinguishing these pods from the olake chart's database pods
+  componentLabel: "fusion-database"
+
+  # -- Databases recorded in the secret, as `<secret key>: <database name>`
+  databases:
+    fusion_database: "fusion"
+
+  # -- Key from `databases` used as POSTGRES_DB on first initialisation
+  primaryDatabaseKey: "fusion_database"
+
+  # -- Credentials for the PostgreSQL this chart deploys.
+  # Only used when `enabled` is true.
+  auth:
+    postgresUser: "fusion"
+    postgresPassword: "fusion"
+    sslMode: "disable"
+
+  # -- Persistent volume for the PostgreSQL this chart deploys
+  persistence:
+    size: 20Gi
+
+  # -- Keys written into the secret this chart creates, and read back by Fusion.
+  # Only used when `enabled` is true.
+  secretKeys:
+    host: "host"
+    port: "port"
+    username: "username"
+    password: "password"
+    fusion_database: "fusion_database"
+    ssl_mode: "ssl_mode"
+
+  # -- Extra annotations for the PostgreSQL Service
+  service:
+    annotations: {}
+
+  # -- Pod scheduling constraints for the PostgreSQL pod
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  securityContext: {}
+
+  # -- PostgreSQL resource requirements (optional overrides)
+  # Defaults: requests: memory=512Mi, cpu=500m
+  resources: {}
+
+  # -- Probe overrides, merged over the chart defaults
+  readinessProbe: {}
+  livenessProbe: {}
+
+  # -- External PostgreSQL configuration (used when `enabled` is false).
+  # The olake chart drives Fusion through this block, pointing it at the
+  # PostgreSQL that chart already manages.
+  external:
+    # -- Name of an existing Kubernetes secret holding the credentials.
+    # The secret must contain the keys named in `external.secretKeys`.
+    # Example secret creation:
+    #   kubectl create secret generic my-fusion-postgres-secret \
+    #     --from-literal=host=my-postgres.example.com \
+    #     --from-literal=port=5432 \
+    #     --from-literal=fusion_database=fusion \
+    #     --from-literal=username=fusion_user \
+    #     --from-literal=password=my_secure_password \
+    #     --from-literal=ssl_mode=disable
+    existingSecret: ""
+
+    # -- Map the keys of the existing secret to the required fields
+    secretKeys:
+      host: "host"
+      port: "port"
+      username: "username"
+      password: "password"
+      fusion_database: "fusion_database"
+      ssl_mode: "ssl_mode"
+
+    # -- Explicit connection properties, used when `existingSecret` is unset.
+    # This chart then creates the secret itself from these values.
+    properties:
+      host: ""
+      port: 5432
+      username: ""
+      password: ""
+      fusion_database: "fusion"
+      ssl_mode: "disable"
+
+  # -- Create the Fusion database on startup if it does not already exist.
+  # Runs as an init container against the configured PostgreSQL instance.
+  createDatabase:
+    enabled: true
+
+  # -- Image used by the PostgreSQL StatefulSet and by the database-creation
+  # init container (needs `psql`)
+  image:
+    repository: library/postgres
+    tag: "14-alpine"
+    pullPolicy: IfNotPresent
+
+# -- Shared ReadWriteMany storage for Fusion and optimizer logs.
+# The Fusion pod and every Spark optimizer master/worker pod mount this claim so
+# their logs land in one place that OLake UI can read.
+sharedStorage:
+  # -- Have this chart create the shared claim, through the bundled `nfs-server`
+  # dependency. Leave false when Fusion runs as a subchart of `olake`: that
+  # chart already creates the claim, and `existingClaim` below mounts it.
+  # Set to true for a standalone Fusion install.
+  create: false
+
+  # -- Mount the shared storage claim. Disable to run Fusion without shared
+  # logging (optimizer logs then stay inside each pod).
+  enabled: true
+
+  # -- Name of an existing ReadWriteMany PVC. The olake chart creates
+  # `olake-shared-storage`; this chart never creates the claim itself.
+  existingClaim: "olake-shared-storage"
+
+  # -- Path the claim is mounted at inside Fusion and optimizer pods
+  mountPath: /data/fusion-logs
+
+  # -- Sub-path within the claim used for Fusion logs
+  subPath: fusion-logs
+
+# -- Bootstrap the optimizer group and optimizers through the Fusion REST API
+# once the Fusion container starts, and release them again on shutdown.
+bootstrap:
+  # -- Run the postStart / preStop lifecycle hooks.
+  # Disable to register optimizers manually from the Fusion dashboard.
+  enabled: true
+
+# -- Fusion config shade properties, used to encrypt sensitive config values
+shade:
+  identifier: "default"
+  sensitiveKeywords: "admin-password;database.password"
+
+# -- Fusion plugins
+plugin:
+  # -- Metric reporters. Unset by default; when configured, a Prometheus
+  # exporter port is opened on the Fusion pod and a Service is created for it.
+  # Example:
+  #   metricReporters:
+  #     prometheusExporter:
+  #       name: prometheus-exporter
+  #       enabled: true
+  #       properties:
+  #         port: 7001
+  #         # Metric filtering by regex (optional, all metrics included by default)
+  #         metric-filter.includes: "table_optimizing_.*|optimizer_group_.*"
+  #         metric-filter.excludes: "table_summary_.*"
+  #       # Optional Service for scraping
+  #       service:
+  #         type: ClusterIP
+  #         port: "7001"
+  #         annotations: {}
+  metricReporters: ~
+
+  # -- Table runtime factories. Set to an empty list to disable the plugin.
+  tableRuntimeFactories:
+    - name: default
+      enabled: true
+      priority: 100
+
+# -- Optimizer configuration (Spark on Kubernetes).
+#
+# Fusion schedules compaction onto an optimizer group. Each optimizer is a Spark
+# application: one MASTER pod (the Spark driver) plus WORKER pods (the Spark
+# executors). Master and workers have very different resource profiles, so they
+# can be scheduled onto different node pools — see `master` and `worker` below.
+optimizer:
+  # -- Optimizer group registered with Fusion during bootstrap
+  group:
+    # -- Name of the optimizer group. OLake UI's `OPTIMIZATION_GROUP` must match.
+    name: spark-container
+    # -- Name of the Fusion container implementation backing the group
+    container: sparkContainer
+
+  # -- Number of optimizer workers requested for the group.
+  # Also caps Fusion's planning parallelism.
+  parallelism: 3
+
+  # -- Optimizer master — the Spark driver pod.
+  # A lightweight, always-on orchestrator.
+  master:
+    # -- Value of the `olake.io/workload` label set on master pods
+    workloadLabel: fusion-master
+
+    # -- Pod scheduling constraints for master pods.
+    # If left empty, falls back to the Fusion pod's `nodeSelector` /
+    # `tolerations` / `affinity` below.
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  # -- Optimizer workers — the Spark executor pods.
+  # Short-lived and heavy; these are what compaction actually runs on.
+  worker:
+    # -- Value of the `olake.io/workload` label set on worker pods
+    workloadLabel: fusion-executor
+
+    # -- Pod scheduling constraints for worker pods.
+    # If left empty, falls back to the Fusion pod's `nodeSelector` /
+    # `tolerations` / `affinity` below.
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  # -- Spark settings shared by the optimizer master and workers
+  spark:
+    # -- Location of the optimizer job JAR inside the Spark image
+    jobUri: "local:///opt/spark/usrlib/optimizer-job.jar"
+
+    # -- Spark optimizer image. Also installed into the Fusion pod by an init
+    # container so Fusion can submit Spark applications.
+    image:
+      repository: olakego/fusion-spark
+      tag: latest
+      pullPolicy: Always
+
+    # -- Extra Spark config entries (rendered as `spark-conf.<key>`).
+    # Example:
+    #   extraConfig:
+    #     spark.sql.shuffle.partitions: "200"
+    extraConfig:
+      spark.dynamicAllocation.enabled: "true"
+      spark.shuffle.service.enabled: "false"
+      spark.dynamicAllocation.shuffleTracking.enabled: "true"
+      spark.driver.memory: "1g"
+      spark.executor.memory: "4g"
+      spark.executor.cores: "1"
+
+    # -- Additional properties for the Fusion optimizer container, passed through
+    # verbatim. Use for things like export.JAVA_HOME, export.HADOOP_CONF_DIR,
+    # export.SPARK_CONF_DIR or ams-optimizing-uri.
+    properties:
+      spark-home: "/opt/spark/"
+      master: "k8s://https://kubernetes.default.svc:443"
+      deploy-mode: "cluster"
+      export.HADOOP_USER_NAME: "spark"
+      export.SPARK_CONF_DIR: "/opt/spark/conf/"
+
+# -- Fusion pod resource requirements (optional overrides).
+# Defaults: requests: memory=512Mi, cpu=500m (no limits by default)
+# Example:
+#   resources:
+#     requests:
+#       cpu: "500m"
+#       memory: "1Gi"
+#     limits:
+#       cpu: "1"
+#       memory: "2Gi"
+resources: {}
+
+# -- Fusion pod security context
+# Example:
+#   securityContext:
+#     runAsNonRoot: false
+#     runAsUser: 1000
+#     runAsGroup: 1000
+#     fsGroup: 1000
+securityContext: {}
+
+# -- Environment variables for the Fusion pod.
+# Example:
+#   env:
+#     CUSTOM_VAR: "value"
+env: {}
+
+# -- Additional volumes for the Fusion pod (templated)
+volumes: []
+
+# -- Additional volumeMounts for the Fusion container (templated)
+volumeMounts: []
+
+# -- Pod scheduling constraints for the Fusion pod
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- Additional pod annotations
+podAnnotations: {}
+
+# -- Additional pod labels
+podLabels: {}
+
+# -- Common labels added to every resource created by this chart
+commonLabels: {}
+
+# -- Common annotations added to the Ingress and HTTPRoute resources
+commonAnnotations: {}
+
+# -- Liveness probe for the Fusion container
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 40
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 10
+  successThreshold: 1
+
+# -- Readiness probe for the Fusion container
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 10
+  successThreshold: 1
+
+# -- Ingress for the Fusion dashboard (the `rest` service)
+ingress:
+  # -- Enable an Ingress resource for the Fusion dashboard
+  enabled: false
+
+  # -- Force the Ingress API version (auto-detected if not set)
+  apiVersion: ""
+
+  # -- IngressClass used to implement the Ingress (Kubernetes 1.18+)
+  ingressClassName: ""
+
+  # -- Default host for the Ingress resource
+  hostname: fusion.local
+
+  # -- Path for the default host
+  path: /
+
+  # -- Ingress path type
+  pathType: ImplementationSpecific
+
+  # -- Additional annotations for the Ingress resource.
+  # Example:
+  #   annotations:
+  #     nginx.ingress.kubernetes.io/rewrite-target: /
+  #     cert-manager.io/cluster-issuer: letsencrypt-prod
+  annotations: {}
+
+  # -- Enable TLS for `ingress.hostname`. The certificate is read from a secret
+  # named `<hostname>-tls`, which cert-manager or `selfSigned` can create.
+  tls: false
+
+  # -- Create the TLS secret for this Ingress using a Helm self-signed certificate
+  selfSigned: false
+
+  # -- Additional hostnames covered by this Ingress record.
+  # Example:
+  #   extraHosts:
+  #     - name: fusion.example.com
+  #       path: /
+  extraHosts: []
+
+  # -- Additional paths added to the main host.
+  # Example (ALB SSL redirect):
+  #   extraPaths:
+  #     - path: /*
+  #       backend:
+  #         serviceName: ssl-redirect
+  #         servicePort: use-annotation
+  extraPaths: []
+
+  # -- TLS configuration for the additional hostnames.
+  # Example:
+  #   extraTls:
+  #     - hosts:
+  #         - fusion.example.com
+  #       secretName: fusion.example.com-tls
+  extraTls: []
+
+  # -- Additional rules for this Ingress record
+  extraRules: []
+
+# -- Gateway API HTTPRoute for the Fusion dashboard.
+# An alternative to `ingress` for clusters using the Gateway API. Requires the
+# Gateway API CRDs and a Gateway installed in the cluster.
+httpRoute:
+  # -- Enable an HTTPRoute resource for the Fusion dashboard
+  enabled: false
+
+  # -- Gateways (and optional listener sections) this route attaches to.
+  # Example:
+  #   parentRefs:
+  #     - name: my-gateway
+  #       namespace: gateway-system
+  #       sectionName: https
+  parentRefs: []
+
+  # -- Default hostname for the HTTPRoute
+  hostname: fusion.local
+
+  # -- Path to match for the main hostname
+  path: /
+
+  # -- Gateway API path match type: PathPrefix, Exact or RegularExpression
+  pathType: PathPrefix
+
+  # -- Additional annotations for the HTTPRoute resource
+  annotations: {}
+
+  # -- Additional hostnames covered by this route
+  extraHosts: []
+
+  # -- Additional rules for this route
+  extraRules: []
+
+# -- In-cluster NFS server, provided by the `nfs-server` dependency and used only
+# when `sharedStorage.create` is true. The keys here are identical to the olake
+# chart's `nfsServer` block; see that chart for the full reference.
+nfsServer:
+  # -- Base name for the NFS server resources
+  nameOverride: "fusion"
+
+  # -- Name of the shared claim this chart creates
+  claimName: "fusion-shared-storage"
+
+  # -- Name of the StorageClass the NFS server provisions through. Distinct from
+  # the olake chart's "nfs-server" so a standalone Fusion install alongside an
+  # olake install does not collide on this cluster-scoped name.
+  storageClass:
+    name: "fusion-nfs-server"
+
+  # -- Deploy the in-cluster NFS server. Set to false to have the claim
+  # provisioned from an existing ReadWriteMany StorageClass instead.
+  enabled: true
+
+  external:
+    # -- StorageClass for dynamic RWX PVC creation.
+    # Required when nfsServer.enabled is false.
+    storageClass: ""

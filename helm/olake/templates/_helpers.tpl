@@ -46,15 +46,43 @@ Create the name of the service account to use for olake-workers
 {{- end }}
 
 {{/*
-Create the name of the service account to use for Fusion
+Resource name base of the Fusion release.
+
+Fusion normally ships as a subchart of this chart, so its resources are named
+from the shared release. This mirrors the `fusion.fullname` helper in that
+chart so the parent can address them without the subchart having to publish
+anything back. Set `fusion.releaseName` instead when Fusion is installed as its
+own release in this namespace.
 */}}
-{{- define "olake.fusionServiceAccountName" -}}
-{{- if .Values.fusion.serviceAccount.create }}
-{{- default (printf "%s-fusion" (include "olake.fullname" .)) .Values.fusion.serviceAccount.name }}
-{{- else }}
-{{- .Values.fusion.serviceAccount.name | default "default" }}
-{{- end }}
-{{- end }}
+{{- define "olake.fusionFullname" -}}
+{{- if .Values.fusion.releaseName -}}
+{{- .Values.fusion.releaseName | trunc 63 | trimSuffix "-" -}}
+{{- else if .Values.fusion.fullnameOverride -}}
+{{- .Values.fusion.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := .Values.fusion.nameOverride | default "fusion" -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Name of the Fusion REST service that OLake UI talks to
+*/}}
+{{- define "olake.fusionRestService" -}}
+{{- .Values.fusion.restService | default (printf "%s-rest" (include "olake.fusionFullname" .)) -}}
+{{- end -}}
+
+{{/*
+Name of the secret holding the Fusion admin credentials.
+Defaults to the secret the fusion chart creates for its release.
+*/}}
+{{- define "olake.fusionAuthSecretName" -}}
+{{- .Values.fusion.auth.existingSecret | default (printf "%s-auth" (include "olake.fusionFullname" .)) -}}
+{{- end -}}
 
 {{/*
 Create the name of the service account to use for job pods

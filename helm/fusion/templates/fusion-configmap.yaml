@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fusion.fullname" . }}-config
+  namespace: {{ include "fusion.namespace" . }}
+  labels:
+    {{- include "fusion.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+data:
+  ## Helm chart provided Fusion configuration
+  config.yaml: |
+    ams:
+      server-expose-host: "127.0.0.1"
+
+      thrift-server:
+        table-service:
+          bind-port: {{ .Values.server.table.port }}
+        optimizing-service:
+          bind-port: {{ .Values.server.optimizing.port }}
+
+      http-server:
+        rest-auth-type: {{ .Values.server.rest.restAuthType }}
+        bind-port: {{ .Values.server.rest.port }}
+
+      optimizer:
+        task-execute-timeout: 1h
+        max-planning-parallelism: {{ .Values.optimizer.parallelism }}
+
+      {{- if or .Values.shade.identifier .Values.shade.sensitiveKeywords }}
+      shade:
+        {{- if .Values.shade.identifier }}
+        identifier: {{ .Values.shade.identifier }}
+        {{- end }}
+        {{- if .Values.shade.sensitiveKeywords }}
+        sensitive-keywords: {{ .Values.shade.sensitiveKeywords }}
+        {{- end }}
+      {{- end }}
+
+      database:
+        type: postgres
+        jdbc-driver-class: org.postgresql.Driver
+        {{- if and (not .Values.postgresql.enabled) .Values.postgresql.external.existingSecret }}
+        # url comes from the AMS_DATABASE_URL env var, built from the secret
+        # named in postgresql.external.existingSecret
+        {{- else }}
+        url: {{ include "fusion.postgresql.jdbcUrl" . | quote }}
+        {{- end }}
+
+      terminal:
+        local:
+          using-session-catalog-for-hive: false
+          spark.sql.iceberg.handle-timestamp-without-timezone: false
+          spark.sql.codegen.wholeStage: false
+
+    containers:
+      - name: {{ .Values.optimizer.group.container }}
+        {{- include "fusion.optimizer.container.spark" . | nindent 8 }}
+
+  ## Pod template for the optimizer master (Spark driver)
+  master-pod-template.yaml: |
+    {{- include "fusion.optimizer.podTemplate" (dict "role" .Values.optimizer.master "context" $) | nindent 4 }}
+
+  ## Pod template for the optimizer workers (Spark executors)
+  worker-pod-template.yaml: |
+    {{- include "fusion.optimizer.podTemplate" (dict "role" .Values.optimizer.worker "context" $) | nindent 4 }}
+  {{- with .Values.plugin.metricReporters }}
+
+  ## Helm chart provided metric reporters configuration
+  metric-reporters.yaml: |
+    metric-reporters:
+      - name: {{ .prometheusExporter.name }}
+        enabled: {{ .prometheusExporter.enabled }}
+        properties:
+          {{ .prometheusExporter.properties | toYaml | nindent 10 | trim }}
+  {{- end }}
+  {{- with .Values.plugin.tableRuntimeFactories }}
+
+  ## Helm chart provided table runtime factories configuration
+  table-runtime-factories.yaml: |
+    table-runtime-factories:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}

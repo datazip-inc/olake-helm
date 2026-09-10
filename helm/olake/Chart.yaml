@@ -35,5 +35,11 @@ dependencies:
     repository: "file://../postgresql"
     alias: postgresql
     condition: postgresql.enabled
+  # Iceberg table maintenance and compaction. Off by default.
+  - name: fusion
+    version: "0.0.1"
+    repository: "file://../fusion"
+    condition: fusion.enabled
+
 annotations:
   helm.sh/schema-validation: "true" # Enable schema validation for this chart

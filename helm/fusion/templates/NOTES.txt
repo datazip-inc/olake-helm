@@ -1,0 +1,85 @@
+🎉 OLake Fusion has been deployed!
+
+Fusion runs one server pod that schedules Iceberg compaction onto a
+Spark-on-Kubernetes optimizer:
+
+  optimizer master   the Spark driver — a lightweight, always-on orchestrator
+  optimizer workers  the Spark executors — where compaction actually runs
+                     (parallelism: {{ .Values.optimizer.parallelism }}, group: {{ .Values.optimizer.group.name }})
+
+📋 ACCESS INSTRUCTIONS:
+
+{{- if .Values.ingress.enabled }}
+
+🌐 INGRESS ACCESS:
+  - Fusion dashboard: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}{{ .Values.ingress.path }}
+{{- else if .Values.httpRoute.enabled }}
+
+🌐 GATEWAY ACCESS:
+  - Fusion dashboard: http://{{ .Values.httpRoute.hostname }}{{ .Values.httpRoute.path }}
+{{- else }}
+
+🔗 PORT-FORWARD ACCESS:
+
+  kubectl port-forward -n {{ include "fusion.namespace" . }} svc/{{ include "fusion.fullname" . }}-rest {{ .Values.server.rest.port }}:{{ .Values.server.rest.port }}
+
+  - Fusion dashboard: http://localhost:{{ .Values.server.rest.port }}
+{{- end }}
+
+{{- if not .Values.auth.existingSecret }}
+
+  - Username: {{ .Values.auth.adminUser.username }}
+  - Password: {{ .Values.auth.adminUser.password }}
+{{- else }}
+
+  Credentials are read from the existing secret {{ .Values.auth.existingSecret }}.
+{{- end }}
+
+🔌 WIRING OLAKE UI TO FUSION:
+
+  You installed Fusion as its own release. To point an existing olake release at
+  it, set the following in the olake chart's values and upgrade that release:
+
+    fusion:
+      enabled: true
+      releaseName: {{ include "fusion.fullname" . | quote }}
+{{- if .Values.auth.existingSecret }}
+      auth:
+        existingSecret: {{ .Values.auth.existingSecret | quote }}
+{{- end }}
+
+  Installing the olake chart with `fusion.enabled=true` instead makes Fusion a
+  subchart of that release, wired up automatically - no releaseName needed.
+
+🔍 WATCHING THE OPTIMIZER:
+
+  kubectl get pods -n {{ include "fusion.namespace" . }} -l olake.io/workload={{ .Values.optimizer.master.workloadLabel }}
+  kubectl get pods -n {{ include "fusion.namespace" . }} -l olake.io/workload={{ .Values.optimizer.worker.workloadLabel }}
+
+
+📦 DATABASE:
+{{- if .Values.postgresql.enabled }}
+
+  This chart deployed its own PostgreSQL, reachable at
+  {{ include "fusion.postgresql.host" . }}:5432.
+
+  To use an existing database instead, set `postgresql.enabled=false` and point
+  `postgresql.external` at it.
+{{- else }}
+
+  Fusion is using an existing PostgreSQL, through the secret
+  {{ include "fusion.postgresql.secretName" . }}.
+{{- end }}
+
+💾 SHARED STORAGE:
+{{- if .Values.sharedStorage.create }}
+
+  This chart created the claim {{ include "fusion.sharedStoragePVC" . }} for
+  optimizer logs.
+{{- else }}
+
+  Optimizer logs go to the existing claim {{ include "fusion.sharedStoragePVC" . }}.
+  Set `sharedStorage.create=true` to have this chart provision its own instead.
+{{- end }}
+
+For more information, visit: https://olake.io/docs
