@@ -239,10 +239,6 @@ func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev
 	log := logger.Log(ctx)
 	current := existing.Spec.Resources.Requests[corev1.ResourceStorage]
 
-	// The size to wait for is what the spec asks, not what this run asks: an
-	// expansion a previous run requested and never saw finish leaves the spec
-	// ahead of the volume, and that run is the one that must not start early.
-	target := current
 	switch requested.Cmp(current) {
 	case 1:
 		patch := existing.DeepCopy()
@@ -259,13 +255,12 @@ func (k *KubernetesExecutor) expandIndexPVC(ctx context.Context, existing *corev
 		}
 
 		log.Info("expanding index PVC", "pvcName", existing.Name, "from", current.String(), "to", requested.String())
-		target = requested
 	case -1:
 		log.Warn("index PVC shrink requested but Kubernetes does not support it; keeping the current size",
 			"pvcName", existing.Name, "current", current.String(), "configured", requested.String())
 	}
 
-	return k.waitForIndexResize(ctx, existing.Name, target, heartbeat)
+	return k.waitForIndexResize(ctx, existing.Name, requested, heartbeat)
 }
 
 // waitForIndexResize blocks until the CSI driver has grown the backing device,
