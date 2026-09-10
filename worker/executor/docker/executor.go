@@ -3,7 +3,10 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -53,9 +56,28 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		return "", err
 	}
 
+	indexMount, err := d.ensureIndexMount(req.JobID, req.Command, req.IndexRequired)
+	if err != nil {
+		log.Error("failed to prepare index directory", "jobID", req.JobID, "error", err)
+		return "", err
+	}
+
 	// Environment variables propagation
+	envVars := utils.GetWorkerEnvVars()
+	if indexMount != nil {
+		envVars[constants.EnvIndexDBDir] = indexMount.Target
+
+		if envVars[constants.EnvIndexDBCacheSize] == "" {
+			envVars[constants.EnvIndexDBCacheSize] = strconv.Itoa(constants.DefaultIndexCacheSizeMB)
+		}
+
+		if envVars[constants.EnvIndexDBMaxOpenFiles] == "" {
+			envVars[constants.EnvIndexDBMaxOpenFiles] = strconv.Itoa(constants.DefaultIndexMaxOpenFiles)
+		}
+	}
+
 	var envs []string
-	for k, v := range utils.GetWorkerEnvVars() {
+	for k, v := range envVars {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
 
@@ -77,6 +99,10 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
 			}
 		}
+	}
+
+	if indexMount != nil {
+		hostConfig.Mounts = append(hostConfig.Mounts, *indexMount)
 	}
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
@@ -114,6 +140,29 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	return string(output), nil
+}
+
+// ensureIndexMount returns the bind mount that carries a job's Pebble index, or
+// nil when the job gets none.
+//
+// The index instead gets its own persistence-root directory keyed
+// on JobID alone, matching the per-job claim the kubernetes executor mounts.
+func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, indexRequired bool) (*mount.Mount, error) {
+	// Opt-in per job, and only for the operations that touch the index.
+	if !slices.Contains(constants.AsyncCommands, operation) || !indexRequired {
+		return nil, nil
+	}
+
+	indexDir := filepath.Join(utils.GetConfigDir(), constants.IndexDirName, fmt.Sprintf("olake-index-%d", jobID))
+	if err := os.MkdirAll(indexDir, constants.DefaultDirPermissions); err != nil {
+		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
+	}
+
+	return &mount.Mount{
+		Type:   mount.TypeBind,
+		Source: utils.GetHostOutputDir(indexDir),
+		Target: constants.DefaultIndexMountPath,
+	}, nil
 }
 
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {

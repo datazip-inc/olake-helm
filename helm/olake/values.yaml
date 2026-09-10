@@ -114,6 +114,41 @@ global:
   #   - "nfs": NFS shared volume (DEPRECATED — support will be removed soon)
   localStorageMode: "nfs"
 
+# -- Per-job index volume for the Pebble index used by the Iceberg
+# positional-delete / deletion-vector write path. `default` holds the settings
+# every job starts from; entries under `jobs` are deep-merged over it field by
+# field (labels and annotations merge per key, every other field is replaced),
+# so set only what differs.
+#
+# A job only gets a volume when its `index_required` is true,
+# `index_required` is true when any of stream in job has positional-delete or deletion-vector enabled.
+#
+# whatever is configured here. The claim is `olake-index-<JobID>` and outlives
+# the pods that use it, so the index survives between runs.
+#
+# Unset fields fall back to the worker defaults: 20Gi, cluster default
+# StorageClass, /var/lib/olake/index, ReadWriteOnce, cacheSizeMB 512,
+# maxOpenFiles 1000.
+# Sizing, disk type, AZ pinning and attachment limits: see README, "Per-Job Index Storage".
+#
+#   jobIndexes:
+#     default:                          # every job starts from this
+#       size: 50Gi                      # grow-only; needs allowVolumeExpansion on the StorageClass. Can be increased safely without loosing volume/index
+#       storageClass: "gp3"             # block storage only, never NFS/EFS; "" uses global.storageClass
+#       accessModes: [ReadWriteOnce]    # block storage is single-attach
+#       mountPath: /var/lib/olake/index
+#       cacheSizeMB: 512                # Pebble block cache, PER STREAM
+#       maxOpenFiles: 1000              # SSTable file descriptors, PER STREAM
+#       labels: {}                      # extra labels on the PVC
+#       annotations: {}                 # extra annotations on the PVC, for backup tooling
+#     jobs:
+#       123:                            # one job; unset fields inherit default
+#         size: 100Gi
+#         existingClaim: ""             # mount this PVC instead of provisioning one. Per-JobID
+#                                       # only, never under `default`. size/storageClass/
+#                                       # accessModes/labels/annotations are ignored for this job
+jobIndexes: {}
+
 # OLake UI - Main application
 olakeUI:
   # -- Number of OLake UI replicas

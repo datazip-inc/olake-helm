@@ -11,6 +11,10 @@ const (
 	ContainerStopTimeout     = 5  // in seconds
 	ContainerCleanupTimeout  = 30 // in seconds
 	DefaultSyncTimeout       = time.Hour * 24 * 30
+	// UnschedulableGracePeriod is how long a pod may stay Pending for a reason
+	// that cannot resolve itself before the run is failed. Generous enough to
+	// absorb a slow volume detach from a dead node.
+	UnschedulableGracePeriod = time.Minute * 10
 	TaskQueue                = "OLAKE_DOCKER_TASK_QUEUE"
 	OperationTypeKey         = "OperationType"
 	DefaultTemporalNamespace = "default"
@@ -22,6 +26,24 @@ const (
 	DockerPersistentDir = "/tmp/olake-config"
 	OutputFileName      = "output.json"
 	TelemetryUserIDPath = "telemetry/user_id"
+
+	// IndexDirName is the persistence-root subdirectory that holds one Pebble
+	// index directory per job. Docker counterpart of the per-job index PVC.
+	IndexDirName = "index"
+	// DefaultIndexSize is the requested size of a job's index volume.
+	DefaultIndexSize = "20Gi"
+	// DefaultIndexMountPath is where the job's index volume is mounted inside the
+	// driver container, in both the kubernetes and docker executors.
+	DefaultIndexMountPath = "/var/lib/olake/index"
+	// DefaultIndexCacheSizeMB is the Pebble block cache size, in megabytes.
+	DefaultIndexCacheSizeMB = 512
+	// DefaultIndexMaxOpenFiles caps the file descriptors Pebble keeps open.
+	DefaultIndexMaxOpenFiles = 1000
+	// IndexResizeTimeout bounds the wait for the CSI driver to grow the backing
+	// device. The filesystem half runs at pod mount and is never waited for.
+	IndexResizeTimeout = time.Minute * 10
+	// IndexResizePollInterval is how often the claim is re-read while it grows.
+	IndexResizePollInterval = time.Second * 5
 
 	// File and directory permissions
 	DefaultDirPermissions  = 0755

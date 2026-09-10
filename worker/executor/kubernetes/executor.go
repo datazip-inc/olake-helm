@@ -122,7 +122,15 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
 	log := logger.Log(ctx)
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
-	podSpec := k.CreatePodSpec(req, workdir, imageName)
+
+	// Provision the per-job index volume before the pod that mounts it.
+	indexVolume, err := k.ensureIndexVolume(ctx, req.JobID, req.Command, req.IndexRequired, req.HeartbeatFunc)
+	if err != nil {
+		log.Error("failed to prepare index volume", "jobID", req.JobID, "command", req.Command, "error", err)
+		return "", err
+	}
+
+	podSpec := k.CreatePodSpec(req, workdir, imageName, indexVolume)
 	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
 
 	if _, err := k.createPod(ctx, podSpec); err != nil {

@@ -1,6 +1,11 @@
 package types
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
 
 type Command string
 
@@ -43,6 +48,28 @@ type JobData struct {
 	DestinationVersion string
 	SourceName         string
 	DestinationName    string
+	// AdvancedSettings is the job's advanced_settings jsonb column, read as text.
+	// Empty when the column is NULL.
+	AdvancedSettings string
+}
+
+// IndexRequired reports whether the job asked for the per-job Pebble index
+// volume, via `index_required` in its advanced settings. Unparseable settings
+// are an error rather than a false: a job that asked for an index and lost it to
+// a typo would otherwise rebuild the index every run with nothing to say why.
+func (j JobData) IndexRequired() (bool, error) {
+	if strings.TrimSpace(j.AdvancedSettings) == "" {
+		return false, nil
+	}
+
+	var settings struct {
+		IndexRequired bool `json:"index_required"`
+	}
+	if err := json.Unmarshal([]byte(j.AdvancedSettings), &settings); err != nil {
+		return false, fmt.Errorf("failed to parse job advanced settings: %s", err)
+	}
+
+	return settings.IndexRequired, nil
 }
 
 type WebhookNotificationArgs struct {
