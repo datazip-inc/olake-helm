@@ -2,7 +2,7 @@ apiVersion: v2
 name: olake
 description: A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 type: application
-version: 0.0.27
+version: 0.0.28
 appVersion: "0.3.10"
 home: https://github.com/datazip-inc/olake-helm
 sources:
@@ -19,6 +19,21 @@ keywords:
 maintainers:
   - name: Team OLake
     email: hello@olake.io
-dependencies: []
+dependencies:
+  # Shared NFS server + the ReadWriteMany claim that OLake workers and Fusion
+  # both mount. Aliased to `nfsServer` so the existing `nfsServer.*` values keep
+  # working unchanged. Intentionally unconditional: when `nfsServer.enabled` is
+  # false this chart still has to create the external-storageClass PVC.
+  - name: nfs-server
+    version: "0.0.1"
+    repository: "file://../nfs-server"
+    alias: nfsServer
+  # PostgreSQL backing OLake UI, Temporal and Fusion. Aliased to `postgresql` so
+  # the existing `postgresql.*` values keep working unchanged.
+  - name: postgresql
+    version: "0.0.1"
+    repository: "file://../postgresql"
+    alias: postgresql
+    condition: postgresql.enabled
 annotations:
   helm.sh/schema-validation: "true" # Enable schema validation for this chart
