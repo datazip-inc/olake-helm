@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smoke-source
+  labels:
+    olake.io/managed: "true"
+    olake.io/kind: source
+data:
+  projectId: "123"
+  userId: "1"
+  config: |
+    {
+      "name": "smoke-source-test_1",
+      "type": "postgres",
+      "version": "latest",
+      "config": "{\"host\":\"pg.example\",\"port\":5432,\"database\":\"smoke\",\"username\":\"smoke\",\"password\":\"smoke\"}"
+    }

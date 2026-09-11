@@ -53,8 +53,8 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if (include "olake.jobServiceAccountName" .) }}
-      serviceAccountName: {{ include "olake.jobServiceAccountName" . }}
+      {{- if (include "olake.uiServiceAccountName" .) }}
+      serviceAccountName: {{ include "olake.uiServiceAccountName" . }}
       {{- end }}
       {{- if or .Values.temporal.enabled .Values.fusion.enabled }}
       initContainers:
@@ -91,7 +91,7 @@ spec:
       {{- end }}
       containers:
       - name: olake-ui
-        image: "{{ include "olake.registryBase" . }}/{{ .Values.olakeUI.image.repository }}:{{ .Values.olakeUI.image.tag }}"
+        image: "{{ include "olake.containerImage" (dict "context" . "repository" .Values.olakeUI.image.repository "tag" .Values.olakeUI.image.tag) }}"
         imagePullPolicy: {{ .Values.olakeUI.image.pullPolicy }}
         ports:
         - name: olake-ui
@@ -111,6 +111,14 @@ spec:
         {{- range $key, $value := .Values.olakeUI.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
+        {{- end }}
+        {{- if .Values.gitops.enabled }}
+        - name: GITOPS_ENABLED
+          value: "true"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         {{- end }}
         # Fusion configuration
         {{- if .Values.fusion.enabled }}
