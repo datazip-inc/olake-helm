@@ -48,7 +48,6 @@ func (w *heartbeatWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-
 func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	_, err := d.client.ImageInspect(ctx, imageName)
