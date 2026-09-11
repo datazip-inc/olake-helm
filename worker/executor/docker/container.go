@@ -33,7 +33,23 @@ type ContainerState struct {
 	ExitCode *int
 }
 
-func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
+type heartbeatWriter struct {
+	ctx           context.Context
+	imageName     string
+	heartbeatFunc func(context.Context, ...interface{})
+	lastHeartbeat time.Time
+}
+
+func (w *heartbeatWriter) Write(p []byte) (int, error) {
+	if w.heartbeatFunc != nil && time.Since(w.lastHeartbeat) > 5*time.Second {
+		w.heartbeatFunc(w.ctx, fmt.Sprintf("pulling image %s", w.imageName))
+		w.lastHeartbeat = time.Now()
+	}
+	return len(p), nil
+}
+
+
+func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if err != nil {
@@ -53,7 +69,14 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		}
 		defer reader.Close()
 
-		if _, err = io.Copy(io.Discard, reader); err != nil {
+		writer := &heartbeatWriter{
+			ctx:           ctx,
+			imageName:     imageName,
+			heartbeatFunc: heartbeatFunc,
+			lastHeartbeat: time.Now(),
+		}
+
+		if _, err = io.Copy(writer, reader); err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 				log.Error("image pull timed out", "image", imageName)
 				return fmt.Errorf("image pull for %s timed out", imageName)
