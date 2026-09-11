@@ -1,4 +1,4 @@
-// GitOps: failure-indicator pods for CR validation errors (spawn/delete via IndicatorWorkflow).
+// GitOps: failure-indicator pods for ConfigMap/Secret validation errors (spawn/delete via IndicatorWorkflow).
 package kubernetes
 
 import (
@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	indicatorImage         = "busybox"
+	indicatorImage          = "busybox"
 	indicatorTerminationMax = 4096
 	indicatorAnnotationMax  = 1024
 
-	labelIndicator = "olake.io/indicator"
-	labelKind      = "olake.io/kind"
-	labelCR        = "olake.io/cr"
+	labelIndicator  = "olake.io/indicator"
+	labelKind       = "olake.io/kind"
+	labelResource   = "olake.io/resource"
 	annotationError = "olake.io/error"
 )
 
@@ -67,9 +67,9 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 			Name:      name,
 			Namespace: ns,
 			Labels: map[string]string{
-				labelIndicator: "true",
-				labelKind:      req.Kind,
-				labelCR:        req.CRName,
+				labelIndicator:   "true",
+				labelKind:        req.Kind,
+				labelResource:    req.ResourceName,
 				"olake.io/phase": "Failed",
 			},
 			Annotations: map[string]string{

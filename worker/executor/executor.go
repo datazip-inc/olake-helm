@@ -18,35 +18,39 @@ import (
 type Executor interface {
 	Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error)
 	Cleanup(ctx context.Context, req *types.ExecutionRequest) error
-	// Indicator is GitOps-only: spawn/delete a failure-indicator pod/container.
-	Indicator(ctx context.Context, req *types.IndicatorRequest) error
 	Close() error
 }
 
+// FailureIndicator spawns or deletes GitOps failure-indicator pods/containers.
+type FailureIndicator interface {
+	Indicator(ctx context.Context, req *types.IndicatorRequest) error
+}
+
 type AbstractExecutor struct {
-	executor Executor
-	db       *database.DB
+	executor  Executor
+	indicator FailureIndicator
+	db        *database.DB
 }
 
 // NewExecutor creates and returns the executor client based on the executor environment
 func NewExecutor(ctx context.Context, db *database.DB) (*AbstractExecutor, error) {
 	executorEnv := utils.GetExecutorEnvironment()
-
-	var exec Executor
-	var err error
-
 	switch executorEnv {
 	case string(types.Docker):
-		exec, err = docker.NewDockerExecutor()
+		d, err := docker.NewDockerExecutor()
+		if err != nil {
+			return nil, err
+		}
+		return &AbstractExecutor{executor: d, indicator: d, db: db}, nil
 	case string(types.Kubernetes):
-		exec, err = kubernetes.NewKubernetesExecutor(ctx)
+		k, err := kubernetes.NewKubernetesExecutor(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &AbstractExecutor{executor: k, indicator: k, db: db}, nil
 	default:
-		exec, err = nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
+		return nil, fmt.Errorf("invalid executor environment: %s", executorEnv)
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &AbstractExecutor{executor: exec, db: db}, nil
 }
 
 func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -116,9 +120,8 @@ func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *type
 	return nil
 }
 
-// Indicator is GitOps-only: spawn/delete a failure-indicator pod/container.
-func (a *AbstractExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
-	return a.executor.Indicator(ctx, req)
+func (a *AbstractExecutor) FailureIndicator() FailureIndicator {
+	return a.indicator
 }
 
 func (a *AbstractExecutor) Close() {

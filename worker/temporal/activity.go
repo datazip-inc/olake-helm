@@ -20,12 +20,13 @@ import (
 
 type Activity struct {
 	executor   *executor.AbstractExecutor
+	indicator  executor.FailureIndicator
 	db         *database.DB
 	tempClient client.Client
 }
 
 func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Activity {
-	return &Activity{executor: e, db: db, tempClient: c.GetClient()}
+	return &Activity{executor: e, indicator: e.FailureIndicator(), db: db, tempClient: c.GetClient()}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -276,9 +277,9 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req type
 	return nil
 }
 
-// IndicatorActivity is GitOps-only: spawns/deletes a failure indicator via the executor.
+// IndicatorActivity is GitOps-only: spawns/deletes a failure indicator.
 func (a *Activity) IndicatorActivity(ctx context.Context, req types.IndicatorRequest) error {
 	log := logger.Log(ctx)
 	log.Info("gitops indicator", "action", req.Action, "name", req.Name, "kind", req.Kind)
-	return a.executor.Indicator(ctx, &req)
+	return a.indicator.Indicator(ctx, &req)
 }

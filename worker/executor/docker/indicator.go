@@ -1,4 +1,4 @@
-// GitOps: failure-indicator containers for CR validation errors (spawn/delete via IndicatorWorkflow).
+// GitOps: failure-indicator containers for ConfigMap/Secret validation errors (spawn/delete via IndicatorWorkflow).
 package docker
 
 import (
@@ -17,7 +17,7 @@ const (
 	indicatorTerminationMax = 4096
 	labelIndicatorDocker    = "olake.io/indicator"
 	labelKindDocker         = "olake.io/kind"
-	labelCRDocker           = "olake.io/cr"
+	labelResourceDocker     = "olake.io/resource"
 	labelPhaseDocker        = "olake.io/phase"
 	// Log the error, then stay alive so the container remains visible in `docker ps`.
 	// Phase=Failed label marks it as a GitOps failure indicator (not a healthy workload).
@@ -62,7 +62,7 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 		Labels: map[string]string{
 			labelIndicatorDocker: "true",
 			labelKindDocker:      req.Kind,
-			labelCRDocker:        req.CRName,
+			labelResourceDocker:  req.ResourceName,
 			labelPhaseDocker:     "Failed",
 		},
 	}

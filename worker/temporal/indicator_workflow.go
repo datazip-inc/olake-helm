@@ -1,4 +1,4 @@
-// GitOps: Temporal workflow that spawns/deletes failure-indicator pods/containers for CR errors.
+// GitOps: Temporal workflow that spawns/deletes failure-indicator pods/containers for ConfigMap/Secret errors.
 package temporal
 
 import (

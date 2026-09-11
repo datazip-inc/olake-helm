@@ -93,10 +93,10 @@ type ProjectSettings struct {
 
 // IndicatorRequest is GitOps-only: sent from olake-ui via IndicatorWorkflow to spawn/delete failure indicators.
 type IndicatorRequest struct {
-	Action    string `json:"action"`    // spawn | delete
-	Name      string `json:"name"`      // pod/container name (DNS-1123)
-	Namespace string `json:"namespace"` // K8s namespace; ignored in Docker mode
-	Kind      string `json:"kind"`      // source | destination | job | streams
-	CRName    string `json:"cr_name"`   // originating ConfigMap name
-	Message   string `json:"message"`   // error text for spawn
+	Action       string `json:"action"`        // spawn | delete
+	Name         string `json:"name"`          // pod/container name (DNS-1123)
+	Namespace    string `json:"namespace"`     // K8s namespace; ignored in Docker mode
+	Kind         string `json:"kind"`          // source | destination | job | streams
+	ResourceName string `json:"resource_name"` // originating ConfigMap or Secret name
+	Message      string `json:"message"`       // error text for spawn
 }
