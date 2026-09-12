@@ -33,21 +33,6 @@ type ContainerState struct {
 	ExitCode *int
 }
 
-type heartbeatWriter struct {
-	ctx           context.Context
-	imageName     string
-	heartbeatFunc func(context.Context, ...interface{})
-	lastHeartbeat time.Time
-}
-
-func (w *heartbeatWriter) Write(p []byte) (int, error) {
-	if w.heartbeatFunc != nil && time.Since(w.lastHeartbeat) > 5*time.Second {
-		w.heartbeatFunc(w.ctx, fmt.Sprintf("pulling image %s", w.imageName))
-		w.lastHeartbeat = time.Now()
-	}
-	return len(p), nil
-}
-
 func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	_, err := d.client.ImageInspect(ctx, imageName)
@@ -57,6 +42,25 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
+
+		done := make(chan struct{})
+		defer close(done)
+
+		if heartbeatFunc != nil {
+			go func() {
+				ticker := time.NewTicker(5 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						heartbeatFunc(ctx, fmt.Sprintf("pulling image %s", imageName))
+					case <-done:
+						return
+					}
+				}
+			}()
+		}
+
 		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{RegistryAuth: registryAuth()})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
@@ -68,14 +72,7 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		}
 		defer reader.Close()
 
-		writer := &heartbeatWriter{
-			ctx:           ctx,
-			imageName:     imageName,
-			heartbeatFunc: heartbeatFunc,
-			lastHeartbeat: time.Now(),
-		}
-
-		if _, err = io.Copy(writer, reader); err != nil {
+		if _, err = io.Copy(io.Discard, reader); err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 				log.Error("image pull timed out", "image", imageName)
 				return fmt.Errorf("image pull for %s timed out", imageName)
