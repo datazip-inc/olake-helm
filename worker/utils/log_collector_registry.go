@@ -5,18 +5,18 @@ import (
 	"sync"
 )
 
-type workflowLogCollectors struct {
-	worker   *workerLogWriter
-	attempts int
+type workerLogWriters struct {
+	workerLogWriter *workerLogWriter
+	attempts        int
 }
 
-type workflowLogCollectorRegistry struct {
+type workerLogWriterRegistry struct {
 	mu      sync.Mutex
-	entries map[string]*workflowLogCollectors
+	entries map[string]*workerLogWriters
 }
 
-var globalWorkflowLogCollectorRegistry = &workflowLogCollectorRegistry{
-	entries: make(map[string]*workflowLogCollectors),
+var globalWorkerLogWriterRegistry = &workerLogWriterRegistry{
+	entries: make(map[string]*workerLogWriters),
 }
 
 type connectorLogCollectors struct {
@@ -39,12 +39,12 @@ func acquireWorkerLogWriter(
 	ctx context.Context,
 	workDir string,
 ) (release func() error, workerWriter *workerLogWriter, err error) {
-	globalWorkflowLogCollectorRegistry.mu.Lock()
-	defer globalWorkflowLogCollectorRegistry.mu.Unlock()
+	globalWorkerLogWriterRegistry.mu.Lock()
+	defer globalWorkerLogWriterRegistry.mu.Unlock()
 
-	if logCollectors := globalWorkflowLogCollectorRegistry.entries[workDir]; logCollectors != nil {
-		logCollectors.attempts++
-		return releaseWorkerLogWriter(workDir), logCollectors.worker, nil
+	if logWriters := globalWorkerLogWriterRegistry.entries[workDir]; logWriters != nil {
+		logWriters.attempts++
+		return releaseWorkerLogWriter(workDir), logWriters.workerLogWriter, nil
 	}
 
 	workerWriter, err = newWorkerLogWriter(ctx, workDir)
@@ -52,32 +52,32 @@ func acquireWorkerLogWriter(
 		return nil, nil, err
 	}
 
-	globalWorkflowLogCollectorRegistry.entries[workDir] = &workflowLogCollectors{
-		worker:   workerWriter,
-		attempts: 1,
+	globalWorkerLogWriterRegistry.entries[workDir] = &workerLogWriters{
+		workerLogWriter: workerWriter,
+		attempts:        1,
 	}
 	return releaseWorkerLogWriter(workDir), workerWriter, nil
 }
 
 func releaseWorkerLogWriter(workDir string) func() error {
 	return func() error {
-		globalWorkflowLogCollectorRegistry.mu.Lock()
-		defer globalWorkflowLogCollectorRegistry.mu.Unlock()
+		globalWorkerLogWriterRegistry.mu.Lock()
+		defer globalWorkerLogWriterRegistry.mu.Unlock()
 
-		logCollectors := globalWorkflowLogCollectorRegistry.entries[workDir]
-		if logCollectors == nil {
+		logWriters := globalWorkerLogWriterRegistry.entries[workDir]
+		if logWriters == nil {
 			return nil
 		}
-		logCollectors.attempts--
-		if logCollectors.attempts > 0 {
+		logWriters.attempts--
+		if logWriters.attempts > 0 {
 			return nil
 		}
 
 		var err error
-		if logCollectors.worker != nil {
-			err = logCollectors.worker.Close()
+		if logWriters.workerLogWriter != nil {
+			err = logWriters.workerLogWriter.Close()
 		}
-		delete(globalWorkflowLogCollectorRegistry.entries, workDir)
+		delete(globalWorkerLogWriterRegistry.entries, workDir)
 		return err
 	}
 }
