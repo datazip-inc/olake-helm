@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/acarl005/stripansi"
@@ -33,7 +32,14 @@ type PodLogBuffer struct {
 	counter               int
 	lastLocalLogTimestamp time.Time // k8s/docker line timestamp for chunk naming
 	lastLocalLogSeq       uint64    // last seq in the buffered chunk
-	mu                    sync.Mutex
+}
+
+// resumePoint is the S3 snapshot used to continue log collection.
+type resumePoint struct {
+	logDir              string
+	lastPodLogTimestamp time.Time
+	lastPodLogSeq       uint64
+	chunkCounter        int // highest uploaded chunk number; 0 if none exist yet
 }
 
 // logChunkMetadata holds resume fields parsed from a chunked log filename.
@@ -57,8 +63,13 @@ type s3Object struct {
 	LastModified time.Time
 }
 
-// NewPodLogBuffer creates a new PodLogBuffer
-func NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix string, counter int) (*PodLogBuffer, error) {
+// NewPodLogBuffer creates a local staging buffer for S3 log chunks.
+func NewPodLogBuffer(workDir, logRelDir, filenamePrefix string, counter int) (*PodLogBuffer, error) {
+	localDir := PodLogLocalDir(workDir)
+	if err := CreateDirectory(localDir); err != nil {
+		return nil, err
+	}
+
 	s3LogDir, err := configStorageKey(workDir, logRelDir, false)
 	if err != nil {
 		return nil, err
@@ -143,88 +154,34 @@ func parseLogChunkMetadata(name, filenamePrefix string) (logChunkMetadata, bool)
 	}, true
 }
 
-// newWorkerPodLogBufferForWorkDir creates a PodLogBuffer for worker logs.
-func newWorkerPodLogBufferForWorkDir(ctx context.Context, workDir string) (*PodLogBuffer, time.Time, uint64, error) {
-	localDir := PodLogLocalDir(workDir)
-	if err := CreateDirectory(localDir); err != nil {
-		return nil, time.Time{}, 0, err
-	}
-
-	lastLogTimestamp, lastLogSeq, chunkCounter, err := resolveLogChunkResumeState(ctx, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref)
-	if err != nil {
-		return nil, time.Time{}, 0, err
-	}
-
-	buffer, err := NewPodLogBuffer(localDir, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref, chunkCounter)
-	if err != nil {
-		return nil, time.Time{}, 0, err
-	}
-	return buffer, lastLogTimestamp, lastLogSeq, nil
-}
-
-// NewConnectorPodLogBuffer creates a new PodLogBuffer for the connector pod logs.
-func newConnectorPodLogBufferForWorkDir(ctx context.Context, workDir, filenamePrefix string) (*PodLogBuffer, time.Time, uint64, error) {
-	localDir := PodLogLocalDir(workDir)
-	if err := CreateDirectory(localDir); err != nil {
-		return nil, time.Time{}, 0, err
-	}
-
-	logRelDir, lastLogTimestamp, lastLogSeq, chunkCounter, err := resolveLogDirState(ctx, workDir, filenamePrefix)
-	if err != nil {
-		return nil, time.Time{}, 0, err
-	}
-
-	buffer, err := NewPodLogBuffer(localDir, workDir, logRelDir, filenamePrefix, chunkCounter)
-	if err != nil {
-		return nil, time.Time{}, 0, err
-	}
-	return buffer, lastLogTimestamp, lastLogSeq, nil
-}
-
-// resolveLogDirState lists log chunks for the current sync_* directory and returns the
-// S3-relative log path, latest chunk timestamp/seq for resume, and highest chunk counter.
-func resolveLogDirState(ctx context.Context, workDir, filenamePrefix string) (logRelDir string, lastLogTimestamp time.Time, lastLogSeq uint64, chunkCounter int, err error) {
-	currentLogDir, err := resolveCurrentLogDir(ctx, workDir)
-	if err != nil {
-		return "", time.Time{}, 0, 0, err
-	}
-	logRelDir = path.Join("logs", currentLogDir)
-
-	lastLogTimestamp, lastLogSeq, chunkCounter, err = resolveLogChunkResumeState(ctx, workDir, logRelDir, filenamePrefix)
-	if err != nil {
-		return "", time.Time{}, 0, 0, err
-	}
-
-	return logRelDir, lastLogTimestamp, lastLogSeq, chunkCounter, nil
-}
-
-// resolveLogChunkResumeState lists log chunks under logRelDir and returns resume metadata from the latest chunk.
-func resolveLogChunkResumeState(ctx context.Context, workDir, logRelDir, filenamePrefix string) (lastLogTimestamp time.Time, lastLogSeq uint64, chunkCounter int, err error) {
+// loadResumePoint lists chunks under logRelDir and returns the latest timestamp/seq/chunkCounter.
+func loadResumePoint(ctx context.Context, workDir, logRelDir, prefix string) (resumePoint, error) {
 	s3LogDir, err := configStorageKey(workDir, logRelDir, true)
 	if err != nil {
-		return time.Time{}, 0, 0, err
+		return resumePoint{}, err
 	}
 
 	s3Objects, err := listS3Objects(ctx, s3LogDir)
 	if err != nil {
-		return time.Time{}, 0, 0, err
+		return resumePoint{}, err
 	}
 
+	resume := resumePoint{logDir: logRelDir}
 	for _, s3object := range s3Objects {
 		keySuffix := strings.TrimPrefix(s3object.Key, s3LogDir)
 		if keySuffix == "" {
 			continue
 		}
-		meta, ok := parseLogChunkMetadata(keySuffix, filenamePrefix)
-		if !ok || meta.counter <= chunkCounter {
+		meta, ok := parseLogChunkMetadata(keySuffix, prefix)
+		if !ok || meta.counter <= resume.chunkCounter {
 			continue
 		}
-		chunkCounter = meta.counter
-		lastLogTimestamp = meta.timestamp
-		lastLogSeq = meta.seq
+		resume.chunkCounter = meta.counter
+		resume.lastPodLogTimestamp = meta.timestamp
+		resume.lastPodLogSeq = meta.seq
 	}
 
-	return lastLogTimestamp, lastLogSeq, chunkCounter, nil
+	return resume, nil
 }
 
 // resolveCurrentLogDir returns the connector log session directory name (sync_*)
@@ -285,9 +242,6 @@ func PodLogLocalDir(workDir string) string {
 
 // Flush uploads the local buffer file to S3 and removes the local file.
 func (b *PodLogBuffer) Flush(ctx context.Context) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	data, err := os.ReadFile(b.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -296,7 +250,7 @@ func (b *PodLogBuffer) Flush(ctx context.Context) error {
 		return err
 	}
 
-	if err := b.uploadTolockeds3(ctx, podLogLineEntry{
+	if err := b.upload(ctx, podLogLineEntry{
 		PodLogTimestamp:   b.lastLocalLogTimestamp,
 		Seq:               b.lastLocalLogSeq,
 		normalizedLogLine: string(data),
@@ -315,9 +269,7 @@ func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLi
 		if flushErr := b.Flush(ctx); flushErr != nil {
 			return flushErr
 		}
-		b.mu.Lock()
-		defer b.mu.Unlock()
-		return b.uploadTolockeds3(ctx, normalizedLogLine)
+		return b.upload(ctx, normalizedLogLine)
 	}
 	if shouldFlush {
 		return b.Flush(ctx)
@@ -326,19 +278,16 @@ func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLi
 }
 
 func (b *PodLogBuffer) appendLine(normalizedLogLine podLogLineEntry) (shouldFlush bool, err error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if !normalizedLogLine.PodLogTimestamp.IsZero() {
 		b.lastLocalLogTimestamp = normalizedLogLine.PodLogTimestamp
 	}
-	if normalizedLogLine.Seq > 0 {
+	if normalizedLogLine.Seq > b.lastLocalLogSeq {
 		b.lastLocalLogSeq = normalizedLogLine.Seq
 	}
-	if err := b.writeToLocalLockedFile([]byte(normalizedLogLine.normalizedLogLine)); err != nil {
+	if err := b.writeLocal([]byte(normalizedLogLine.normalizedLogLine)); err != nil {
 		return false, err
 	}
-	size, err := b.currentLockedBufferSize()
+	size, err := b.currentBufferSize()
 	if err != nil {
 		return false, err
 	}
@@ -352,8 +301,8 @@ func (b *PodLogBuffer) appendLine(normalizedLogLine podLogLineEntry) (shouldFlus
 	return size >= int64(threshold), nil
 }
 
-// currentLockedBufferSize returns the size of the local buffer file.
-func (b *PodLogBuffer) currentLockedBufferSize() (int64, error) {
+// currentBufferSize returns the size of the local buffer file.
+func (b *PodLogBuffer) currentBufferSize() (int64, error) {
 	info, err := os.Stat(b.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -364,8 +313,8 @@ func (b *PodLogBuffer) currentLockedBufferSize() (int64, error) {
 	return info.Size(), nil
 }
 
-// writeToLocalLockedFile writes the data to the local file and returns an error if the file cannot be opened or written.
-func (b *PodLogBuffer) writeToLocalLockedFile(data []byte) (err error) {
+// writeLocal appends data to the local buffer file.
+func (b *PodLogBuffer) writeLocal(data []byte) (err error) {
 	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
 	if err != nil {
 		return err
@@ -383,9 +332,8 @@ func (b *PodLogBuffer) writeToLocalLockedFile(data []byte) (err error) {
 	return nil
 }
 
-// uploadTolockeds3 uploads the data to S3 with the filename.
-func (b *PodLogBuffer) uploadTolockeds3(ctx context.Context, normalizedLogLine podLogLineEntry) error {
-	filename := b.nextLockedFilename(normalizedLogLine)
+func (b *PodLogBuffer) upload(ctx context.Context, normalizedLogLine podLogLineEntry) error {
+	filename := b.nextFilename(normalizedLogLine)
 	key := path.Join(b.s3LogDir, filename)
 
 	client, bucket, err := getS3Client()
@@ -401,8 +349,8 @@ func (b *PodLogBuffer) uploadTolockeds3(ctx context.Context, normalizedLogLine p
 	return err
 }
 
-// nextLockedFilename returns the next filename for the next chunk.
-func (b *PodLogBuffer) nextLockedFilename(normalizedLogLine podLogLineEntry) string {
+// nextFilename returns the next S3 chunk filename and increments the counter.
+func (b *PodLogBuffer) nextFilename(normalizedLogLine podLogLineEntry) string {
 	b.counter++
 	ts := strings.ReplaceAll(normalizedLogLine.PodLogTimestamp.UTC().Format(time.RFC3339Nano), ":", "")
 	return fmt.Sprintf("%s%06d-%s%s%06d.log", b.filenamePrefix, b.counter, ts, logChunkSeqMarker, normalizedLogLine.Seq)

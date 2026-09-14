@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -435,32 +434,27 @@ func RemoveFlagFromArgs(arguments []string, flagName string) []string {
 	return result
 }
 
-// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
-// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
-func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command, newWorkerLogCollector func(ctx context.Context, workflowID, workDir string) (*RuntimeLogCollector, error), newConnectorLogCollector func(ctx context.Context, workflowID, workDir string, command types.Command) (*RuntimeLogCollector, error)) (context.Context, *logger.WorkflowLogFile, error) {
+// PrepareWorkflowLogger attaches a workflow logger to ctx. In S3 mode worker logs are written
+// directly to S3 chunks; in NFS mode it creates logs/ and opens worker.log.
+// Close the returned handle when the workflow finishes.
+func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
 	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
-	workflowLogPath := filepath.Join(workdirPath, "logs")
-	if err := SetupWorkDirectory(workflowLogPath); err != nil {
-		return ctx, nil, err
-	}
 
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
-		releaseCollectors, err := acquireWorkflowLogCollectors(ctx, workflowID, workdirPath, command, newWorkerLogCollector, newConnectorLogCollector)
+		release, workerWriter, err := acquireWorkerLogWriter(ctx, workdirPath)
 		if err != nil {
 			return ctx, nil, err
 		}
 
-		// Same resume as connector logs: last seq is persisted in the chunk filename.
-		var lastLogSeq uint64
-		if _, seq, _, resumeErr := resolveLogChunkResumeState(ctx, workdirPath, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref); resumeErr == nil {
-			lastLogSeq = seq
-		}
-
-		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), io.Discard, func() error {
-			return releaseCollectors(ctx)
-		}, lastLogSeq)
+		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), workerWriter, func() error {
+			return release()
+		}, workerWriter.nextSeq)
 	default:
+		workflowLogPath := filepath.Join(workdirPath, "logs")
+		if err := SetupWorkDirectory(workflowLogPath); err != nil {
+			return ctx, nil, err
+		}
 		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
 	}
 }

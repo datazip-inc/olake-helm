@@ -11,6 +11,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -147,6 +148,16 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 				log.Error("failed to cleanup pod", "podName", podSpec.Name, "command", req.Command, "workflowID", req.WorkflowID, "error", err)
 			}
 		}()
+	}
+
+	if storagemode.Get() == constants.StorageModeS3 {
+		release, err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.RuntimeLogCollector, error) {
+			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to start connector log collector: %s", err)
+		}
+		defer release()
 	}
 
 	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {

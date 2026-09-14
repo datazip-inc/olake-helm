@@ -129,33 +129,8 @@ func (a *AbstractExecutor) RecoverWorkerLogs(ctx context.Context) error {
 	case *docker.DockerExecutor:
 		return docker.RecoverWorkerLogs(ctx, e)
 	case *kubernetes.KubernetesExecutor:
-		return kubernetes.RecoverPreviousWorkerLogs(ctx, e)
+		return kubernetes.RecoverWorkerLogs(ctx, e)
 	default:
 		return nil
-	}
-}
-
-// NewWorkerLogCollector tails this worker's runtime logs for the given activity (S3 mode).
-func (a *AbstractExecutor) NewWorkerLogCollector(ctx context.Context, workflowID, workDir string) (*utils.RuntimeLogCollector, error) {
-	switch e := a.executor.(type) {
-	case *docker.DockerExecutor:
-		return docker.NewWorkerLogCollector(ctx, e, workflowID, workDir)
-	case *kubernetes.KubernetesExecutor:
-		return kubernetes.NewWorkerLogCollector(ctx, e, workflowID, workDir)
-	default:
-		return nil, fmt.Errorf("unsupported executor for worker log collection")
-	}
-}
-
-// NewConnectorLogCollector tails connector runtime logs for async activities (S3 mode).
-func (a *AbstractExecutor) NewConnectorLogCollector(ctx context.Context, workflowID, workDir string, command types.Command) (*utils.RuntimeLogCollector, error) {
-	switch e := a.executor.(type) {
-	case *docker.DockerExecutor:
-		containerName := utils.GetWorkflowDirectory(command, workflowID)
-		return docker.NewContainerLogCollector(ctx, e, containerName, workDir)
-	case *kubernetes.KubernetesExecutor:
-		return kubernetes.NewPodLogCollector(ctx, e, workflowID, workDir)
-	default:
-		return nil, fmt.Errorf("unsupported executor for connector log collection")
 	}
 }

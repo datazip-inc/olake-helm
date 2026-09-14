@@ -3,15 +3,11 @@ package utils
 import (
 	"context"
 	"sync"
-
-	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 type workflowLogCollectors struct {
-	worker    *RuntimeLogCollector
-	connector *RuntimeLogCollector
-	attempts  int
+	worker   *workerLogWriter
+	attempts int
 }
 
 type workflowLogCollectorRegistry struct {
@@ -23,67 +19,111 @@ var globalWorkflowLogCollectorRegistry = &workflowLogCollectorRegistry{
 	entries: make(map[string]*workflowLogCollectors),
 }
 
-// acquireWorkflowLogCollectors returns a release function that must run when the activity attempt ends.
-// Collectors are shared across Temporal activity retries for the same workDir (attempt-counted).
-func acquireWorkflowLogCollectors(
+type connectorLogCollectors struct {
+	collector *RuntimeLogCollector
+	attempts  int
+}
+
+type connectorLogCollectorRegistry struct {
+	mu      sync.Mutex
+	entries map[string]*connectorLogCollectors
+}
+
+var globalConnectorLogCollectorRegistry = &connectorLogCollectorRegistry{
+	entries: make(map[string]*connectorLogCollectors),
+}
+
+// acquireWorkerLogWriter returns a release function that must run when the activity attempt ends.
+// The worker writer is shared across Temporal activity retries for the same workDir.
+func acquireWorkerLogWriter(
 	ctx context.Context,
-	workflowID string,
 	workDir string,
-	command types.Command,
-	newWorkerLogCollector func(ctx context.Context, workflowID, workDir string) (*RuntimeLogCollector, error),
-	newConnectorLogCollector func(ctx context.Context, workflowID, workDir string, command types.Command) (*RuntimeLogCollector, error),
-) (func(context.Context) error, error) {
+) (release func() error, workerWriter *workerLogWriter, err error) {
 	globalWorkflowLogCollectorRegistry.mu.Lock()
 	defer globalWorkflowLogCollectorRegistry.mu.Unlock()
 
 	if logCollectors := globalWorkflowLogCollectorRegistry.entries[workDir]; logCollectors != nil {
 		logCollectors.attempts++
-		return releaseWorkflowLogCollectors(workDir), nil
+		return releaseWorkerLogWriter(workDir), logCollectors.worker, nil
 	}
 
-	workerCollector, err := newWorkerLogCollector(ctx, workflowID, workDir)
+	workerWriter, err = newWorkerLogWriter(ctx, workDir)
 	if err != nil {
-		return nil, err
-	}
-	workerCollector.Start(ctx)
-
-	var connectorCollector *RuntimeLogCollector
-	if newConnectorLogCollector != nil {
-		connectorCollector, err = newConnectorLogCollector(ctx, workflowID, workDir, command)
-		if err != nil {
-			logger.Warnf("failed to start connector log collector for workflowID=%s: %s", workflowID, err)
-		} else {
-			connectorCollector.Start(ctx)
-		}
+		return nil, nil, err
 	}
 
 	globalWorkflowLogCollectorRegistry.entries[workDir] = &workflowLogCollectors{
-		worker:    workerCollector,
-		connector: connectorCollector,
-		attempts:  1,
+		worker:   workerWriter,
+		attempts: 1,
 	}
-	return releaseWorkflowLogCollectors(workDir), nil
+	return releaseWorkerLogWriter(workDir), workerWriter, nil
 }
 
-func releaseWorkflowLogCollectors(workDir string) func(context.Context) error {
-	return func(ctx context.Context) error {
+func releaseWorkerLogWriter(workDir string) func() error {
+	return func() error {
 		globalWorkflowLogCollectorRegistry.mu.Lock()
 		defer globalWorkflowLogCollectorRegistry.mu.Unlock()
 
 		logCollectors := globalWorkflowLogCollectorRegistry.entries[workDir]
-
+		if logCollectors == nil {
+			return nil
+		}
 		logCollectors.attempts--
 		if logCollectors.attempts > 0 {
 			return nil
 		}
 
-		delete(globalWorkflowLogCollectorRegistry.entries, workDir)
+		var err error
 		if logCollectors.worker != nil {
-			logCollectors.worker.Stop(ctx)
+			err = logCollectors.worker.Close()
 		}
-		if logCollectors.connector != nil {
-			logCollectors.connector.Stop(ctx)
+		delete(globalWorkflowLogCollectorRegistry.entries, workDir)
+		return err
+	}
+}
+
+// AcquireConnectorLogCollector returns a shared connector collector for workDir.
+// Overlapping Execute calls (Temporal retries) reuse one buffer and chunk counter.
+// Release from Execute so ownership stays out of the interceptor.
+func AcquireConnectorLogCollector(ctx context.Context, workDir string, newCollector func() (*RuntimeLogCollector, error)) (release func(), err error) {
+	globalConnectorLogCollectorRegistry.mu.Lock()
+	defer globalConnectorLogCollectorRegistry.mu.Unlock()
+
+	if logCollectors := globalConnectorLogCollectorRegistry.entries[workDir]; logCollectors != nil {
+		logCollectors.attempts++
+		return releaseConnectorLogCollector(workDir), nil
+	}
+
+	collector, err := newCollector()
+	if err != nil {
+		return nil, err
+	}
+	collector.Start(context.WithoutCancel(ctx))
+
+	globalConnectorLogCollectorRegistry.entries[workDir] = &connectorLogCollectors{
+		collector: collector,
+		attempts:  1,
+	}
+	return releaseConnectorLogCollector(workDir), nil
+}
+
+func releaseConnectorLogCollector(workDir string) func() {
+	return func() {
+		globalConnectorLogCollectorRegistry.mu.Lock()
+		defer globalConnectorLogCollectorRegistry.mu.Unlock()
+
+		logCollectors := globalConnectorLogCollectorRegistry.entries[workDir]
+		if logCollectors == nil {
+			return
 		}
-		return nil
+		logCollectors.attempts--
+		if logCollectors.attempts > 0 {
+			return
+		}
+
+		if logCollectors.collector != nil {
+			logCollectors.collector.Stop()
+		}
+		delete(globalConnectorLogCollectorRegistry.entries, workDir)
 	}
 }

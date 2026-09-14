@@ -3,7 +3,6 @@ package temporal
 import (
 	"context"
 
-	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -13,11 +12,10 @@ import (
 // LoggingInterceptor automatically sets up workflow file logging for activities.
 type LoggingInterceptor struct {
 	interceptor.WorkerInterceptorBase
-	exec *executor.AbstractExecutor
 }
 
-func NewLoggingInterceptor(exec *executor.AbstractExecutor) *LoggingInterceptor {
-	return &LoggingInterceptor{exec: exec}
+func NewLoggingInterceptor() *LoggingInterceptor {
+	return &LoggingInterceptor{}
 }
 
 func (i *LoggingInterceptor) InterceptActivity(
@@ -26,13 +24,11 @@ func (i *LoggingInterceptor) InterceptActivity(
 ) interceptor.ActivityInboundInterceptor {
 	return &loggingActivityInterceptor{
 		ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next},
-		exec:                           i.exec,
 	}
 }
 
 type loggingActivityInterceptor struct {
 	interceptor.ActivityInboundInterceptorBase
-	exec *executor.AbstractExecutor
 }
 
 func (a *loggingActivityInterceptor) ExecuteActivity(
@@ -44,7 +40,7 @@ func (a *loggingActivityInterceptor) ExecuteActivity(
 		return a.Next.ExecuteActivity(ctx, in)
 	}
 
-	ctxWithLogger, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command, a.exec.NewWorkerLogCollector, a.exec.NewConnectorLogCollector)
+	ctxWithLogger, logFile, err := utils.PrepareWorkflowLogger(ctx, req.WorkflowID, req.Command)
 	if err != nil {
 		logger.Warnf("failed to prepare workflow logger for workflowID=%s: %s", req.WorkflowID, err)
 		return a.Next.ExecuteActivity(ctx, in)

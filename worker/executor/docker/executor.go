@@ -40,6 +40,21 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 	log.Info("running container", "command", req.Command, "image", imageName, "containerName", containerName)
 
+	var containerID string
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
+		defer func() {
+			if containerID == "" {
+				return
+			}
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
+			defer cancel()
+
+			if _, err := d.client.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true}); err != nil {
+				log.Warn("failed to remove container", "containerID", containerID, "error", err)
+			}
+		}()
+	}
+
 	if slices.Contains(constants.AsyncCommands, req.Command) {
 		startOperation, err := d.shouldStartOperation(ctx, req, containerName, workdir)
 		if err != nil {
@@ -107,25 +122,26 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
-	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	containerID, err = d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
 		log.Error("failed to create container", "containerName", containerName, "error", err)
 		return "", err
-	}
-	if !slices.Contains(constants.AsyncCommands, req.Command) {
-		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
-			defer cancel()
-
-			if _, err := d.client.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true}); err != nil {
-				log.Warn("failed to remove container", "containerID", containerID, "error", err)
-			}
-		}()
 	}
 
 	if err := d.startContainer(ctx, containerID); err != nil {
 		log.Error("failed to start container", "containerID", containerID, "error", err)
 		return "", err
+	}
+
+	if storagemode.Get() == constants.StorageModeS3 {
+		release, err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.RuntimeLogCollector, error) {
+			return NewContainerLogCollector(ctx, d, containerID, workdir)
+		})
+		if err != nil {
+			log.Error("failed to start connector log collector", "containerID", containerID, "error", err)
+			return "", fmt.Errorf("failed to start connector log collector: %s", err)
+		}
+		defer release()
 	}
 
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {

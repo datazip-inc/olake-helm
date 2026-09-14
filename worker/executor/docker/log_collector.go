@@ -23,23 +23,9 @@ func NewContainerLogCollector(ctx context.Context, d *DockerExecutor, containerI
 		func(ctx context.Context) bool {
 			state := d.getContainerState(ctx, containerID, "")
 			if !state.Exists {
-				// Collector starts before the container is created; keep retrying until it exists.
 				return true
 			}
 			return state.Running
-		},
-	)
-}
-
-func NewWorkerLogCollector(ctx context.Context, d *DockerExecutor, workflowID, workDir string) (*utils.RuntimeLogCollector, error) {
-	containerID, err := workerContainerID()
-	if err != nil {
-		return nil, err
-	}
-
-	return utils.NewWorkerLogCollector(ctx, workflowID, workDir,
-		func(ctx context.Context, lastLogTimestamp time.Time, follow bool) (io.Reader, error) {
-			return openDockerLogStream(ctx, d, containerID, lastLogTimestamp, follow)
 		},
 	)
 }

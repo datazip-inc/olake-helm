@@ -2,9 +2,13 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
@@ -14,50 +18,61 @@ type workflowLogKey struct {
 	command    types.Command
 }
 
-// NewWorkerLogCollector tails worker container logs via the runtime API and uploads chunks to S3.
-func NewWorkerLogCollector(ctx context.Context, workflowID, workDir string, streamLogs StreamFunc) (*RuntimeLogCollector, error) {
-	buffer, lastLogTimestamp, lastLogSeq, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
+// workerLogWriter writes live worker logs into the same S3 chunk buffer connector logs use.
+type workerLogWriter struct {
+	buffer *PodLogBuffer
+	seq    atomic.Uint64
+	mu     sync.Mutex
+}
+
+func newWorkerLogWriter(ctx context.Context, workDir string) (*workerLogWriter, error) {
+	resume, err := loadResumePoint(ctx, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref)
+	if err != nil {
+		return nil, err
+	}
+	buffer, err := NewPodLogBuffer(workDir, resume.logDir, constants.WorkerLogFilenamePref, resume.chunkCounter)
 	if err != nil {
 		return nil, err
 	}
 
-	// First collection for this workflow: tail from activity start, not entire container history.
-	activityStart := time.Now().UTC()
-	if lastLogTimestamp.IsZero() {
-		lastLogTimestamp = activityStart.Add(-2 * time.Second)
+	writer := &workerLogWriter{buffer: buffer}
+	writer.seq.Store(resume.lastPodLogSeq)
+	return writer, nil
+}
+
+func (w *workerLogWriter) nextSeq() uint64 {
+	return w.seq.Add(1)
+}
+
+func (w *workerLogWriter) Write(logLine []byte) (int, error) {
+	if len(logLine) == 0 {
+		return 0, nil
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	runtimeLogCollector := &RuntimeLogCollector{
-		buffer:           buffer,
-		lastLogTimestamp: lastLogTimestamp,
-		streamLogs:       streamLogs,
-		done:             make(chan struct{}),
+	var parsed podLogLineEntry
+	_ = json.Unmarshal(logLine, &parsed)
+
+	writeCtx, cancel := context.WithTimeout(context.Background(), logFinishTimeout)
+	defer cancel()
+	if err := w.buffer.WriteLine(writeCtx, podLogLineEntry{
+		Seq:               parsed.Seq,
+		PodLogTimestamp:   time.Now().UTC(),
+		normalizedLogLine: string(logLine),
+	}); err != nil {
+		logger.Warnf("failed to persist worker log line: %s", err)
+		return 0, err
 	}
+	return len(logLine), nil
+}
 
-	runtimeLogCollector.processLine = func(ctx context.Context, rawLogLine string) error {
-		normalizedLogLine, ok := parsePodLogLine(rawLogLine)
-		if !ok {
-			return nil
-		}
-		// Only lines tagged for this activity; skip startup/root-logger noise without workflowID.
-		if normalizedLogLine.WorkflowID != workflowID {
-			return nil
-		}
-		if normalizedLogLine.Seq > 0 {
-			if normalizedLogLine.Seq <= lastLogSeq {
-				return nil
-			}
-			lastLogSeq = normalizedLogLine.Seq
-		}
-
-		runtimeLogCollector.lastLogTimestampMu.Lock()
-		runtimeLogCollector.lastLogTimestamp = normalizedLogLine.PodLogTimestamp
-		runtimeLogCollector.lastLogTimestampMu.Unlock()
-
-		return runtimeLogCollector.buffer.WriteLine(ctx, normalizedLogLine)
-	}
-
-	return runtimeLogCollector, nil
+func (w *workerLogWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	flushCtx, cancel := context.WithTimeout(context.Background(), logFinishTimeout)
+	defer cancel()
+	return w.buffer.Flush(flushCtx)
 }
 
 // RecoverWorkerLogs reads a one-shot runtime log stream and uploads missing lines per workflow.
@@ -122,20 +137,25 @@ func groupWorkerLogLines(reader io.Reader) (map[workflowLogKey][]podLogLineEntry
 // appendWorkerLogLines appends worker log lines to the buffer and flushes them to S3.
 func appendWorkerLogLines(ctx context.Context, workflowID string, command types.Command, normalizedLogLines []podLogLineEntry) error {
 	_, workDir := GetWorkflowDirAndSubDir(workflowID, command)
-	buffer, _, lastLogSeq, err := newWorkerPodLogBufferForWorkDir(ctx, workDir)
+	resume, err := loadResumePoint(ctx, workDir, constants.WorkerLogRelDir, constants.WorkerLogFilenamePref)
 	if err != nil {
 		return err
 	}
+	buffer, err := NewPodLogBuffer(workDir, resume.logDir, constants.WorkerLogFilenamePref, resume.chunkCounter)
+	if err != nil {
+		return err
+	}
+	lastLogSeq := resume.lastPodLogSeq
 
 	for _, normalizedLogLine := range normalizedLogLines {
-		if normalizedLogLine.Seq > 0 {
-			if normalizedLogLine.Seq <= lastLogSeq {
-				continue
-			}
-			lastLogSeq = normalizedLogLine.Seq
+		if normalizedLogLine.Seq > 0 && normalizedLogLine.Seq <= lastLogSeq {
+			continue
 		}
 		if err := buffer.WriteLine(ctx, normalizedLogLine); err != nil {
 			return err
+		}
+		if normalizedLogLine.Seq > 0 {
+			lastLogSeq = normalizedLogLine.Seq
 		}
 	}
 	return buffer.Flush(ctx)

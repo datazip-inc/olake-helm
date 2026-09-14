@@ -34,15 +34,7 @@ func NewPodLogCollector(ctx context.Context, k *KubernetesExecutor, workflowID, 
 	)
 }
 
-func NewWorkerLogCollector(ctx context.Context, k *KubernetesExecutor, workflowID, workDir string) (*utils.RuntimeLogCollector, error) {
-	return utils.NewWorkerLogCollector(ctx, workflowID, workDir,
-		func(ctx context.Context, lastLogTimestamp time.Time, follow bool) (io.Reader, error) {
-			return openPodLogStream(ctx, k, workerPodName(), constants.WorkerContainerName, lastLogTimestamp, follow, false)
-		},
-	)
-}
-
-func RecoverPreviousWorkerLogs(ctx context.Context, k *KubernetesExecutor) error {
+func RecoverWorkerLogs(ctx context.Context, k *KubernetesExecutor) error {
 	podName := workerPodName()
 
 	logger.Infof("recovering worker logs from previous container for pod %s", podName)

@@ -3,7 +3,7 @@ package utils
 import (
 	"context"
 	"io"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -12,6 +12,7 @@ import (
 const (
 	logReconnectInitial = time.Second
 	logReconnectMax     = 30 * time.Second
+	logFinishTimeout    = 30 * time.Second
 )
 
 // StreamFunc opens a log stream from the given resume timestamp.
@@ -21,42 +22,63 @@ type StreamFunc func(ctx context.Context, lastLogTimestamp time.Time, follow boo
 type StillRunningFunc func(ctx context.Context) bool
 
 // RuntimeLogCollector tails runtime logs, buffers locally, and uploads chunks to S3.
+// One owner goroutine runs follow, catch-up, and flush. Stop only signals and joins.
 type RuntimeLogCollector struct {
-	buffer *PodLogBuffer
+	buffer              *PodLogBuffer
+	lastPodLogTimestamp time.Time
+	lastPodLogSeq       atomic.Uint64
+	streamLogs          StreamFunc
+	stillRunning        StillRunningFunc
+	streamCtx           context.Context
+	cancel              context.CancelFunc
+	done                chan struct{}
+}
 
-	lastLogTimestamp   time.Time
-	lastLogTimestampMu sync.Mutex
-
-	streamCancel   context.CancelFunc
-	streamCancelMu sync.Mutex
-
-	streamLogs   StreamFunc
-	stillRunning StillRunningFunc
-
-	processLine func(ctx context.Context, rawLogLine string) error
-
-	done chan struct{}
-	wg   sync.WaitGroup
+// processLogLine parses a raw stream line, skips old seq, and writes the buffer.
+func (c *RuntimeLogCollector) processLogLine(ctx context.Context, rawLogLine string) error {
+	normalizedLogLine, ok := parsePodLogLine(rawLogLine)
+	if !ok {
+		return nil
+	}
+	if normalizedLogLine.Seq > 0 && normalizedLogLine.Seq <= c.lastPodLogSeq.Load() {
+		return nil
+	}
+	if err := c.buffer.WriteLine(ctx, normalizedLogLine); err != nil {
+		return err
+	}
+	if normalizedLogLine.Seq > 0 {
+		c.lastPodLogSeq.Store(normalizedLogLine.Seq)
+	}
+	c.lastPodLogTimestamp = normalizedLogLine.PodLogTimestamp
+	return nil
 }
 
 func (c *RuntimeLogCollector) Start(ctx context.Context) {
-	c.wg.Add(1)
+	c.streamCtx, c.cancel = context.WithCancel(ctx)
 	go func() {
-		defer c.wg.Done()
-		c.follow(ctx)
+		defer close(c.done)
+		defer func() {
+			finishCtx, cancel := context.WithTimeout(context.Background(), logFinishTimeout)
+			defer cancel()
+			c.catchUp(finishCtx)
+			if err := c.buffer.Flush(finishCtx); err != nil {
+				logger.Warnf("failed to flush remaining logs: %s", err)
+			}
+		}()
+		c.follow()
 	}()
 }
 
-func (c *RuntimeLogCollector) follow(ctx context.Context) {
+func (c *RuntimeLogCollector) follow() {
 	backoff := logReconnectInitial
 
 	for {
-		err := c.runStream(ctx)
-		if c.shouldStop(ctx) {
+		err := c.runStream()
+		if c.streamCtx.Err() != nil {
 			return
 		}
 
-		if c.stillRunning != nil && !c.stillRunning(ctx) {
+		if c.stillRunning != nil && !c.stillRunning(c.streamCtx) {
 			return
 		}
 
@@ -65,39 +87,19 @@ func (c *RuntimeLogCollector) follow(ctx context.Context) {
 		}
 
 		select {
-		case <-c.done:
-			return
-		case <-ctx.Done():
+		case <-c.streamCtx.Done():
 			return
 		case <-time.After(backoff):
 		}
 
-		if err != nil && backoff < logReconnectMax {
-			backoff *= 2
-			if backoff > logReconnectMax {
-				backoff = logReconnectMax
-			}
+		if err != nil {
+			backoff = min(backoff*2, logReconnectMax)
 		}
 	}
 }
 
-func (c *RuntimeLogCollector) runStream(ctx context.Context) error {
-	c.lastLogTimestampMu.Lock()
-	lastLogTimestamp := c.lastLogTimestamp
-	c.lastLogTimestampMu.Unlock()
-
-	streamCtx, cancel := context.WithCancel(ctx)
-	c.streamCancelMu.Lock()
-	c.streamCancel = cancel
-	c.streamCancelMu.Unlock()
-	defer func() {
-		cancel()
-		c.streamCancelMu.Lock()
-		c.streamCancel = nil
-		c.streamCancelMu.Unlock()
-	}()
-
-	reader, err := c.streamLogs(streamCtx, lastLogTimestamp, true)
+func (c *RuntimeLogCollector) runStream() error {
+	reader, err := c.streamLogs(c.streamCtx, c.lastPodLogTimestamp, true)
 	if err != nil {
 		return err
 	}
@@ -106,44 +108,20 @@ func (c *RuntimeLogCollector) runStream(ctx context.Context) error {
 	}
 
 	return readPodLogStream(reader, func(rawLogLine string) error {
-		return c.processLine(ctx, rawLogLine)
+		return c.processLogLine(c.streamCtx, rawLogLine)
 	})
 }
 
-func (c *RuntimeLogCollector) shouldStop(ctx context.Context) bool {
-	select {
-	case <-c.done:
-		return true
-	case <-ctx.Done():
-		return true
-	default:
-		return false
+func (c *RuntimeLogCollector) Stop() {
+	if c.cancel == nil {
+		return
 	}
-}
-
-func (c *RuntimeLogCollector) Stop(ctx context.Context) {
-	c.cancelStream()
-	close(c.done)
-	c.wg.Wait()
-	c.catchUp(ctx)
-
-	if err := c.buffer.Flush(ctx); err != nil {
-		logger.Warnf("failed to flush remaining logs: %s", err)
-	}
+	c.cancel()
+	<-c.done
 }
 
 func (c *RuntimeLogCollector) catchUp(ctx context.Context) {
-	c.lastLogTimestampMu.Lock()
-	lastLogTimestamp := c.lastLogTimestamp
-	c.lastLogTimestampMu.Unlock()
-	if lastLogTimestamp.IsZero() {
-		return
-	}
-
-	catchUpCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	reader, err := c.streamLogs(catchUpCtx, lastLogTimestamp, false)
+	reader, err := c.streamLogs(ctx, c.lastPodLogTimestamp, false)
 	if err != nil {
 		logger.Warnf("failed to catch up logs: %s", err)
 		return
@@ -153,16 +131,8 @@ func (c *RuntimeLogCollector) catchUp(ctx context.Context) {
 	}
 
 	if err := readPodLogStream(reader, func(rawLogLine string) error {
-		return c.processLine(ctx, rawLogLine)
+		return c.processLogLine(ctx, rawLogLine)
 	}); err != nil {
 		logger.Warnf("failed to read catch-up logs: %s", err)
 	}
-}
-
-func (c *RuntimeLogCollector) cancelStream() {
-	c.streamCancelMu.Lock()
-	if c.streamCancel != nil {
-		c.streamCancel()
-	}
-	c.streamCancelMu.Unlock()
 }
