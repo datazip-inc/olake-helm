@@ -101,30 +101,20 @@ func RecoverWorkerLogs(ctx context.Context, streamLogs func(ctx context.Context)
 }
 
 // groupWorkerLogLines groups worker log lines by workflowID and command.
+// Only lines that carry workflowID are recovered; inheriting it from a previous
+// line would pull in unrelated stdout (startup logs, debug prints) and write
+// seq-less chunks that reset resume seq to 0.
 func groupWorkerLogLines(reader io.Reader) (map[workflowLogKey][]podLogLineEntry, error) {
 	groupedNormalizedLogLines := make(map[workflowLogKey][]podLogLineEntry)
-	var workflowID string
-	var command types.Command
 
 	err := readPodLogStream(reader, func(rawLogLine string) error {
 		normalizedLogLine, ok := parsePodLogLine(rawLogLine)
-		if !ok {
+		if !ok || normalizedLogLine.WorkflowID == "" {
 			return nil
 		}
 
-		if normalizedLogLine.WorkflowID != "" {
-			workflowID = normalizedLogLine.WorkflowID
-		}
-		if workflowID == "" {
-			return nil
-		}
-		if normalizedLogLine.Command != "" {
-			command = types.Command(normalizedLogLine.Command)
-		}
-		if command == "" {
-			command = types.Sync
-		}
-		key := workflowLogKey{workflowID: workflowID, command: command}
+		command := Ternary(normalizedLogLine.Command == "", types.Sync, types.Command(normalizedLogLine.Command)).(types.Command)
+		key := workflowLogKey{workflowID: normalizedLogLine.WorkflowID, command: command}
 		groupedNormalizedLogLines[key] = append(groupedNormalizedLogLines[key], normalizedLogLine)
 		return nil
 	})

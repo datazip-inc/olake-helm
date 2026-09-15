@@ -254,6 +254,10 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 		return &types.Result{OK: true}, nil
 	}
 
+	if state.Exists && !state.Running {
+		d.flushExitedConnectorLogs(ctx, workDir, containerName)
+	}
+
 	// If container exists and exited, treat as finished: cleanup and return status
 	if state.Exists && !state.Running && state.ExitCode != nil {
 		log.Info("container exited", "workflowID", req.WorkflowID, "containerName", containerName, "exitCode", *state.ExitCode)

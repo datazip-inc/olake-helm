@@ -158,6 +158,22 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	return string(output), nil
 }
 
+// flushExitedConnectorLogs one-shot catch-up + S3 flush while the container still exists.
+func (d *DockerExecutor) flushExitedConnectorLogs(ctx context.Context, workDir, containerName string) {
+	if storagemode.Get() != constants.StorageModeS3 {
+		return
+	}
+	log := logger.Log(ctx)
+	collector, err := NewContainerLogCollector(ctx, d, containerName, workDir)
+	if err != nil {
+		log.Error("failed to flush remaining connector logs", "containerName", containerName, "error", err)
+		return
+	}
+	if err := collector.Drain(); err != nil {
+		log.Error("failed to flush remaining connector logs", "containerName", containerName, "error", err)
+	}
+}
+
 // ensureIndexMount returns the bind mount that carries a job's Pebble index, or
 // nil when the job gets none.
 //

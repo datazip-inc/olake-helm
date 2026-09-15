@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -50,6 +51,17 @@ func (c *RuntimeLogCollector) processLogLine(ctx context.Context, rawLogLine str
 		c.lastPodLogSeq.Store(normalizedLogLine.Seq)
 	}
 	c.lastPodLogTimestamp = normalizedLogLine.PodLogTimestamp
+	return nil
+}
+
+// Drain uploads remaining logs from the resume point without starting a follow goroutine.
+func (c *RuntimeLogCollector) Drain() error {
+	finishCtx, cancel := context.WithTimeout(context.Background(), logFinishTimeout)
+	defer cancel()
+	c.catchUp(finishCtx)
+	if err := c.buffer.Flush(finishCtx); err != nil {
+		return fmt.Errorf("failed to flush remaining logs: %s", err)
+	}
 	return nil
 }
 

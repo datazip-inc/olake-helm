@@ -173,12 +173,19 @@ func loadResumePoint(ctx context.Context, workDir, logRelDir, prefix string) (re
 			continue
 		}
 		meta, ok := parseLogChunkMetadata(keySuffix, prefix)
-		if !ok || meta.counter <= resume.chunkCounter {
+		if !ok {
 			continue
 		}
-		resume.chunkCounter = meta.counter
-		resume.lastPodLogTimestamp = meta.timestamp
-		resume.lastPodLogSeq = meta.seq
+		// Latest chunk wins for counter/timestamp (used as the Docker/K8s since cursor).
+		// Seq must be the max across chunks: a later chunk of seq-less lines is named
+		// -seq000000 and must not reset resume back to 0.
+		if meta.counter > resume.chunkCounter {
+			resume.chunkCounter = meta.counter
+			resume.lastPodLogTimestamp = meta.timestamp
+		}
+		if meta.seq > resume.lastPodLogSeq {
+			resume.lastPodLogSeq = meta.seq
+		}
 	}
 
 	return resume, nil
@@ -227,9 +234,8 @@ func parsePodLogLine(rawLogLine string) (podLogLineEntry, bool) {
 		return podLogLineEntry{}, false
 	}
 	var normalizedLogLine podLogLineEntry
-	if err := json.Unmarshal([]byte(strings.TrimSpace(normalizedLine)), &normalizedLogLine); err != nil {
-		return podLogLineEntry{}, false
-	}
+	// Ignore type errors
+	_ = json.Unmarshal([]byte(strings.TrimSpace(normalizedLine)), &normalizedLogLine)
 	normalizedLogLine.PodLogTimestamp = podLogTimestamp
 	normalizedLogLine.normalizedLogLine = normalizedLine
 	return normalizedLogLine, true
