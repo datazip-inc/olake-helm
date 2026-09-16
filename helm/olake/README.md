@@ -167,6 +167,54 @@ global:
 
 **Deprecation Notice:** The legacy `global.jobMapping` configuration (which only supported `nodeSelector`) is deprecated and will be removed in a future release. Users are strongly advised to migrate to `global.jobProfiles`, which provides feature-rich scheduling capabilities including tolerations and affinity rules.
 
+### Per-Job Index Storage
+
+The Iceberg positional-delete / deletion-vector write path keeps a Pebble index while it
+writes. Without storage that outlives the pod, that index is discarded when the sync pod
+goes away and rebuilt from scratch on the next run. The chart gives each job its own block
+volume for it — one PersistentVolumeClaim named `olake-index-<JobID>`, which the worker
+never deletes — so the index survives between runs, and a job's `sync` and
+`clear-destination` pods mount the same volume.
+
+A job gets a volume only when its `index_required` advanced setting is true, which is set
+when any of its streams uses positional deletes or deletion vectors. Nothing is
+provisioned for jobs that do not ask.
+
+Use block storage. The index needs POSIX locking and reliable `fsync`, so a shared
+RWX filesystem (NFS, EFS, Azure Files) is not a supported backing store for it.
+
+#### Configuring
+
+Sizing and placement come from the top-level `jobIndexes` block — not from
+`global.jobProfiles`, which only places the pod. `default` is what every job starts from,
+and entries under `jobs` are deep-merged over it field by field, so set only what differs.
+
+```yaml
+jobIndexes:
+  default: # inherited by every job
+    size: 50Gi
+    storageClass: "gp3"
+  jobs:
+    123: # JobID - deep-merged over `default`
+      size: 200Gi
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `size` | `20Gi` | Grow-only. |
+| `storageClass` | `global.storageClass`, then the cluster default | Block storage. |
+| `accessModes` | `[ReadWriteOnce]` | |
+| `mountPath` | `/var/lib/olake/index` | Where the connector opens the index. |
+| `cacheSizeMB` | `512` | Pebble block cache, **per stream**. |
+| `maxOpenFiles` | `1000` | SSTable file descriptors, **per stream**. |
+| `labels` / `annotations` | none | Written once, when the claim is created. Merge per key with `default`. |
+| `existingClaim` | none | Mount a PVC you created instead of provisioning one. |
+
+Apply changes with `helm upgrade`. The worker watches its ConfigMap, so they take effect
+on each job's next run without a restart. Raising `size` expands the claim on that run,
+which needs `allowVolumeExpansion: true` on the StorageClass; Kubernetes rejects
+shrinking, and every other field applies only to claims that do not exist yet.
+
 ### Fusion Compaction Scheduling
 
 Fusion runs two kinds of pods with very different resource profiles:
@@ -498,6 +546,23 @@ kubectl logs -l app.kubernetes.io/name=olake-workers -f
    kubectl get pods -l app.kubernetes.io/name=olake-nfs-server
    kubectl describe storageclass nfs-server
    ```
+
+5. **Sync pod stuck in `Pending` with `volume node affinity conflict`**
+
+   The job's index volume is pinned to one availability zone and the pod cannot schedule there.
+   ```bash
+   # Which zone is the job's index volume pinned to?
+   kubectl get pv -o custom-columns=\
+   NAME:.metadata.name,\
+   CLAIM:.spec.claimRef.name,\
+   ZONE:'.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]'
+
+   # Why did scheduling fail?
+   kubectl describe pod <pod-name> | grep -A5 FailedScheduling
+   ```
+   The worker fails the run with an explicit message after the pod has been unschedulable for 10 minutes, rather than letting the activity hang until the sync timeout. Fix by aligning the job profile's `nodeSelector` / `affinity` with that zone. There is no way to move an EBS volume between AZs; migrating means snapshotting the volume and restoring it in the target zone, or discarding the claim and paying a full index rebuild.
+
+   Transient rejections are not failed early: a cluster waiting on the autoscaler, or a `Multi-Attach error` while the previous node's volume detaches (up to ~6 minutes after an ungraceful node loss), are left to resolve on their own.
 
 ## Uninstallation
 

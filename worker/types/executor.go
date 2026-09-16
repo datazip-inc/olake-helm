@@ -25,6 +25,10 @@ type ExecutionRequest struct {
 	Timeout       time.Duration `json:"timeout"`
 	OutputFile    string        `json:"output_file"`
 	TempPath      string        `json:"temp_path"`
+	// IndexRequired mirrors the job's `index_required` advanced setting. Only a
+	// job that asks for it gets an index volume, so a deployment that does not
+	// use the Iceberg delete path provisions no storage at all.
+	IndexRequired bool `json:"index_required"`
 
 	// k8s specific fields
 	HeartbeatFunc func(context.Context, ...interface{}) `json:"-"`
