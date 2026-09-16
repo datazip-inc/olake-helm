@@ -466,8 +466,8 @@ temporal:
   server:
     # -- Temporal server image configuration
     image:
-      repository: temporalio/auto-setup
-      tag: "1.22.3"
+      repository: temporalio/server
+      tag: "1.32.0"
       pullPolicy: Always
 
     # -- Pod scheduling constraints
@@ -504,6 +504,15 @@ temporal:
     #   runAsUser: 1000
     #   runAsGroup: 1000
     securityContext: {}
+
+  # -- temporalio/admin-tools image, used by the schema-migration and namespace-creation
+  # initContainers (temporal-sql-tool / temporal CLI). Keep the tag in sync with
+  # temporal.server.image.tag.
+  adminTools:
+    image:
+      repository: temporalio/admin-tools
+      tag: "1.32.0"
+      pullPolicy: Always
 
   # -- Temporal Web UI configuration (disabled by default)
   ui:
