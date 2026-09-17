@@ -11,6 +11,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,15 +31,16 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace           string
+	PVCName             string
+	S3CredentialsSecret string
+	ServiceAccount      string
+	JobServiceAccount   string
+	SecretKey           string
+	BasePath            string
+	WorkerIdentity      string
+	SecurityContext     *corev1.PodSecurityContext
+	JobPodAnnotations   map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -63,6 +65,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	// Get config from environment
 	namespace := viper.GetString(constants.EnvNamespace)
 	pvcName := viper.GetString(constants.EnvStoragePVCName)
+	s3CredentialsSecret := viper.GetString(constants.EnvS3CredentialsSecret)
 	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	secretKey := viper.GetString(constants.EnvSecretKey)
@@ -103,15 +106,16 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		namespace:     namespace,
 		configWatcher: watcher,
 		config: &KubernetesConfig{
-			Namespace:         namespace,
-			PVCName:           pvcName,
-			ServiceAccount:    serviceAccount,
-			JobServiceAccount: jobServiceAccount,
-			SecretKey:         secretKey,
-			BasePath:          basePath,
-			WorkerIdentity:    workerIdenttity,
-			SecurityContext:   securityContext,
-			JobPodAnnotations: jobPodAnnotations,
+			Namespace:           namespace,
+			PVCName:             pvcName,
+			S3CredentialsSecret: s3CredentialsSecret,
+			ServiceAccount:      serviceAccount,
+			JobServiceAccount:   jobServiceAccount,
+			SecretKey:           secretKey,
+			BasePath:            basePath,
+			WorkerIdentity:      workerIdenttity,
+			SecurityContext:     securityContext,
+			JobPodAnnotations:   jobPodAnnotations,
 		},
 	}, nil
 }
@@ -137,6 +141,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
+			utils.ReleaseConnectorLogCollector(workdir)
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
@@ -144,6 +149,14 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 				log.Error("failed to cleanup pod", "podName", podSpec.Name, "command", req.Command, "workflowID", req.WorkflowID, "error", err)
 			}
 		}()
+	}
+
+	if storagemode.Get() == constants.StorageModeS3 {
+		if err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
+			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)
+		}, true); err != nil {
+			return "", fmt.Errorf("failed to start connector log collector: %s", err)
+		}
 	}
 
 	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
@@ -164,6 +177,9 @@ func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRe
 	log := logger.Log(ctx)
 	podName := k.sanitizeName(req.WorkflowID)
 	log.Info("cleaning up pod", "podName", podName, "workflowID", req.WorkflowID)
+
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	utils.ReleaseConnectorLogCollector(workDir)
 
 	if err := k.cleanupPod(ctx, podName); err != nil {
 		log.Error("failed to cleanup pod", "podName", podName, "error", err)

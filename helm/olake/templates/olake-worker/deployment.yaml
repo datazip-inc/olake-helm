@@ -53,8 +53,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
-      {{- if .Values.temporal.enabled }}
+      {{- if or .Values.temporal.enabled (and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3")) }}
       initContainers:
+      {{- if .Values.temporal.enabled }}
       - name: wait-for-temporal
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent
@@ -68,6 +69,22 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      {{- end }}
+      {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+      - name: wait-for-minio
+        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO to be ready..."
+          until nc -z {{ include "olake.minio.serviceName" . }}.{{ include "olake.namespace" . }}.svc.cluster.local 9000; do
+            echo "MinIO is not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "MinIO is ready!"
+      {{- end }}
       {{- end }}
       containers:
       - name: olake-workers
@@ -131,6 +148,39 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        # Log storage configuration
+        - name: OLAKE_STORAGE_MODE
+          value: {{ include "olake.storageMode" . | quote }}
+        {{- if eq (include "olake.storageMode" .) "s3" }}
+        - name: OLAKE_S3_BUCKET
+          value: {{ required "s3LogFileStorage.bucket is required when S3 log storage is active" .Values.s3LogFileStorage.bucket | quote }}
+        - name: OLAKE_S3_REGION
+          value: {{ required "s3LogFileStorage.region is required when S3 log storage is active" .Values.s3LogFileStorage.region | quote }}
+        {{- if .Values.s3LogFileStorage.prefix }}
+        - name: OLAKE_S3_PREFIX
+          value: {{ .Values.s3LogFileStorage.prefix | quote }}
+        {{- end }}
+        {{- $endpoint := include "olake.s3Endpoint" . -}}
+        {{- if $endpoint }}
+        - name: OLAKE_S3_ENDPOINT
+          value: {{ $endpoint | quote }}
+        {{- end }}
+        {{- $s3Secret := include "olake.s3CredentialsSecretName" . -}}
+        {{- if $s3Secret }}
+        - name: OLAKE_S3_CREDENTIALS_SECRET
+          value: {{ $s3Secret | quote }}
+        - name: OLAKE_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ $s3Secret }}
+              key: OLAKE_S3_ACCESS_KEY_ID
+        - name: OLAKE_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $s3Secret }}
+              key: OLAKE_S3_SECRET_ACCESS_KEY
+        {{- end }}
+        {{- end }}
         envFrom:
         - configMapRef:
             name: olake-workers-config
@@ -150,7 +200,7 @@ spec:
           "timeoutSeconds" 5
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" "echo ok > /data/olake-jobs/.healthcheck && wget -q --spider --timeout=2 http://localhost:8090/ready"))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.workerReadinessProbeShell" .)))
         }}
         {{- $readinessProbe := mergeOverwrite $defaultReadinessProbe (.Values.olakeWorker.readinessProbe | default dict) }}
         readinessProbe:
@@ -161,7 +211,7 @@ spec:
           "timeoutSeconds" 10
           "failureThreshold" 3
           "successThreshold" 1
-          "exec" (dict "command" (list "/bin/sh" "-c" "echo ok > /data/olake-jobs/.healthcheck && wget -q --spider --timeout=2 http://localhost:8090/health"))
+          "exec" (dict "command" (list "/bin/sh" "-c" (include "olake.workerLivenessProbeShell" .)))
         }}
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.olakeWorker.livenessProbe | default dict) }}
         livenessProbe:
@@ -171,5 +221,9 @@ spec:
           mountPath: /data/olake-jobs
       volumes:
       - name: shared-storage
+        {{- if eq (include "olake.storageMode" .) "nfs" }}
         persistentVolumeClaim:
           claimName: {{ include "olake.sharedStoragePVC" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
