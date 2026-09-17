@@ -18,6 +18,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
@@ -335,6 +336,10 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 						{
 							Name:  "OLAKE_WORKFLOW_ID",
 							Value: req.WorkflowID,
+						},
+						{
+							Name:  constants.EnvConfigFolder,
+							Value: utils.ConnectorConfigDir(req.Command, req.WorkflowID),
 						},
 						{
 							Name:  constants.EnvSecretKey,

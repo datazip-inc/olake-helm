@@ -279,7 +279,11 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	}
 
 	// First launch path: only if we never launched and nothing is running
-	if !utils.WorkflowAlreadyLaunched(ctx, workDir) {
+	alreadyLaunched, err := utils.WorkflowAlreadyLaunched(ctx, workDir)
+	if err != nil {
+		return nil, err
+	}
+	if !alreadyLaunched {
 		return &types.Result{OK: true}, nil
 	}
 

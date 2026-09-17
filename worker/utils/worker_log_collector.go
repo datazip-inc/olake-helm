@@ -6,7 +6,6 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
@@ -53,14 +52,11 @@ func (w *workerLogWriter) Write(logLine []byte) (int, error) {
 
 	var parsed podLogLineEntry
 	_ = json.Unmarshal(logLine, &parsed)
+	parsed.normalizedLogLine = string(logLine)
 
 	writeCtx, cancel := context.WithTimeout(context.Background(), logFinishTimeout)
 	defer cancel()
-	if err := w.buffer.WriteLine(writeCtx, podLogLineEntry{
-		Seq:               parsed.Seq,
-		PodLogTimestamp:   time.Now().UTC(),
-		normalizedLogLine: string(logLine),
-	}); err != nil {
+	if err := w.buffer.WriteLine(writeCtx, parsed); err != nil {
 		logger.Warnf("failed to persist worker log line: %s", err)
 		return 0, err
 	}

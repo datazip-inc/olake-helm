@@ -219,15 +219,16 @@ func ReadFileFromS3(ctx context.Context, workDir, relativePath string, validateJ
 // workflowConnectorLogsExistInS3 mirrors the NFS check for logs/sync_*/olake.log:
 // true only when connector log chunks have been uploaded for this workflow.
 // Worker retries before the first chunk is uploaded still look like a first launch.
-func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) bool {
+// List/path errors are unknown, not "never launched".
+func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, error) {
 	logsPath, err := configStorageKey(workDir, "logs", true)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to resolve logs path: %s", err)
 	}
 
 	s3Objects, err := listS3Objects(ctx, logsPath)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to list objects in %s: %s", logsPath, err)
 	}
 
 	for _, s3object := range s3Objects {
@@ -236,10 +237,10 @@ func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) bool {
 			continue
 		}
 		if strings.HasPrefix(parts[0], constants.ConnectorLogDirPrefix) && strings.HasPrefix(parts[1], constants.PodLogFilenamePref) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // deleteS3Object deletes a single object from the configured S3 bucket.

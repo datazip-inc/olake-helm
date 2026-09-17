@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func NewPodLogCollector(ctx context.Context, k *KubernetesExecutor, workflowID, workDir string) (*utils.RuntimeLogCollector, error) {
+func NewPodLogCollector(ctx context.Context, k *KubernetesExecutor, workflowID, workDir string) (*utils.ConnectorLogCollector, error) {
 	podName := k.sanitizeName(workflowID)
 	return utils.NewConnectorLogCollector(
 		ctx,

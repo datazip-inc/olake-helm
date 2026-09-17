@@ -43,6 +43,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	var containerID string
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
+			utils.ReleaseConnectorLogCollector(workdir)
 			if containerID == "" {
 				return
 			}
@@ -79,6 +80,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	// Environment variables propagation
 	envVars := utils.GetWorkerEnvVars()
+	envVars[constants.EnvConfigFolder] = utils.ConnectorConfigDir(req.Command, req.WorkflowID)
 	if indexMount != nil {
 		envVars[constants.EnvIndexDBDir] = indexMount.Target
 
@@ -134,14 +136,13 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	if storagemode.Get() == constants.StorageModeS3 {
-		release, err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.RuntimeLogCollector, error) {
+		err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
 			return NewContainerLogCollector(ctx, d, containerID, workdir)
-		})
+		}, true)
 		if err != nil {
 			log.Error("failed to start connector log collector", "containerID", containerID, "error", err)
 			return "", fmt.Errorf("failed to start connector log collector: %s", err)
 		}
-		defer release()
 	}
 
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
@@ -158,18 +159,17 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	return string(output), nil
 }
 
-// flushExitedConnectorLogs one-shot catch-up + S3 flush while the container still exists.
+// flushExitedConnectorLogs uploads leftover connector logs while the container still exists.
+// Closes a live follow collector if this process started one, then drains.
 func (d *DockerExecutor) flushExitedConnectorLogs(ctx context.Context, workDir, containerName string) {
 	if storagemode.Get() != constants.StorageModeS3 {
 		return
 	}
 	log := logger.Log(ctx)
-	collector, err := NewContainerLogCollector(ctx, d, containerName, workDir)
+	err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
+		return NewContainerLogCollector(ctx, d, containerName, workDir)
+	}, false)
 	if err != nil {
-		log.Error("failed to flush remaining connector logs", "containerName", containerName, "error", err)
-		return
-	}
-	if err := collector.Drain(); err != nil {
 		log.Error("failed to flush remaining connector logs", "containerName", containerName, "error", err)
 	}
 }
@@ -200,6 +200,9 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
 	log := logger.Log(ctx)
 	log.Info("stopping container for cleanup", "workflowID", req.WorkflowID)
+
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	utils.ReleaseConnectorLogCollector(workDir)
 
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		log.Error("failed to stop container", "workflowID", req.WorkflowID, "error", err)

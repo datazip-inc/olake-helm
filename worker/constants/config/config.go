@@ -94,11 +94,13 @@ func requiredEnvVars() error {
 	case constants.StorageModeS3:
 		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
 	default:
-		if execEnv == string(types.Docker) {
-			requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
-		} else {
+		if execEnv == string(types.Kubernetes) {
 			requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
 		}
+	}
+
+	if execEnv == string(types.Docker) {
+		requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
 	}
 
 	var missing []string

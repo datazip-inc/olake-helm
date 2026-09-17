@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/client"
 )
 
-func NewContainerLogCollector(ctx context.Context, d *DockerExecutor, containerID, workDir string) (*utils.RuntimeLogCollector, error) {
+func NewContainerLogCollector(ctx context.Context, d *DockerExecutor, containerID, workDir string) (*utils.ConnectorLogCollector, error) {
 	return utils.NewConnectorLogCollector(
 		ctx,
 		workDir,

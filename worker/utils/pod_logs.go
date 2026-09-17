@@ -34,6 +34,7 @@ type PodLogBuffer struct {
 	lastLocalLogSeq       uint64    // last seq in the buffered chunk
 }
 
+// TODO: optimize per-line open/stat and synchronous PutObject on Flush (keep the file handle open, track size in memory, bounded async upload queue).
 // resumePoint is the S3 snapshot used to continue log collection.
 type resumePoint struct {
 	logDir              string
@@ -51,10 +52,12 @@ type logChunkMetadata struct {
 
 // podLogLineEntry is a parsed pod log line: JSON fields, k8s/docker timestamp, and normalized line text.
 type podLogLineEntry struct {
-	WorkflowID        string `json:"workflowID"`
-	Command           string `json:"command"`
-	Seq               uint64 `json:"seq"`
-	PodLogTimestamp   time.Time
+	WorkflowID string `json:"workflowID"`
+	Command    string `json:"command"`
+	Seq        uint64 `json:"seq"`
+	// PodLogTimestamp is the chunk/resume timestamp. Worker JSON fills it from
+	// zerolog "time"; parsePodLogLine then overwrites it with the docker/k8s prefix.
+	PodLogTimestamp   time.Time `json:"time"`
 	normalizedLogLine string
 }
 

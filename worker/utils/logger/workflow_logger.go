@@ -14,32 +14,23 @@ import (
 // ctxKey is the key type for the logger in the context.
 type ctxKey struct{}
 
-// WorkflowLogFile holds the log sink for a workflow and must be closed when the workflow finishes.
+// WorkflowLogFile holds the NFS worker.log handle. S3 mode has no file to close.
 type WorkflowLogFile struct {
-	file    *os.File
-	onClose func() error
+	file *os.File
 }
 
-// Close must be called when the workflow finishes.
+// Close must be called when the activity finishes. Nil-safe for S3 mode.
 func (wf *WorkflowLogFile) Close() error {
-	if wf == nil {
+	if wf == nil || wf.file == nil {
 		return nil
 	}
-	var err error
-	switch {
-	case wf.file != nil:
-		err = wf.file.Close()
-	case wf.onClose != nil:
-		err = wf.onClose()
-	}
-	return err
+	return wf.file.Close()
 }
 
-// InitWorkflowLoggerForS3 creates a zerolog.Logger that writes to stdout and the given writer.
-// workflowID and command are attached to every log line for S3 worker log routing.
-// nextSeq is the single owner of worker log sequence numbers; overlapping activity
-// attempts must share the same function so JSON seq stays unique.
-func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, onClose func() error, nextSeq func() uint64) (context.Context, *WorkflowLogFile, error) {
+// InitWorkflowLoggerForS3 logs to stdout and fileWriter with workflowID, command, and nextSeq.
+// There is no file handle to close; the writer is released by the interceptor for
+// discover/check, and by PostSync/PostClear for sync/clear-destination.
+func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, nextSeq func() uint64) (context.Context, error) {
 	stdoutWriter := createStdoutWriter()
 	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, fileWriter)
 	log := zerolog.New(multiWriter).Hook(zerolog.HookFunc(func(e *zerolog.Event, _ zerolog.Level, _ string) {
@@ -52,7 +43,7 @@ func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fi
 		log = log.With().Str("command", command).Logger()
 	}
 
-	return CtxWithLogger(ctx, log), &WorkflowLogFile{onClose: onClose}, nil
+	return CtxWithLogger(ctx, log), nil
 }
 
 // Note: workflowDir must already exist before calling this function.

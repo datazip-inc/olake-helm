@@ -54,7 +54,11 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
-	if !utils.WorkflowAlreadyLaunched(ctx, workdir) && req.Configs != nil {
+	alreadyLaunched, err := utils.WorkflowAlreadyLaunched(ctx, workdir)
+	if err != nil {
+		return nil, err
+	}
+	if !alreadyLaunched && req.Configs != nil {
 		if err := utils.WriteConfigFiles(ctx, workdir, req.Configs); err != nil {
 			log.Error("failed to write config files", "workdir", workdir, "error", err)
 			return nil, err

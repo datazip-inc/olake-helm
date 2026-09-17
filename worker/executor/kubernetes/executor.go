@@ -141,6 +141,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 
 	if !slices.Contains(constants.AsyncCommands, req.Command) {
 		defer func() {
+			utils.ReleaseConnectorLogCollector(workdir)
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
@@ -151,13 +152,11 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	}
 
 	if storagemode.Get() == constants.StorageModeS3 {
-		release, err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.RuntimeLogCollector, error) {
+		if err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
 			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)
-		})
-		if err != nil {
+		}, true); err != nil {
 			return "", fmt.Errorf("failed to start connector log collector: %s", err)
 		}
-		defer release()
 	}
 
 	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
@@ -178,6 +177,9 @@ func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRe
 	log := logger.Log(ctx)
 	podName := k.sanitizeName(req.WorkflowID)
 	log.Info("cleaning up pod", "podName", podName, "workflowID", req.WorkflowID)
+
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	utils.ReleaseConnectorLogCollector(workDir)
 
 	if err := k.cleanupPod(ctx, podName); err != nil {
 		log.Error("failed to cleanup pod", "podName", podName, "error", err)

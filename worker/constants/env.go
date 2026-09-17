@@ -69,6 +69,10 @@ const (
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 
+	// EnvConfigFolder is the workflow config directory the connector should use.
+	// NFS: /mnt/config (the mounted workflow subdir). S3: s3://bucket/[prefix/]{workflow-dir}.
+	EnvConfigFolder = "CONFIG_FOLDER"
+
 	// path the olake driver opens its Pebble index at. The executor mounts the
 	// job's index volume here and pins the variable on the driver container.
 	EnvIndexDBDir = "OLAKE_INDEX_DB_DIR"

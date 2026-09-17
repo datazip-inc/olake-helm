@@ -17,6 +17,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
+	"golang.org/x/mod/semver"
 )
 
 // Ternary returns trueValue if condition is true, otherwise returns falseValue
@@ -241,28 +242,49 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
+// s3 mode only supports connector versions that are at least the minimum version "v0.9.2"
+func ValidateConnectorVersionForStorageMode(version string) error {
+	if storagemode.Get() != constants.StorageModeS3 {
+		return nil
+	}
+	if !semver.IsValid(version) {
+		return nil
+	}
+	if semver.Compare(version, constants.MinS3StorageModeVersion) < 0 {
+		return fmt.Errorf("connector version %s does not support S3 storage mode: requires %s or later", version, constants.MinS3StorageModeVersion)
+	}
+	return nil
+}
+
 // WorkflowAlreadyLaunched reports whether this workflow has already started a connector run.
 // Config files alone do not count — they are written before the container/pod is launched.
-func WorkflowAlreadyLaunched(ctx context.Context, workdir string) bool {
+func WorkflowAlreadyLaunched(ctx context.Context, workdir string) (bool, error) {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
-		return workflowConnectorLogsExistInS3(ctx, workdir)
+		alreadyLaunched, err := workflowConnectorLogsExistInS3(ctx, workdir)
+		if err != nil {
+			return false, err
+		}
+		return alreadyLaunched, nil
 	default:
 		logDir := filepath.Join(workdir, "logs")
 		entries, err := os.ReadDir(logDir)
 		if err != nil {
-			return false
+			if os.IsNotExist(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf("failed to read log directory %s: %s", logDir, err)
 		}
 
 		for _, entry := range entries {
 			if entry.IsDir() {
 				olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
 				if _, err := os.Stat(olakeLogPath); err == nil {
-					return true
+					return true, nil
 				}
 			}
 		}
-		return false
+		return false, nil
 	}
 }
 
@@ -317,54 +339,34 @@ func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, 
 	return subdir, workdir
 }
 
-// connectorConfigPath returns the path the connector binary should read for a config file.
-// NFS mounts the workflow dir at /mnt/config; S3 uses s3://bucket/[prefix/]{workflow-dir}/file.
-func connectorConfigPath(command types.Command, workflowID, filename string) string {
+// ConnectorConfigDir is the config folder the connector should read and write.
+// NFS mounts the workflow dir at /mnt/config. S3 is s3://bucket/[prefix/]{workflow-dir}.
+func ConnectorConfigDir(command types.Command, workflowID string) string {
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
 		bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
-		jobDir := GetWorkflowDirectory(command, workflowID)
-		key := path.Join(jobDir, filename)
+		key := GetWorkflowDirectory(command, workflowID)
 		if prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/"); prefix != "" {
 			key = path.Join(prefix, key)
 		}
 		return fmt.Sprintf("s3://%s/%s", bucket, key)
 	default:
-		// Workflow dir is mounted at /mnt/config (K8s subPath or Docker bind mount).
-		return path.Join(constants.ContainerMountDir, filename)
+		return constants.ContainerMountDir
 	}
 }
 
-// RefreshConnectorArgs rebuilds CLI args from the execution WorkflowID.
-// Schedule metadata is baked with the stable schedule ID (e.g. sync-123-1), but Temporal
-// runs each fire under a unique ID (sync-123-1-<timestamp>). Configs are written under the
-// execution ID hash, so Args must match that path — not the schedule-time hash.
-// When revertToSync is true, Command is reset to Sync first (used after clear-destination).
-func RefreshConnectorArgs(req *types.ExecutionRequest, revertToSync bool) {
-	if req == nil || req.WorkflowID == "" {
-		return
-	}
-	if revertToSync {
-		req.Command = types.Sync
+// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
+func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
+	args := []string{
+		"sync",
+		"--config", "/mnt/config/source.json",
+		"--destination", "/mnt/config/destination.json",
+		"--catalog", "/mnt/config/streams.json",
+		"--state", "/mnt/config/state.json",
 	}
 
-	switch req.Command {
-	case types.Sync:
-		req.Args = []string{
-			"sync",
-			"--config", connectorConfigPath(types.Sync, req.WorkflowID, "source.json"),
-			"--destination", connectorConfigPath(types.Sync, req.WorkflowID, "destination.json"),
-			"--catalog", connectorConfigPath(types.Sync, req.WorkflowID, "streams.json"),
-			"--state", connectorConfigPath(types.Sync, req.WorkflowID, "state.json"),
-		}
-	case types.ClearDestination:
-		req.Args = []string{
-			"clear-destination",
-			"--streams", connectorConfigPath(types.ClearDestination, req.WorkflowID, "streams.json"),
-			"--state", connectorConfigPath(types.ClearDestination, req.WorkflowID, "state.json"),
-			"--destination", connectorConfigPath(types.ClearDestination, req.WorkflowID, "destination.json"),
-		}
-	}
+	req.Command = types.Sync
+	req.Args = args
 }
 
 // ExtractJSONAndMarshal extracts and returns the last valid JSON block from output
@@ -435,21 +437,20 @@ func RemoveFlagFromArgs(arguments []string, flagName string) []string {
 }
 
 // PrepareWorkflowLogger attaches a workflow logger to ctx. In S3 mode worker logs are written
-// directly to S3 chunks; in NFS mode it creates logs/ and opens worker.log.
-// Close the returned handle when the workflow finishes.
+// directly to S3 chunks and the returned handle is nil. In NFS mode it creates logs/ and
+// opens worker.log; close that handle when the activity finishes.
 func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
 	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
 
 	switch storagemode.Get() {
 	case constants.StorageModeS3:
-		release, workerWriter, err := acquireWorkerLogWriter(ctx, workdirPath)
+		workerWriter, err := acquireWorkerLogWriter(ctx, workdirPath)
 		if err != nil {
 			return ctx, nil, err
 		}
 
-		return logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), workerWriter, func() error {
-			return release()
-		}, workerWriter.nextSeq)
+		ctxWithLogger, err := logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), workerWriter, workerWriter.nextSeq)
+		return ctxWithLogger, nil, err
 	default:
 		workflowLogPath := filepath.Join(workdirPath, "logs")
 		if err := SetupWorkDirectory(workflowLogPath); err != nil {

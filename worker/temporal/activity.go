@@ -63,6 +63,10 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 	// base telemetry payload for non-sync commands; old CLI versions just ignore the file
 	telemetry.WriteConfigs(req, telemetry.BasePayload(ctx, req))
 
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
+	}
+
 	return a.executor.Execute(ctx, req)
 }
 
@@ -117,6 +121,11 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventStarted, "")
 	}
 
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, "")
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
+	}
+
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
@@ -145,6 +154,10 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 }
 
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest, status syncStatus) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	// After telemetry below, not in Cleanup: this activity still logs on the writer.
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
 	log.Info("cleaning up sync for job", "jobID", req.JobID)
 
@@ -193,6 +206,9 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
 	log.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
@@ -200,7 +216,7 @@ func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRe
 		return err
 	}
 
-	utils.RefreshConnectorArgs(req, true)
+	utils.RevertUpdatesInSchedule(req)
 
 	// update the schedule
 	workflowID, scheduleID := utils.SyncWorkflowAndScheduleID(req.ProjectID, req.JobID)

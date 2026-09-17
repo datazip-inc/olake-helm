@@ -55,6 +55,10 @@ const (
 	StorageModeNFS = "nfs"
 	StorageModeS3  = "s3"
 
+	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
+	// TODO: change to v0.10.2 when the connector is released
+	MinS3StorageModeVersion = "v0.10.2"
+
 	// Kubernetes ConfigMap names
 	GlobalEnvConfigMap  = "olake-global-env"
 	WorkersConfigMap    = "olake-workers-config"

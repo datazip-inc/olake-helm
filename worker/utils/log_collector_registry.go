@@ -3,127 +3,105 @@ package utils
 import (
 	"context"
 	"sync"
-)
 
-type workerLogWriters struct {
-	workerLogWriter *workerLogWriter
-	attempts        int
-}
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+)
 
 type workerLogWriterRegistry struct {
 	mu      sync.Mutex
-	entries map[string]*workerLogWriters
+	entries map[string]*workerLogWriter
 }
 
 var globalWorkerLogWriterRegistry = &workerLogWriterRegistry{
-	entries: make(map[string]*workerLogWriters),
-}
-
-type connectorLogCollectors struct {
-	collector *RuntimeLogCollector
-	attempts  int
+	entries: make(map[string]*workerLogWriter),
 }
 
 type connectorLogCollectorRegistry struct {
 	mu      sync.Mutex
-	entries map[string]*connectorLogCollectors
+	entries map[string]*ConnectorLogCollector
 }
 
 var globalConnectorLogCollectorRegistry = &connectorLogCollectorRegistry{
-	entries: make(map[string]*connectorLogCollectors),
+	entries: make(map[string]*ConnectorLogCollector),
 }
 
-// acquireWorkerLogWriter returns a release function that must run when the activity attempt ends.
-// The worker writer is shared across Temporal activity retries for the same workDir.
-func acquireWorkerLogWriter(
-	ctx context.Context,
-	workDir string,
-) (release func() error, workerWriter *workerLogWriter, err error) {
+// acquireWorkerLogWriter returns the worker log writer for workDir, creating it only if missing.
+// A Temporal retry that finds an existing writer reuses it; logging follows the
+// container/pod.
+func acquireWorkerLogWriter(ctx context.Context, workDir string) (*workerLogWriter, error) {
 	globalWorkerLogWriterRegistry.mu.Lock()
 	defer globalWorkerLogWriterRegistry.mu.Unlock()
 
-	if logWriters := globalWorkerLogWriterRegistry.entries[workDir]; logWriters != nil {
-		logWriters.attempts++
-		return releaseWorkerLogWriter(workDir), logWriters.workerLogWriter, nil
+	if writer := globalWorkerLogWriterRegistry.entries[workDir]; writer != nil {
+		return writer, nil
 	}
 
-	workerWriter, err = newWorkerLogWriter(ctx, workDir)
+	workerWriter, err := newWorkerLogWriter(ctx, workDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	globalWorkerLogWriterRegistry.entries[workDir] = &workerLogWriters{
-		workerLogWriter: workerWriter,
-		attempts:        1,
-	}
-	return releaseWorkerLogWriter(workDir), workerWriter, nil
+	globalWorkerLogWriterRegistry.entries[workDir] = workerWriter
+	return workerWriter, nil
 }
 
-func releaseWorkerLogWriter(workDir string) func() error {
-	return func() error {
-		globalWorkerLogWriterRegistry.mu.Lock()
-		defer globalWorkerLogWriterRegistry.mu.Unlock()
+// ReleaseWorkerLogWriter flushes and drops the worker log writer for workDir.
+// Call when the container/pod is gone.
+func ReleaseWorkerLogWriter(workDir string) {
+	globalWorkerLogWriterRegistry.mu.Lock()
+	workerWriter := globalWorkerLogWriterRegistry.entries[workDir]
 
-		logWriters := globalWorkerLogWriterRegistry.entries[workDir]
-		if logWriters == nil {
-			return nil
-		}
-		logWriters.attempts--
-		if logWriters.attempts > 0 {
-			return nil
-		}
+	delete(globalWorkerLogWriterRegistry.entries, workDir)
+	globalWorkerLogWriterRegistry.mu.Unlock()
 
-		var err error
-		if logWriters.workerLogWriter != nil {
-			err = logWriters.workerLogWriter.Close()
+	if workerWriter != nil {
+		if err := workerWriter.Close(); err != nil {
+			logger.Warnf("failed to close worker log writer: %s", err)
 		}
-		delete(globalWorkerLogWriterRegistry.entries, workDir)
-		return err
 	}
 }
 
-// AcquireConnectorLogCollector returns a shared connector collector for workDir.
-// Overlapping Execute calls (Temporal retries) reuse one buffer and chunk counter.
-// Release from Execute so ownership stays out of the interceptor.
-func AcquireConnectorLogCollector(ctx context.Context, workDir string, newCollector func() (*RuntimeLogCollector, error)) (release func(), err error) {
+// AcquireConnectorLogCollector binds a connector log collector for workDir.
+// If follow is true (Execute): start follow when none is running; a Temporal retry
+// that finds an existing collector reuses it.
+// If follow is false (flush leftovers): close an existing follow collector, otherwise
+// one-shot drain without Start.
+func AcquireConnectorLogCollector(ctx context.Context, workDir string, newCollector func() (*ConnectorLogCollector, error), follow bool) error {
 	globalConnectorLogCollectorRegistry.mu.Lock()
 	defer globalConnectorLogCollectorRegistry.mu.Unlock()
 
-	if logCollectors := globalConnectorLogCollectorRegistry.entries[workDir]; logCollectors != nil {
-		logCollectors.attempts++
-		return releaseConnectorLogCollector(workDir), nil
+	if existing := globalConnectorLogCollectorRegistry.entries[workDir]; existing != nil {
+		if !follow {
+			delete(globalConnectorLogCollectorRegistry.entries, workDir)
+			return existing.Drain()
+		}
+		return nil
 	}
 
 	collector, err := newCollector()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	collector.Start(context.WithoutCancel(ctx))
 
-	globalConnectorLogCollectorRegistry.entries[workDir] = &connectorLogCollectors{
-		collector: collector,
-		attempts:  1,
+	if !follow {
+		return collector.Drain()
 	}
-	return releaseConnectorLogCollector(workDir), nil
+
+	collector.Start(context.WithoutCancel(ctx))
+	globalConnectorLogCollectorRegistry.entries[workDir] = collector
+	return nil
 }
 
-func releaseConnectorLogCollector(workDir string) func() {
-	return func() {
-		globalConnectorLogCollectorRegistry.mu.Lock()
-		defer globalConnectorLogCollectorRegistry.mu.Unlock()
+// ReleaseConnectorLogCollector stops and drops the collector for workDir.
+// Call when the container/pod is gone.
+func ReleaseConnectorLogCollector(workDir string) {
+	globalConnectorLogCollectorRegistry.mu.Lock()
+	connectorCollector := globalConnectorLogCollectorRegistry.entries[workDir]
 
-		logCollectors := globalConnectorLogCollectorRegistry.entries[workDir]
-		if logCollectors == nil {
-			return
-		}
-		logCollectors.attempts--
-		if logCollectors.attempts > 0 {
-			return
-		}
+	delete(globalConnectorLogCollectorRegistry.entries, workDir)
+	globalConnectorLogCollectorRegistry.mu.Unlock()
 
-		if logCollectors.collector != nil {
-			logCollectors.collector.Stop()
-		}
-		delete(globalConnectorLogCollectorRegistry.entries, workDir)
+	if connectorCollector != nil {
+		connectorCollector.Stop()
 	}
 }
