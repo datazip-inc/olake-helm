@@ -51,7 +51,7 @@ spec:
       {{- end }}
       containers:
       - name: minio
-        image: {{ include "olake.registryBase" . }}/{{ .Values.s3LogFileStorage.image.repository }}:{{ .Values.s3LogFileStorage.image.tag }}
+        image: quay.io/{{ .Values.s3LogFileStorage.image.repository }}:{{ .Values.s3LogFileStorage.image.tag }}
         imagePullPolicy: IfNotPresent
         ports:
         - name: api
