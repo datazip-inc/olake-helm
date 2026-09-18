@@ -12,6 +12,10 @@ metadata:
     {{- include "olake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  {{- if and .Values.temporal.server.strategy .Values.temporal.server.strategy.type }}
+  strategy:
+    {{- toYaml .Values.temporal.server.strategy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: temporal
@@ -103,6 +107,11 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+        - name: DBNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}database{{ else }}{{ .Values.postgresql.external.secretKeys.temporal_database }}{{ end }}
         {{- $sslConfig := dict "mode" "disable" }}
         {{- if not .Values.postgresql.enabled }}
           {{- if .Values.postgresql.external.existingSecret }}
@@ -128,7 +137,7 @@ spec:
         - |
           set -eu
           echo "Starting PostgreSQL schema setup..."
-          DB_NAME_MAIN=temporal
+          DB_NAME_MAIN="$DBNAME"
           DB_NAME_VIS=temporal_visibility
           temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_MAIN" create \
             || echo "  (create skipped: database already exists)"
@@ -175,14 +184,10 @@ spec:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
         - name: DBNAME
-          {{- if .Values.postgresql.enabled }}
-          value: "temporal"
-          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
-              key: {{ .Values.postgresql.external.secretKeys.temporal_database }}
-          {{- end }}
+              key: {{ if .Values.postgresql.enabled }}database{{ else }}{{ .Values.postgresql.external.secretKeys.temporal_database }}{{ end }}
         {{- $sslConfig := dict "mode" "disable" }}
         {{- if not .Values.postgresql.enabled }}
           {{- if .Values.postgresql.external.existingSecret }}
