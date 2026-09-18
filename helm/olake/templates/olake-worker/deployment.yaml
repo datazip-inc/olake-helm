@@ -68,6 +68,39 @@ spec:
             sleep 5
           done
           echo "Temporal is ready!"
+      - name: create-temporal-namespace
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.temporal.adminTools.image.repository }}:{{ .Values.temporal.adminTools.image.tag }}"
+        imagePullPolicy: {{ .Values.temporal.adminTools.image.pullPolicy }}
+        env:
+        - name: TEMPORAL_ADDRESS
+          value: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
+        - name: DEFAULT_NAMESPACE
+          value: "default"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          echo "Creating namespace '$DEFAULT_NAMESPACE'..."
+          attempt=1
+          max_attempts=30
+          while :; do
+            if temporal operator namespace describe -n "$DEFAULT_NAMESPACE" --address "$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+              echo "Namespace '$DEFAULT_NAMESPACE' already exists"
+              break
+            fi
+            if temporal operator namespace create -n "$DEFAULT_NAMESPACE" --address "$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+              echo "Namespace '$DEFAULT_NAMESPACE' created"
+              break
+            fi
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Failed to create namespace '$DEFAULT_NAMESPACE' after $max_attempts attempts"
+              exit 1
+            fi
+            echo "Namespace operation not ready yet, waiting... (attempt $attempt/$max_attempts)"
+            attempt=$((attempt + 1))
+            sleep 5
+          done
       {{- end }}
       containers:
       - name: olake-workers
