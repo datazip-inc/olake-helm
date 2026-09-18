@@ -176,7 +176,7 @@ olakeUI:
     # -- Service type (ClusterIP for internal, NodePort/LoadBalancer for external access)
     type: ClusterIP
     annotations: {}
-    nodePort: "" # Only used if type is NodePort, can customize the nodeport
+    nodePort: ""  # Only used if type is NodePort, can customize the nodeport
 
   # -- OLake UI resource requirements (optional overrides)
   # Defaults: requests: memory=512Mi, cpu=500m (no limits by default)
@@ -198,7 +198,7 @@ olakeUI:
   #   runAsGroup: 1000
   #   fsGroup: 1000
   securityContext: {}
-
+  
   # -- Environment variables for OLake UI
   # Add custom environment variables here
   # Example:
@@ -664,7 +664,7 @@ elasticsearch:
   resources: {}
 
   # -- Elasticsearch security context
-  securityContext:
+  securityContext: 
     fsGroup: 1000
     runAsUser: 1000
     runAsGroup: 1000
@@ -766,7 +766,7 @@ fusion:
       # Example:
       #   extraConfig:
       #     spark.sql.shuffle.partitions: "200"
-      extraConfig:
+      extraConfig: 
         spark.dynamicAllocation.enabled: "true"
         spark.shuffle.service.enabled: "false"
         spark.dynamicAllocation.shuffleTracking.enabled: "true"
