@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/spf13/viper"
 	"golang.org/x/mod/semver"
 )
 
@@ -29,7 +30,17 @@ func CompareAtLeast(version, minVersion string) bool {
 	return semver.Compare(version, minVersion) >= 0
 }
 
-// UseSelectedStreamsSplit reports whether selected_streams_config should be mounted and --selected-streams passed.
-func UseSelectedStreamsSplit(version string) bool {
-	return CompareAtLeast(version, constants.MinSelectedStreamsSplitVersion)
+// CustomDriverVersion returns the custom driver version used to test OLake in development, or
+// empty outside development. olake-ui reads the same variables, so both sides gate alike.
+func CustomDriverVersion() string {
+	if strings.EqualFold(strings.TrimSpace(viper.GetString(constants.EnvAppEnvironment)), constants.AppEnvDevelopment) {
+		return viper.GetString(constants.EnvCustomDriverVersion)
+	}
+	return ""
+}
+
+// SupportsSplitStreams reports whether the source driver accepts the split catalog flags
+// (--available-streams / --selected-streams). Older drivers only read streams.json.
+func SupportsSplitStreams(version string) bool {
+	return CustomDriverVersion() != "" || CompareAtLeast(version, constants.MinSplitStreamsVersion)
 }

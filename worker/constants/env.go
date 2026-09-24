@@ -35,6 +35,11 @@ const (
 	EnvLogRetentionPeriod = "LOG_RETENTION_PERIOD"
 	EnvHostPersistentDir  = "PERSISTENT_DIR"
 
+	// development: CUSTOM_DRIVER_VERSION is honoured only when APP_ENV is development, as in olake-ui
+	EnvAppEnvironment      = "APP_ENV"
+	EnvCustomDriverVersion = "CUSTOM_DRIVER_VERSION"
+	AppEnvDevelopment      = "development"
+
 	// kubernetes
 	EnvNamespace             = "WORKER_NAMESPACE"
 	EnvStoragePVCName        = "OLAKE_STORAGE_PVC_NAME"

@@ -31,6 +31,18 @@ func columnExists(ctx context.Context, db *DB, table, column string) (bool, erro
 	return exists, nil
 }
 
+// optionalColumn returns the select expression for a job column that may not exist yet.
+func optionalColumn(ctx context.Context, db *DB, table, column string) (string, error) {
+	exists, err := columnExists(ctx, db, table, column)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "CAST(NULL AS TEXT)", nil
+	}
+	return "j." + column, nil
+}
+
 // decryptJobData decrypts the Source and Destination config fields of a JobData.
 // If OLAKE_SECRET_KEY is not configured, Decrypt returns the value unchanged.
 func decryptJobData(jobData *types.JobData) error {
@@ -55,37 +67,39 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	defer cancel()
 
 	jobTable := db.tables["job"]
-	hasSelectedStreams, err := columnExists(cctx, db, jobTable, "selected_streams_config")
+	// The catalog columns may not exist yet when the worker runs against a database the UI has
+	// not migrated; read them as NULL then.
+	selectedStreamsExpr, err := optionalColumn(cctx, db, jobTable, "selected_streams_config")
 	if err != nil {
 		log.Error("failed to check selected_streams_config column", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to check selected_streams_config column: %w", err)
 	}
-	selectedStreamsExpr := "CAST(NULL AS TEXT)"
-	if hasSelectedStreams {
-		selectedStreamsExpr = "j.selected_streams_config"
+	availableStreamsExpr, err := optionalColumn(cctx, db, jobTable, "available_streams_config")
+	if err != nil {
+		log.Error("failed to check available_streams_config column", "jobID", jobId, "error", err)
+		return types.JobData{}, fmt.Errorf("failed to check available_streams_config column: %w", err)
 	}
 
 	query := fmt.Sprintf(`
-			SELECT j.name, j.streams_config, %s, j.state, j.project_id, s.config, d.config, s.version, s.type, COALESCE(j.advanced_settings::text, ''),
+			SELECT j.name, j.streams_config, %s, %s, j.state, j.project_id, s.config, d.config, s.version, s.type, COALESCE(j.advanced_settings::text, ''),
 				j.frequency, j.created_at, d.version, s.name, d.name
 			FROM %q j
 			JOIN %q s ON j.source_id = s.id
 			JOIN %q d ON j.dest_id = d.id
 			WHERE j.id = $1`,
-		selectedStreamsExpr, jobTable, db.tables["source"], db.tables["dest"])
+		selectedStreamsExpr, availableStreamsExpr, jobTable, db.tables["source"], db.tables["dest"])
 
 	rows := db.client.QueryRowContext(cctx, query, jobId)
 
 	var jobData types.JobData
-	var selectedStreams sql.NullString
-	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver, &jobData.AdvancedSettings,
+	var selectedStreams, availableStreams sql.NullString
+	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &availableStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver, &jobData.AdvancedSettings,
 		&jobData.Frequency, &jobData.CreatedAt, &jobData.DestinationVersion, &jobData.SourceName, &jobData.DestinationName); err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
-	if selectedStreams.Valid {
-		jobData.SelectedStreams = selectedStreams.String
-	}
+	jobData.SelectedStreams = selectedStreams.String
+	jobData.AvailableStreams = availableStreams.String
 
 	if err := decryptJobData(&jobData); err != nil {
 		log.Error("failed to decrypt job data", "jobID", jobId, "error", err)
