@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/types"
 )
 
 func SetupWorkDirectory(workDirPath string) error {
@@ -58,23 +57,6 @@ func WriteFile(filePath string, data []byte) error {
 func DeleteDirectory(dirPath string) error {
 	if err := os.RemoveAll(dirPath); err != nil {
 		return fmt.Errorf("failed to delete directory %s: %s", dirPath, err)
-	}
-	return nil
-}
-
-func CleanupConfigFiles(workDir string, configs []types.JobConfig) {
-	for _, config := range configs {
-		filePath := filepath.Join(workDir, config.Name)
-		_ = os.Remove(filePath) // Ignore error for cleanup
-	}
-}
-
-func WriteConfigFiles(workDir string, configs []types.JobConfig) error {
-	for _, config := range configs {
-		filePath := filepath.Join(workDir, config.Name)
-		if err := os.WriteFile(filePath, []byte(config.Data), constants.DefaultFilePermissions); err != nil {
-			return fmt.Errorf("failed to write %s: %s", config.Name, err)
-		}
 	}
 	return nil
 }

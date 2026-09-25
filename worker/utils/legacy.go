@@ -46,18 +46,9 @@ func BuildSyncReqForLegacyOrNew(args interface{}) (*types.ExecutionRequest, erro
 
 // UpdateSyncRequest updates the ExecutionRequest for deprecated sync workflow
 func UpdateSyncRequestForLegacy(job types.JobData, req *types.ExecutionRequest) {
-	args := []string{
-		"sync",
-		"--config", "/mnt/config/source.json",
-		"--destination", "/mnt/config/destination.json",
-		"--catalog", "/mnt/config/streams.json",
-		"--state", "/mnt/config/state.json",
-	}
-
 	req.ProjectID = job.ProjectID
 	req.Command = types.Sync
 	req.ConnectorType = job.Driver
 	req.Version = job.Version
-	req.Args = args
 	req.Timeout = constants.DefaultSyncTimeout
 }

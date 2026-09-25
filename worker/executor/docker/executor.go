@@ -13,9 +13,11 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
@@ -37,6 +39,22 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	imageName := utils.GetDockerImageName(req.ConnectorType, req.Version)
 	containerName := utils.GetWorkflowDirectory(req.Command, req.WorkflowID)
 	log.Info("running container", "command", req.Command, "image", imageName, "containerName", containerName)
+
+	var containerID string
+	if !slices.Contains(constants.AsyncCommands, req.Command) {
+		defer func() {
+			utils.ReleaseConnectorLogCollector(workdir)
+			if containerID == "" {
+				return
+			}
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
+			defer cancel()
+
+			if _, err := d.client.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true}); err != nil {
+				log.Warn("failed to remove container", "containerID", containerID, "error", err)
+			}
+		}()
+	}
 
 	if slices.Contains(constants.AsyncCommands, req.Command) {
 		startOperation, err := d.shouldStartOperation(ctx, req, containerName, workdir)
@@ -62,6 +80,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	// Environment variables propagation
 	envVars := utils.GetWorkerEnvVars()
+	envVars[constants.EnvConfigFolder] = utils.ConnectorConfigDir(req.Command, req.WorkflowID)
 	if indexMount != nil {
 		envVars[constants.EnvIndexDBDir] = indexMount.Target
 
@@ -87,9 +106,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	hostConfig := &container.HostConfig{}
 	if workdir != "" {
-		hostOutputDir := utils.GetHostOutputDir(workdir)
-		hostConfig.Mounts = []mount.Mount{
-			{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+		switch storagemode.Get() {
+		case constants.StorageModeS3:
+			// Connector must reach MinIO/S3 on the same Docker network as the worker.
+			hostConfig.NetworkMode = container.NetworkMode(viper.GetString(constants.EnvDockerNetwork))
+		default:
+			hostOutputDir := utils.GetHostOutputDir(workdir)
+			hostConfig.Mounts = []mount.Mount{
+				{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
+			}
 		}
 	}
 
@@ -99,25 +124,25 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
-	containerID, err := d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
+	containerID, err = d.getOrCreateContainer(ctx, containerConfig, hostConfig, containerName)
 	if err != nil {
 		log.Error("failed to create container", "containerName", containerName, "error", err)
 		return "", err
-	}
-	if !slices.Contains(constants.AsyncCommands, req.Command) {
-		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
-			defer cancel()
-
-			if _, err := d.client.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true}); err != nil {
-				log.Warn("failed to remove container", "containerID", containerID, "error", err)
-			}
-		}()
 	}
 
 	if err := d.startContainer(ctx, containerID); err != nil {
 		log.Error("failed to start container", "containerID", containerID, "error", err)
 		return "", err
+	}
+
+	if storagemode.Get() == constants.StorageModeS3 {
+		err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
+			return NewContainerLogCollector(ctx, d, containerID, workdir)
+		}, true)
+		if err != nil {
+			log.Error("failed to start connector log collector", "containerID", containerID, "error", err)
+			return "", fmt.Errorf("failed to start connector log collector: %s", err)
+		}
 	}
 
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
@@ -132,6 +157,21 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	return string(output), nil
+}
+
+// flushExitedConnectorLogs uploads leftover connector logs while the container still exists.
+// Closes a live follow collector if this process started one, then drains.
+func (d *DockerExecutor) flushExitedConnectorLogs(ctx context.Context, workDir, containerName string) {
+	if storagemode.Get() != constants.StorageModeS3 {
+		return
+	}
+	log := logger.Log(ctx)
+	err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
+		return NewContainerLogCollector(ctx, d, containerName, workDir)
+	}, false)
+	if err != nil {
+		log.Error("failed to flush remaining connector logs", "containerName", containerName, "error", err)
+	}
 }
 
 // ensureIndexMount returns the bind mount that carries a job's Pebble index, or
@@ -160,6 +200,9 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionRequest) error {
 	log := logger.Log(ctx)
 	log.Info("stopping container for cleanup", "workflowID", req.WorkflowID)
+
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	utils.ReleaseConnectorLogCollector(workDir)
 
 	if err := d.StopContainer(ctx, req.WorkflowID); err != nil {
 		log.Error("failed to stop container", "workflowID", req.WorkflowID, "error", err)

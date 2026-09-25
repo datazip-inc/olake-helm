@@ -1,0 +1,27 @@
+{{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "olake.minio.serviceName" . }}
+  namespace: {{ include "olake.namespace" . }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-minio
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: minio
+    {{- include "olake.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 9000
+    protocol: TCP
+  - name: console
+    port: 9001
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-minio
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: minio
+{{- end }}
