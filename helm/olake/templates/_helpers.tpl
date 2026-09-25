@@ -101,10 +101,10 @@ Reserves 2Gi for filesystem overhead
 
 {{/*
 Return the container registry base URL.
-Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to registry-1.docker.io
+Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to docker.io
 */}}
 {{- define "olake.registryBase" -}}
-{{- .Values.global.env.CONTAINER_REGISTRY_BASE | default "registry-1.docker.io" -}}
+{{- .Values.global.env.CONTAINER_REGISTRY_BASE | default "docker.io" -}}
 {{- end -}}
 
 {{/*
