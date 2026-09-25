@@ -49,7 +49,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
-	if err := d.PullImage(ctx, imageName, req.Version); err != nil {
+	if err := d.PullImage(ctx, imageName, req.Version, req.HeartbeatFunc); err != nil {
 		log.Error("failed to pull image", "image", imageName, "error", err)
 		return "", err
 	}

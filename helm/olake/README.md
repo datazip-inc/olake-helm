@@ -475,7 +475,7 @@ The following images must be mirrored to the registry before deploying:
 | `curlimages/curl:8.1.2` | Docker Hub |
 | `olakego/ui:latest`, `olakego/ui-worker:latest` | Docker Hub |
 | `olakego/source-*` (e.g. `olakego/source-mongodb:v0.7.0`) | Docker Hub |
-| `temporalio/auto-setup:1.22.3`, `temporalio/ui:2.16.2` | Docker Hub |
+| `temporalio/server:1.32.0`, `temporalio/admin-tools:1.32.0`, `temporalio/ui:2.16.2` | Docker Hub |
 | `library/postgres:14-alpine` | Docker Hub |
 | `olakego/fusion:latest`, `olakego/fusion-spark:latest` | Docker Hub |
 | `sig-storage/nfs-provisioner:v4.0.8` | `registry.k8s.io` (built-in NFS only) |
