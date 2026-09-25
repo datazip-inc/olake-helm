@@ -40,6 +40,7 @@ type JobData struct {
 	Source             string
 	Destination        string
 	Streams            string
+	AvailableStreams   string
 	SelectedStreams    string
 	State              string
 	Version            string // source version
