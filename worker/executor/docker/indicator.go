@@ -49,7 +49,7 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 	// remove any existing container with the same name to update the error message
 	_, _ = d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 
-	if err := d.PullImage(ctx, indicatorDockerImage, ""); err != nil {
+	if err := d.PullImage(ctx, indicatorDockerImage, "", req.HeartbeatFunc); err != nil {
 		log.Error("pull indicator image failed", "image", indicatorDockerImage, "error", err)
 		return fmt.Errorf("pull indicator image %s: %w", indicatorDockerImage, err)
 	}

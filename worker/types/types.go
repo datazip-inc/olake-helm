@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -100,4 +101,7 @@ type IndicatorRequest struct {
 	Kind         string `json:"kind"`          // source | destination | job | streams
 	ResourceName string `json:"resource_name"` // originating ConfigMap or Secret name
 	Message      string `json:"message"`       // error text for spawn
+
+	// set by the activity; not part of the workflow payload
+	HeartbeatFunc func(context.Context, ...interface{}) `json:"-"`
 }

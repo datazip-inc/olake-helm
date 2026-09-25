@@ -281,5 +281,6 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req type
 func (a *Activity) IndicatorActivity(ctx context.Context, req types.IndicatorRequest) error {
 	log := logger.Log(ctx)
 	log.Info("gitops indicator", "action", req.Action, "name", req.Name, "kind", req.Kind)
+	req.HeartbeatFunc = activity.RecordHeartbeat
 	return a.indicator.Indicator(ctx, &req)
 }
