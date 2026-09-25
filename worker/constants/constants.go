@@ -49,6 +49,17 @@ const (
 	DefaultFilePermissions = 0644
 
 	StateFlag = "--state"
+
+	CatalogFlag          = "--catalog"
+	StreamsFlag          = "--streams"
+	AvailableStreamsFlag = "--available-streams"
+	SelectedStreamsFlag  = "--selected-streams"
+	StreamsFile          = "streams.json"
+	AvailableStreamsFile = "available_streams.json"
+	SelectedStreamsFile  = "selected_streams.json"
+
+	// TODO(BEFORE_MERGE): set to the release that ships streams v2
+	MinSplitStreamsVersion = "v0.11.0"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
