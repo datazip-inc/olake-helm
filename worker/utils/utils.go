@@ -245,10 +245,6 @@ func GetHostOutputDir(outputDir string) string {
 
 // s3 mode only supports connector versions that are at least the minimum version "v0.9.2"
 func ValidateConnectorVersionForStorageMode(version string) error {
-	//TODO: remove this once before release
-	if true {
-		return nil
-	}
 	if storagemode.Get() != constants.StorageModeS3 {
 		return nil
 	}
