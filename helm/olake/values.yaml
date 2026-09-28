@@ -49,7 +49,8 @@ global:
   jobMapping: {}
 
   # -- JobID-based scheduling profiles for pods created by olake-workers
-  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity).
+  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity)
+  # and optional compute resources (Resources).
   # Overrides `jobMapping` if both are defined for the same JobID.
   #
   # Special Key "0": Defines the DEFAULT profile for all short-lived jobs (test, discover, spec)
@@ -73,6 +74,30 @@ global:
   #                 - key: "gpu"
   #                   operator: "In"
   #                   values: ["true"]
+  #
+  # Resources (optional): CPU/memory for the connector pod, in the standard Kubernetes shape.
+  # Only applied when set; otherwise pods keep the built-in default
+  # (requests: memory=256Mi, cpu=100m; no limits).
+  #   - Sync / clear-destination use the JobID's profile, then profile "0", then the built-in default.
+  #   - Test / discover / spec always use profile "0", then the built-in default.
+  #   - A profile's resources replace the fallback as a whole; fields are not merged.
+  #   - Setting only a limit makes Kubernetes use the same value as the request.
+  # Example:
+  #   jobProfiles:
+  #     0:
+  #       resources:
+  #         requests:
+  #           cpu: "500m"
+  #           memory: "1Gi"
+  #         limits:
+  #           memory: "2Gi"
+  #     123:
+  #       resources:
+  #         requests:
+  #           cpu: "2"
+  #           memory: "8Gi"
+  #         limits:
+  #           memory: "8Gi"
   jobProfiles: {}
 
   # -- Service account configuration for job pods created by olake-workers
@@ -303,6 +328,7 @@ olakeWorker:
   podLabels: {}
 
   # -- OLake Worker resource requirements (optional overrides)
+  # Sizes the worker controller pod only. For sync pods, use `global.jobProfiles.<JobID>.resources`.
   # Defaults: requests: memory=256Mi, cpu=250m (no limits by default)
   # Example customizations:
   #   resources:

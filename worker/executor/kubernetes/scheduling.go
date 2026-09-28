@@ -20,11 +20,26 @@ type JobMappingStats struct {
 	InvalidMappings []string // TODO:  remove invalidMappings from struct{}
 }
 
-// JobSchedulingConfig defines the scheduling constraints for a job
+// JobSchedulingConfig defines the scheduling constraints and compute resources for a job
 type JobSchedulingConfig struct {
-	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
+	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
+	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// validateResources rejects a request that exceeds its limit; the API server
+// would otherwise refuse every pod built from the profile.
+func validateResources(r *corev1.ResourceRequirements) error {
+	if r == nil {
+		return nil
+	}
+	for name, limit := range r.Limits {
+		if request, ok := r.Requests[name]; ok && request.Cmp(limit) > 0 {
+			return fmt.Errorf("%s request %s exceeds limit %s", name, request.String(), limit.String())
+		}
+	}
+	return nil
 }
 
 func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) error {
@@ -156,6 +171,15 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 	if err := json.Unmarshal([]byte(profiles), &result); err != nil {
 		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s", err)
 		return map[int]JobSchedulingConfig{}
+	}
+
+	// Drop only the invalid resources so the profile's scheduling fields still apply
+	for jobID, profile := range result {
+		if err := validateResources(profile.Resources); err != nil {
+			logger.Warnf("job profile %d: ignoring resources, falling back to default: %s", jobID, err)
+			profile.Resources = nil
+			result[jobID] = profile
+		}
 	}
 
 	logger.Infof("job profiles loaded: %d entries", len(result))
