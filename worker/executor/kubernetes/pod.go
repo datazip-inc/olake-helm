@@ -100,6 +100,9 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 				if status.State.Terminated != nil {
 					term := status.State.Terminated
 					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
+					if term.Reason == "OOMKilled" {
+						containerInfo += "; the pod ran out of memory, raise global.jobProfiles.<JobID>.resources.limits.memory"
+					}
 				} else {
 					// The only other two ContainerState options are Waiting and Running, so if it's not Terminated, it must be one of those
 					// refer: https://pkg.go.dev/k8s.io/api/core/v1#ContainerState
@@ -283,13 +286,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							SubPath:   subDir,
 						},
 					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
-						},
-						// No limits for flexibility
-					},
+					Resources: k.GetResourcesForJob(req.JobID, req.Command),
 					Env: []corev1.EnvVar{
 						{
 							Name:  "OLAKE_WORKFLOW_ID",
