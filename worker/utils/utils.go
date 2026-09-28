@@ -64,7 +64,7 @@ func GetDockerImageName(sourceType, version string) string {
 	registryBase := strings.TrimRight(viper.GetString(constants.ContainerRegistryBase), "/")
 	imageName := fmt.Sprintf("%s-%s:%s", constants.DefaultDockerImagePrefix, sourceType, version)
 
-	if registryBase == "" || registryBase == "registry-1.docker.io" {
+	if registryBase == "" || registryBase == "docker.io" {
 		return imageName
 	}
 
