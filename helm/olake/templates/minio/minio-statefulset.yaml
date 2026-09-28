@@ -4,8 +4,6 @@ kind: StatefulSet
 metadata:
   name: {{ include "olake.minio.serviceName" . }}
   namespace: {{ include "olake.namespace" . }}
-  annotations:
-    "helm.sh/resource-policy": keep
   labels:
     app.kubernetes.io/name: {{ include "olake.name" . }}-minio
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -49,10 +47,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.s3LogFileStorage.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: minio
-        image: quay.io/{{ .Values.s3LogFileStorage.image.repository }}:{{ .Values.s3LogFileStorage.image.tag }}
-        imagePullPolicy: IfNotPresent
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.s3LogFileStorage.image.repository }}:{{ .Values.s3LogFileStorage.image.tag }}"
+        imagePullPolicy: {{ .Values.s3LogFileStorage.image.pullPolicy }}
         ports:
         - name: api
           containerPort: 9000
@@ -104,8 +106,6 @@ spec:
   volumeClaimTemplates:
   - metadata:
       name: minio-data
-      annotations:
-        "helm.sh/resource-policy": keep
     spec:
       accessModes:
         - ReadWriteOnce

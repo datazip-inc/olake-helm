@@ -33,6 +33,10 @@ func (wf *WorkflowLogFile) Close() error {
 func InitWorkflowLoggerForS3(ctx context.Context, workflowID, command string, fileWriter io.Writer, nextSeq func() uint64) (context.Context, error) {
 	stdoutWriter := createStdoutWriter()
 	multiWriter := zerolog.MultiLevelWriter(stdoutWriter, fileWriter)
+	// nextSeq() runs in the hook, before the write. Today only the activity goroutine logs for a
+	// workflow, so seq order equals write order. If concurrent logging per workflow is introduced,
+	// seq order and write (stdout/buffer) order can differ: chunk names carry the last seen seq, so a
+	// resumed writer could reuse seq values, and recovery's checkpoint could skip or duplicate lines.
 	log := zerolog.New(multiWriter).Hook(zerolog.HookFunc(func(e *zerolog.Event, _ zerolog.Level, _ string) {
 		e.Uint64("seq", nextSeq())
 	})).With().Timestamp().Logger()

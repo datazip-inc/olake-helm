@@ -85,21 +85,28 @@ func requiredEnvVars() error {
 		constants.EnvKubernetesServiceHost,
 	}
 
-	execEnv := utils.GetExecutorEnvironment()
-	if execEnv == string(types.Kubernetes) {
+	s3RequiredEnv := []string{
+		constants.EnvS3Bucket,
+		constants.EnvS3Region,
+	}
+
+	onKubernetes := utils.GetExecutorEnvironment() == string(types.Kubernetes)
+	onDocker := utils.GetExecutorEnvironment() == string(types.Docker)
+	onS3 := storagemode.Get() == constants.StorageModeS3
+	// NFS is the default storage mode
+	onNFS := storagemode.Get() != constants.StorageModeS3
+
+	switch {
+	case onKubernetes && onS3:
 		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
-	}
-
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		requiredEnv = append(requiredEnv, constants.EnvS3Bucket, constants.EnvS3Region)
-	default:
-		if execEnv == string(types.Kubernetes) {
-			requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
-		}
-	}
-
-	if execEnv == string(types.Docker) {
+		requiredEnv = append(requiredEnv, s3RequiredEnv...)
+	case onKubernetes && onNFS:
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+		requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
+	case onS3 && onDocker:
+		requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
+		requiredEnv = append(requiredEnv, s3RequiredEnv...)
+	case onDocker && onNFS:
 		requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
 	}
 

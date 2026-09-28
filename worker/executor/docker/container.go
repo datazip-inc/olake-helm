@@ -16,6 +16,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/registry"
@@ -248,14 +249,28 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
 
-	// If container is running, adopt it and let Execute wait with the log collector.
+	// If container is running, adopt it: reattach the S3 log collector, then wait for completion.
+	// Execute must not continue for it, since ContainerStart would rerun the sync if it exits first.
 	if state.Exists && state.Running {
 		log.Info("adopting running container", "workflowID", req.WorkflowID, "containerName", containerName)
-		return &types.Result{OK: true}, nil
+		if storagemode.Get() == constants.StorageModeS3 {
+			err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
+				return NewContainerLogCollector(ctx, d, containerName, workDir)
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to start connector log collector: %s", err)
+			}
+		}
+		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
+			return nil, err
+		}
+		state = d.getContainerState(ctx, containerName, req.WorkflowID)
 	}
 
 	if state.Exists && !state.Running {
-		d.flushExitedConnectorLogs(ctx, workDir, containerName)
+		if err := d.flushExitedConnectorLogs(ctx, workDir, containerName); err != nil {
+			return nil, err
+		}
 	}
 
 	// If container exists and exited, treat as finished: cleanup and return status

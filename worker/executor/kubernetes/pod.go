@@ -262,14 +262,6 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 				Optional: ptr.To(true),
 			},
 		},
-		{
-			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: constants.WorkersConfigMap,
-				},
-				Optional: ptr.To(true),
-			},
-		},
 	}
 	if storagemode.Get() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
 		envFrom = append(envFrom, corev1.EnvFromSource{
@@ -338,7 +330,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 							Value: req.WorkflowID,
 						},
 						{
-							Name:  constants.EnvConfigFolder,
+							Name:  constants.EnvS3ConfigFolder,
 							Value: utils.ConnectorConfigDir(req.Command, req.WorkflowID),
 						},
 						{
@@ -394,7 +386,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	}
 
 	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
-	if slices.Contains(constants.AsyncCommands, req.Command) && storagemode.Get() == constants.StorageModeNFS {
+	if utils.IsAsyncCommand(req.Command) && storagemode.Get() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

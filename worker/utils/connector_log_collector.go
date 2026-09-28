@@ -63,13 +63,15 @@ func NewConnectorLogCollector(ctx context.Context, workDir string, streamLogs Co
 	return collector, nil
 }
 
-// processLogLine parses a raw stream line, skips old seq, and writes the buffer.
-func (c *ConnectorLogCollector) processLogLine(ctx context.Context, rawLogLine string) error {
+// processLogLine parses a raw stream line, skips lines already processed before the stream's
+// checkpoint, writes the buffer, and advances the resume checkpoint (seq and timestamp of the
+// last processed line).
+func (c *ConnectorLogCollector) processLogLine(ctx context.Context, rawLogLine string, checkpoint *streamCheckpoint) error {
 	normalizedLogLine, ok := parsePodLogLine(rawLogLine)
 	if !ok {
 		return nil
 	}
-	if normalizedLogLine.Seq > 0 && normalizedLogLine.Seq <= c.lastPodLogSeq.Load() {
+	if !checkpoint.accept(normalizedLogLine) {
 		return nil
 	}
 	if err := c.buffer.WriteLine(ctx, normalizedLogLine); err != nil {
@@ -107,6 +109,7 @@ func (c *ConnectorLogCollector) follow() {
 		if c.stillRunning != nil && !c.stillRunning(c.streamCtx) {
 			return
 		}
+		logger.Warnf("pod log stream stopped while pod still running, retrying in %s", backoff)
 
 		if err == nil {
 			backoff = logReconnectInitial
@@ -124,8 +127,14 @@ func (c *ConnectorLogCollector) follow() {
 	}
 }
 
+// runStream reads the connector log stream from the last processed line. The stream restarts
+// at that line's timestamp (K8s SinceTime has second precision, so already-processed lines
+// come back); streamCheckpoint skips them.
 func (c *ConnectorLogCollector) runStream(ctx context.Context, follow bool) error {
-	reader, err := c.streamLogs(ctx, c.lastPodLogTimestamp, follow)
+	since := c.lastPodLogTimestamp
+	checkpoint := newStreamCheckpoint(c.lastPodLogSeq.Load(), since)
+
+	reader, err := c.streamLogs(ctx, since, follow)
 	if err != nil {
 		return err
 	}
@@ -134,7 +143,7 @@ func (c *ConnectorLogCollector) runStream(ctx context.Context, follow bool) erro
 	}
 
 	return readPodLogStream(reader, func(rawLogLine string) error {
-		return c.processLogLine(ctx, rawLogLine)
+		return c.processLogLine(ctx, rawLogLine, checkpoint)
 	})
 }
 
@@ -144,17 +153,6 @@ func (c *ConnectorLogCollector) Stop() {
 	}
 	c.cancel()
 	<-c.done
-}
-
-// Drain uploads leftover logs without starting a follow loop.
-// If follow is already running, Stop closes it and Start's catch-up is the drain.
-// If follow never started, this is a one-shot catch-up+flush.
-func (c *ConnectorLogCollector) Drain() error {
-	if c.cancel != nil {
-		c.Stop()
-		return nil
-	}
-	return c.catchUpAndFlush()
 }
 
 func (c *ConnectorLogCollector) catchUpAndFlush() error {

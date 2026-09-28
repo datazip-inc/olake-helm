@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/acarl005/stripansi"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -173,7 +174,7 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
 func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if IsAsyncCommand(operation) {
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
 	} else {
 		return originalWorkflowID
@@ -268,12 +269,10 @@ func WorkflowAlreadyLaunched(ctx context.Context, workdir string) (bool, error) 
 		return alreadyLaunched, nil
 	default:
 		logDir := filepath.Join(workdir, "logs")
+		// Comment: Check how functions error handling works here and can be improved.
 		entries, err := os.ReadDir(logDir)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return false, nil
-			}
-			return false, fmt.Errorf("failed to read log directory %s: %s", logDir, err)
+			return false, nil
 		}
 
 		for _, entry := range entries {
@@ -388,12 +387,21 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 		start := strings.Index(line, "{")
 		end := strings.LastIndex(line, "}")
 		if start != -1 && end != -1 && end > start {
+			// NFS console output: a debug line can carry JSON in its text (e.g. a telemetry
+			// error response body) and must not be mistaken for the protocol message.
+			if strings.Contains(stripansi.Strip(line[:start]), "DEBUG") {
+				continue
+			}
 			jsonPart := line[start : end+1]
 			var result map[string]interface{}
 			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
 				continue // Skip invalid JSON
 			}
-			return json.Marshal(unwrapZerologProtocolMessage(result))
+			message, ok := unwrapZerologProtocolMessage(result)
+			if !ok {
+				continue // S3-mode plain log line (string message), not the protocol message
+			}
+			return json.Marshal(message)
 		}
 	}
 
@@ -402,16 +410,18 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 
 // unwrapZerologProtocolMessage returns the inner OLake protocol object when stdout is
 // S3-mode zerolog JSON: {"level":"info","message":{"type":"CONNECTION_STATUS",...}}.
-// NFS console output already yields the inner object, so it is returned unchanged.
-func unwrapZerologProtocolMessage(result map[string]interface{}) map[string]interface{} {
+// It reports false for a zerolog line whose message is not an object (a plain log line,
+// e.g. a telemetry debug message printed after the result). NFS console output already
+// yields the inner object, so it is returned unchanged.
+func unwrapZerologProtocolMessage(result map[string]interface{}) (map[string]interface{}, bool) {
 	if _, ok := result["level"].(string); !ok {
-		return result
+		return result, true // not a zerolog line (NFS output): use it as is
 	}
 	message, ok := result["message"].(map[string]interface{})
 	if !ok || message == nil {
-		return result
+		return nil, false // zerolog line with a text message: not the result, skip
 	}
-	return message
+	return message, true // zerolog line with an object message: that object is the result
 }
 
 // IsStateEmpty returns true if the state is empty or an empty JSON object
@@ -458,4 +468,9 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 		}
 		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
 	}
+}
+
+// IsAsyncCommand returns true if the command is an asynchronous command(sync, clear-destination)
+func IsAsyncCommand(command types.Command) bool {
+	return slices.Contains(constants.AsyncCommands, command)
 }

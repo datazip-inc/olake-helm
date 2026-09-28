@@ -4,8 +4,6 @@ kind: Service
 metadata:
   name: {{ include "olake.minio.serviceName" . }}
   namespace: {{ include "olake.namespace" . }}
-  annotations:
-    "helm.sh/resource-policy": keep
   labels:
     app.kubernetes.io/name: {{ include "olake.name" . }}-minio
     app.kubernetes.io/instance: {{ .Release.Name }}

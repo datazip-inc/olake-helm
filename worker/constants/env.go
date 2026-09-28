@@ -45,9 +45,7 @@ const (
 	EnvS3Endpoint            = "OLAKE_S3_ENDPOINT"
 	EnvS3AccessKeyID         = "OLAKE_S3_ACCESS_KEY_ID"
 	EnvS3SecretAccessKey     = "OLAKE_S3_SECRET_ACCESS_KEY"
-	EnvS3SessionToken        = "OLAKE_S3_SESSION_TOKEN"
 	EnvS3CredentialsSecret   = "OLAKE_S3_CREDENTIALS_SECRET"
-	EnvDockerNetwork         = "OLAKE_DOCKER_NETWORK"
 	EnvJobServiceAccountName = "JOB_SERVICE_ACCOUNT_NAME"
 	EnvSecretKey             = "OLAKE_SECRET_KEY"
 	EnvPodName               = "POD_NAME"
@@ -69,9 +67,9 @@ const (
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 
-	// EnvConfigFolder is the workflow config directory the connector should use.
+	// EnvS3ConfigFolder is the workflow config directory the connector should use.
 	// NFS: /mnt/config (the mounted workflow subdir). S3: s3://bucket/[prefix/]{workflow-dir}.
-	EnvConfigFolder = "CONFIG_FOLDER"
+	EnvS3ConfigFolder = "OLAKE_S3_CONFIG_FOLDER"
 
 	// path the olake driver opens its Pebble index at. The executor mounts the
 	// job's index volume here and pins the variable on the driver container.

@@ -2,9 +2,7 @@ package temporal
 
 import (
 	"context"
-	"slices"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -50,7 +48,7 @@ func (a *loggingActivityInterceptor) ExecuteActivity(
 	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 	defer func() {
 		logFile.Close()
-		if !slices.Contains(constants.AsyncCommands, req.Command) {
+		if !utils.IsAsyncCommand(req.Command) {
 			utils.ReleaseWorkerLogWriter(workDir)
 		}
 	}()

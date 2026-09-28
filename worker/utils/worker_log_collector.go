@@ -131,17 +131,14 @@ func appendWorkerLogLines(ctx context.Context, workflowID string, command types.
 	if err != nil {
 		return err
 	}
-	lastLogSeq := resume.lastPodLogSeq
-
+	// Skip lines the previous container already uploaded; see streamCheckpoint.
+	checkpoint := newStreamCheckpoint(resume.lastPodLogSeq, resume.lastPodLogTimestamp)
 	for _, normalizedLogLine := range normalizedLogLines {
-		if normalizedLogLine.Seq > 0 && normalizedLogLine.Seq <= lastLogSeq {
+		if !checkpoint.accept(normalizedLogLine) {
 			continue
 		}
 		if err := buffer.WriteLine(ctx, normalizedLogLine); err != nil {
 			return err
-		}
-		if normalizedLogLine.Seq > 0 {
-			lastLogSeq = normalizedLogLine.Seq
 		}
 	}
 	return buffer.Flush(ctx)

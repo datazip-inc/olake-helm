@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -139,7 +138,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 		return "", err
 	}
 
-	if !slices.Contains(constants.AsyncCommands, req.Command) {
+	if !utils.IsAsyncCommand(req.Command) {
 		defer func() {
 			utils.ReleaseConnectorLogCollector(workdir)
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
@@ -152,9 +151,10 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	}
 
 	if storagemode.Get() == constants.StorageModeS3 {
+		// Stream connector logs to S3 while the pod runs; Release later stops it with a final catch-up and flush.
 		if err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
 			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)
-		}, true); err != nil {
+		}); err != nil {
 			return "", fmt.Errorf("failed to start connector log collector: %s", err)
 		}
 	}

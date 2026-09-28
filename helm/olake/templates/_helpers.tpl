@@ -106,6 +106,7 @@ External S3-compatible endpoints (e.g. external MinIO) use enabled: false with e
 
 {{- define "olake.s3CredentialsSecretName" -}}
 {{- if .Values.s3LogFileStorage.role.enabled -}}
+{{/* Access should be given by IRSA / Pod Identity Association */}}
 {{- else if .Values.s3LogFileStorage.enabled -}}
 {{- include "olake.minio.secretName" . -}}
 {{- else if .Values.s3LogFileStorage.existingSecret -}}
@@ -123,6 +124,12 @@ Fusion still requires the shared RWX volume and is not supported in s3 mode.
 {{- if eq $mode "s3" -}}
 {{- if not (and .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region) -}}
 {{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.localStorageMode is s3" -}}
+{{- end -}}
+{{- if and .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.role.enabled -}}
+{{- fail "s3LogFileStorage.enabled and s3LogFileStorage.role.enabled cannot both be true; the bundled MinIO uses a credentials secret, while role.enabled is for IRSA / EKS Pod Identity against external S3" -}}
+{{- end -}}
+{{- if not (or .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.role.enabled .Values.s3LogFileStorage.existingSecret) -}}
+{{- fail "S3 credentials are required when global.localStorageMode is s3 and s3LogFileStorage.enabled is false; set s3LogFileStorage.role.enabled (IRSA / EKS Pod Identity) or s3LogFileStorage.existingSecret" -}}
 {{- end -}}
 {{- if .Values.fusion.enabled -}}
 {{- fail "Fusion is not supported when global.localStorageMode is s3; set fusion.enabled to false or use nfs" -}}
@@ -154,10 +161,6 @@ OLAKE_S3_PREFIX: {{ .Values.s3LogFileStorage.prefix | quote }}
 {{- $endpoint := include "olake.s3Endpoint" . -}}
 {{- if $endpoint }}
 OLAKE_S3_ENDPOINT: {{ $endpoint | quote }}
-{{- end }}
-{{- $s3Secret := include "olake.s3CredentialsSecretName" . -}}
-{{- if $s3Secret }}
-OLAKE_S3_CREDENTIALS_SECRET: {{ $s3Secret | quote }}
 {{- end }}
 {{- end }}
 {{- end -}}

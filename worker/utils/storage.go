@@ -27,6 +27,11 @@ var (
 	s3Bucket string
 )
 
+type s3Object struct {
+	Key          string
+	LastModified time.Time
+}
+
 // InitStorage initializes the shared S3 client when storage mode is S3. No-op for NFS.
 func InitStorage(ctx context.Context) error {
 	if storagemode.Get() != constants.StorageModeS3 {
@@ -42,7 +47,7 @@ func InitStorage(ctx context.Context) error {
 	secretKey := viper.GetString(constants.EnvS3SecretAccessKey)
 	if accessKey != "" && secretKey != "" {
 		configOpts = append(configOpts, config.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(accessKey, secretKey, viper.GetString(constants.EnvS3SessionToken)),
+			credentials.StaticCredentialsProvider{Value: aws.Credentials{AccessKeyID: accessKey, SecretAccessKey: secretKey}},
 		))
 	}
 
@@ -57,6 +62,10 @@ func InitStorage(ctx context.Context) error {
 		s3Opts = append(s3Opts, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 			o.UsePathStyle = true
+			// SDK-default CRC32 integrity checksums (service/s3 >= v1.73) are not
+			// implemented by several S3-compatible services (R2, older MinIO, GCS interop)
+			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		})
 	}
 
@@ -73,8 +82,13 @@ func InitStorage(ctx context.Context) error {
 func ensureS3Bucket(ctx context.Context, client *s3.Client, bucket string) error {
 	customEndpoint := viper.GetString(constants.EnvS3Endpoint) != ""
 
+	prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/")
 	if !customEndpoint {
-		_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)})
+		_, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:  aws.String(bucket),
+			Prefix:  aws.String(prefix),
+			MaxKeys: aws.Int32(1),
+		})
 		if err != nil {
 			return fmt.Errorf("s3 bucket %q is not accessible: %s", bucket, err)
 		}
@@ -83,7 +97,11 @@ func ensureS3Bucket(ctx context.Context, client *s3.Client, bucket string) error
 
 	const maxAttempts = 60
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)}); err == nil {
+		if _, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:  aws.String(bucket),
+			Prefix:  aws.String(prefix),
+			MaxKeys: aws.Int32(1),
+		}); err == nil {
 			return nil
 		}
 
@@ -101,7 +119,12 @@ func ensureS3Bucket(ctx context.Context, client *s3.Client, bucket string) error
 		if attempt == maxAttempts {
 			return fmt.Errorf("failed to ensure s3 bucket %q after %d attempts: %s", bucket, maxAttempts, err)
 		}
-		time.Sleep(5 * time.Second)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
 	}
 
 	return nil
@@ -241,6 +264,33 @@ func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, 
 		}
 	}
 	return false, nil
+}
+
+// listS3Objects lists S3 objects under the given prefix, including LastModified.
+func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
+	client, bucket, err := getS3Client()
+	if err != nil {
+		return nil, err
+	}
+
+	var s3Objects []s3Object
+	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
+		Bucket: &bucket,
+		Prefix: &prefix,
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects in s3://%s/%s: %s", bucket, prefix, err)
+		}
+		for _, obj := range page.Contents {
+			s3Objects = append(s3Objects, s3Object{
+				Key:          aws.ToString(obj.Key),
+				LastModified: aws.ToTime(obj.LastModified),
+			})
+		}
+	}
+	return s3Objects, nil
 }
 
 // deleteS3Object deletes a single object from the configured S3 bucket.

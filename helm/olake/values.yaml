@@ -376,8 +376,9 @@ s3LogFileStorage:
     # -- Backing volume size for in-cluster MinIO (uses global.storageClass when set)
     size: 20Gi
   image:
-    repository: minio/minio
+    repository: olakego/minio
     tag: RELEASE.2025-04-03T14-56-28Z
+    pullPolicy: IfNotPresent
 
   # -- Pod scheduling constraints
   nodeSelector: {}
@@ -397,6 +398,15 @@ s3LogFileStorage:
   # -- MinIO resource requirements (optional overrides)
   # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
   resources: {}
+
+  # -- MinIO security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
 
   role:
     # -- Use IAM role for hosted S3 auth (EKS IRSA). When true, existingSecret is not required.

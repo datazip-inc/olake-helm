@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/acarl005/stripansi"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 const (
@@ -31,16 +31,56 @@ type PodLogBuffer struct {
 	filenamePrefix        string // chunk filename prefix, e.g. connector- or worker-
 	counter               int
 	lastLocalLogTimestamp time.Time // k8s/docker line timestamp for chunk naming
-	lastLocalLogSeq       uint64    // last seq in the buffered chunk
+	lastLocalLogSeq       uint64    // seq of the last line in the buffered chunk (stream checkpoint)
 }
 
-// TODO: optimize per-line open/stat and synchronous PutObject on Flush (keep the file handle open, track size in memory, bounded async upload queue).
+// COMMENT: optimize per-line open/stat and synchronous PutObject on Flush (keep the file handle open, track size in memory, bounded async upload queue).
 // resumePoint is the S3 snapshot used to continue log collection.
 type resumePoint struct {
 	logDir              string
 	lastPodLogTimestamp time.Time
-	lastPodLogSeq       uint64
-	chunkCounter        int // highest uploaded chunk number; 0 if none exist yet
+	lastPodLogSeq       uint64 // last seen seq of the latest chunk (stream checkpoint); 0 if none
+	chunkCounter        int    // highest uploaded chunk number; 0 if none exist yet
+}
+
+// streamCheckpoint skips log lines that were already uploaded when a stream is re-read from
+// its resume point (connector reconnect, final catch-up, resume after restart, worker recovery).
+// First read (no checkpoint seq): every line is accepted. Otherwise lines are skipped until the
+// checkpoint line (seq == checkpoint seq) shows up, or until log time passes the checkpoint
+// timestamp + 1s if it is missing; then every line is accepted. There is no seq ordering check,
+// so out-of-order lines after the checkpoint are kept.
+// Accepted tradeoffs: an out-of-order line printed before the checkpoint is skipped, and with the
+// checkpoint missing (e.g. log rotation) up to 1s of lines can be lost.
+type streamCheckpoint struct {
+	seq      uint64
+	deadline time.Time
+	reached  bool
+}
+
+func newStreamCheckpoint(seq uint64, timestamp time.Time) *streamCheckpoint {
+	return &streamCheckpoint{
+		seq:      seq,
+		deadline: timestamp.Add(time.Second),
+		reached:  seq == 0,
+	}
+}
+
+// accept reports whether the line should be written.
+func (c *streamCheckpoint) accept(normalizedLogLine podLogLineEntry) bool {
+	if c.reached {
+		return true
+	}
+	if normalizedLogLine.Seq == c.seq {
+		// checkpoint line was already uploaded
+		c.reached = true
+		return false
+	}
+	if !normalizedLogLine.PodLogTimestamp.After(c.deadline) {
+		return false
+	}
+	// checkpoint line not found within 1s: accept from here
+	c.reached = true
+	return true
 }
 
 // logChunkMetadata holds resume fields parsed from a chunked log filename.
@@ -59,11 +99,6 @@ type podLogLineEntry struct {
 	// zerolog "time"; parsePodLogLine then overwrites it with the docker/k8s prefix.
 	PodLogTimestamp   time.Time `json:"time"`
 	normalizedLogLine string
-}
-
-type s3Object struct {
-	Key          string
-	LastModified time.Time
 }
 
 // NewPodLogBuffer creates a local staging buffer for S3 log chunks.
@@ -88,33 +123,6 @@ func NewPodLogBuffer(workDir, logRelDir, filenamePrefix string, counter int) (*P
 		filenamePrefix: filenamePrefix,
 		counter:        counter,
 	}, nil
-}
-
-// listS3Objects lists S3 objects under the given prefix, including LastModified.
-func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
-	client, bucket, err := getS3Client()
-	if err != nil {
-		return nil, err
-	}
-
-	var s3Objects []s3Object
-	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
-		Bucket: &bucket,
-		Prefix: &prefix,
-	})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list objects in s3://%s/%s: %s", bucket, prefix, err)
-		}
-		for _, obj := range page.Contents {
-			s3Objects = append(s3Objects, s3Object{
-				Key:          aws.ToString(obj.Key),
-				LastModified: aws.ToTime(obj.LastModified),
-			})
-		}
-	}
-	return s3Objects, nil
 }
 
 // parseLogChunkMetadata parses counter, timestamp, and seq from a chunk filename.
@@ -179,14 +187,11 @@ func loadResumePoint(ctx context.Context, workDir, logRelDir, prefix string) (re
 		if !ok {
 			continue
 		}
-		// Latest chunk wins for counter/timestamp (used as the Docker/K8s since cursor).
-		// Seq must be the max across chunks: a later chunk of seq-less lines is named
-		// -seq000000 and must not reset resume back to 0.
+		// Latest chunk wins: counter for the next chunk number, timestamp as the since cursor,
+		// and its last seen seq as the checkpoint (0 means no seq: resume accepts every line from since).
 		if meta.counter > resume.chunkCounter {
 			resume.chunkCounter = meta.counter
 			resume.lastPodLogTimestamp = meta.timestamp
-		}
-		if meta.seq > resume.lastPodLogSeq {
 			resume.lastPodLogSeq = meta.seq
 		}
 	}
@@ -266,15 +271,20 @@ func (b *PodLogBuffer) Flush(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	err = os.Remove(b.path)
+	if err != nil {
+		return err
+	}
 	b.lastLocalLogTimestamp = time.Time{}
 	b.lastLocalLogSeq = 0
-	return os.Remove(b.path)
+	return nil
 }
 
 // WriteLine appends a single parsed log line using the same chunking rules as connector log collection.
 func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLineEntry) error {
 	shouldFlush, err := b.appendLine(normalizedLogLine)
 	if err != nil {
+		logger.Warnf("failed to append line to pod log buffer with seq %d: %s", normalizedLogLine.Seq, err)
 		if flushErr := b.Flush(ctx); flushErr != nil {
 			return flushErr
 		}
@@ -287,27 +297,31 @@ func (b *PodLogBuffer) WriteLine(ctx context.Context, normalizedLogLine podLogLi
 }
 
 func (b *PodLogBuffer) appendLine(normalizedLogLine podLogLineEntry) (shouldFlush bool, err error) {
-	if !normalizedLogLine.PodLogTimestamp.IsZero() {
-		b.lastLocalLogTimestamp = normalizedLogLine.PodLogTimestamp
-	}
-	if normalizedLogLine.Seq > b.lastLocalLogSeq {
-		b.lastLocalLogSeq = normalizedLogLine.Seq
-	}
 	if err := b.writeLocal([]byte(normalizedLogLine.normalizedLogLine)); err != nil {
 		return false, err
 	}
+	if !normalizedLogLine.PodLogTimestamp.IsZero() {
+		b.lastLocalLogTimestamp = normalizedLogLine.PodLogTimestamp
+	}
+	// Chunk seq is the last seen seq, not the max: it is the checkpoint a resumed stream skips to.
+	if normalizedLogLine.Seq > 0 {
+		b.lastLocalLogSeq = normalizedLogLine.Seq
+	}
 	size, err := b.currentBufferSize()
 	if err != nil {
-		return false, err
+		// line is already in the buffer; flush so Flush stays the only uploader
+		logger.Warnf("failed to stat pod log buffer, flushing: %s", err)
+		return true, nil
 	}
+	return size >= int64(b.currentThreshold()), nil
+}
 
-	var threshold int
+// currentThreshold returns the chunk size threshold for the current chunk counter.
+func (b *PodLogBuffer) currentThreshold() int {
 	if b.counter < len(constants.PodLogChunkThresholds) {
-		threshold = constants.PodLogChunkThresholds[b.counter]
-	} else {
-		threshold = constants.PodLogChunkMaxBytes
+		return constants.PodLogChunkThresholds[b.counter]
 	}
-	return size >= int64(threshold), nil
+	return constants.PodLogChunkMaxBytes
 }
 
 // currentBufferSize returns the size of the local buffer file.
