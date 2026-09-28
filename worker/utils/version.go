@@ -39,8 +39,8 @@ func CustomDriverVersion() string {
 	return ""
 }
 
-// SupportsSplitStreams reports whether the source driver accepts the split catalog flags
+// SupportsStreamsV2 reports whether the source driver accepts the v2 catalog flags
 // (--available-streams / --selected-streams). Older drivers only read streams.json.
-func SupportsSplitStreams(version string) bool {
-	return CustomDriverVersion() != "" || CompareAtLeast(version, constants.MinSplitStreamsVersion)
+func SupportsStreamsV2(version string) bool {
+	return CustomDriverVersion() != "" || CompareAtLeast(version, constants.MinStreamsV2Version)
 }
