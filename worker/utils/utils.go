@@ -129,7 +129,7 @@ func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, 
 	}
 }
 
-func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobData.Version
 
 	updates := map[string]string{
@@ -138,10 +138,10 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	hasStreamsV2 := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
-	split := hasStreamsV2 && SupportsStreamsV2(jobData.Version)
-	if hasStreamsV2 && !split {
-		logger.Warnf("job %d has a v2 catalog but source version %s is below %s; running with streams.json", req.JobID, jobData.Version, constants.MinStreamsV2Version)
+	// a v2 job cannot fall back to streams.json, which does not carry its selected_streams overrides
+	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
+	if split && !SupportsStreamsV2(jobData.Version) {
+		return fmt.Errorf("job %d uses the v2 catalog, but source version %s is below %s: upgrade the source version", req.JobID, jobData.Version, constants.MinStreamsV2Version)
 	}
 	if split {
 		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
@@ -157,6 +157,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 	}
 
 	ApplyConfigUpdates(req, updates, addIfMissing)
+	return nil
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
