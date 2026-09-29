@@ -109,10 +109,11 @@ func (c *ConnectorLogCollector) follow() {
 		if c.stillRunning != nil && !c.stillRunning(c.streamCtx) {
 			return
 		}
-		logger.Warnf("pod log stream stopped while pod still running, retrying in %s", backoff)
-
-		if err == nil {
+		if err != nil {
+			logger.Warnf("pod log stream failed while pod still running, retrying in %s: %s", backoff, err)
+		} else {
 			backoff = logReconnectInitial
+			logger.Warnf("pod log stream ended while pod still running, retrying in %s", backoff)
 		}
 
 		select {

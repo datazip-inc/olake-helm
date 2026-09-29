@@ -363,13 +363,15 @@ s3LogFileStorage:
   bucket: "olake"
   region: "us-east-1"
   prefix: ""
-  # -- Static credentials secret (required for external S3/MinIO when role.enabled is false)
+  # -- Static credentials secret for external S3/MinIO/GCS S3 API when role.enabled is false.
+  # For GCS, use HMAC credentials via this secret.
   # kubectl create secret generic s3-log-file-storage-secret \
   #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
   #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
   existingSecret: ""
   auth:
     # -- MinIO root credentials when enabled: true (also used as OLAKE_S3_* keys)
+    # Note: Override auth.rootPassword with a secure password for non-local environments.
     rootUser: "olake"
     rootPassword: "password"
   persistence:
@@ -409,13 +411,12 @@ s3LogFileStorage:
   securityContext: {}
 
   role:
-    # -- Use IAM role for hosted S3 auth (EKS IRSA). When true, existingSecret is not required.
+    # Use an IAM role for hosted S3 authentication; supports EKS IRSA and EKS Pod Identity.
+    # When true, existingSecret is not required.
     enabled: false
-    # Cloud provider IAM role association for hosted S3 log storage.
-    # Examples:
+    # Required for EKS IRSA; leave empty when using EKS Pod Identity.
+    # Example:
     #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
-    #   GCP Workload Identity: iam.gke.io/gcp-service-account: "olake-s3-log-storage@project.iam.gserviceaccount.com"
-    #   Azure Workload Identity: azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
     annotations: {}
 
 # DEPRECATED: NFS shared storage. Currently the default component. Support will be removed soon.

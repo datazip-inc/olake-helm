@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// TODO: add support for GCS and Azure Blob storage modes.
 // Get returns OLAKE_STORAGE_MODE from the environment, defaulting to nfs.
 func Get() string {
 	mode := strings.ToLower(strings.TrimSpace(viper.GetString(constants.EnvStorageMode)))
