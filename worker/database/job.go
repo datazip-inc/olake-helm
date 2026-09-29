@@ -92,12 +92,13 @@ func (db *DB) GetJobData(ctx context.Context, jobId int) (types.JobData, error) 
 	rows := db.client.QueryRowContext(cctx, query, jobId)
 
 	var jobData types.JobData
-	var selectedStreams, availableStreams sql.NullString
-	if err := rows.Scan(&jobData.JobName, &jobData.Streams, &selectedStreams, &availableStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver, &jobData.AdvancedSettings,
+	var streams, selectedStreams, availableStreams sql.NullString
+	if err := rows.Scan(&jobData.JobName, &streams, &selectedStreams, &availableStreams, &jobData.State, &jobData.ProjectID, &jobData.Source, &jobData.Destination, &jobData.Version, &jobData.Driver, &jobData.AdvancedSettings,
 		&jobData.Frequency, &jobData.CreatedAt, &jobData.DestinationVersion, &jobData.SourceName, &jobData.DestinationName); err != nil {
 		log.Error("failed to get job data from database", "jobID", jobId, "error", err)
 		return types.JobData{}, fmt.Errorf("failed to scan job data: %w", err)
 	}
+	jobData.Streams = streams.String
 	jobData.SelectedStreams = selectedStreams.String
 	jobData.AvailableStreams = availableStreams.String
 

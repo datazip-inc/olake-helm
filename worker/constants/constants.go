@@ -50,7 +50,7 @@ const (
 
 	StateFlag = "--state"
 
-	CatalogFlag          = "--catalog"
+	CatalogFlag          = "--catalog" // legacy alias of --streams
 	StreamsFlag          = "--streams"
 	AvailableStreamsFlag = "--available-streams"
 	SelectedStreamsFlag  = "--selected-streams"
@@ -59,7 +59,7 @@ const (
 	SelectedStreamsFile  = "selected_streams.json"
 
 	// TODO(BEFORE_MERGE): set to the release that ships streams v2
-	MinSplitStreamsVersion = "v0.11.0"
+	MinStreamsV2Version = "v0.11.0"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
