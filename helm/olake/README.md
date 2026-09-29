@@ -413,7 +413,7 @@ The following images must be mirrored to the registry before deploying:
 | Image | Source |
 |---|---|
 | `library/busybox:latest` | Docker Hub |
-| `curlimages/curl:8.1.2` | Docker Hub |
+| `curlimages/curl:8.21.0` | Docker Hub |
 | `olakego/ui:latest`, `olakego/ui-worker:latest` | Docker Hub |
 | `olakego/source-*` (e.g. `olakego/source-mongodb:v0.7.0`) | Docker Hub |
 | `temporalio/auto-setup:1.22.3`, `temporalio/ui:2.16.2` | Docker Hub |

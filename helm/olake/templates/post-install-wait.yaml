@@ -27,7 +27,7 @@ spec:
       {{- end }}
       containers:
       - name: wait-for-stack
-        image: "{{ include "olake.registryBase" . }}/curlimages/curl:8.1.2"
+        image: "{{ include "olake.curlImage" . }}"
         imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: true

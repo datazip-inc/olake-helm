@@ -46,7 +46,7 @@ spec:
           echo "OLake UI is ready!"
       containers:
       - name: signup-init
-        image: "{{ include "olake.registryBase" . }}/curlimages/curl:latest"
+        image: "{{ include "olake.curlImage" . }}"
         imagePullPolicy: IfNotPresent
         env:
         {{- if .Values.olakeUI.initUser.existingSecret }}

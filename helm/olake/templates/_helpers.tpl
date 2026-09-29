@@ -108,6 +108,13 @@ Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to regis
 {{- end -}}
 
 {{/*
+Return the curl image used by the init and wait jobs.
+*/}}
+{{- define "olake.curlImage" -}}
+{{- include "olake.registryBase" . }}/curlimages/curl:8.21.0
+{{- end -}}
+
+{{/*
 Return the PostgreSQL secret name
 */}}
 {{- define "olake.postgresql.secretName" -}}
