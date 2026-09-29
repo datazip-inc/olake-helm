@@ -129,7 +129,7 @@ func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, 
 	}
 }
 
-func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) error {
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
 	req.Version = jobData.Version
 
 	updates := map[string]string{
@@ -138,11 +138,8 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	// a v2 job cannot fall back to streams.json, which does not carry its selected_streams overrides
+	// the job's catalog format decides the flags; CheckStreamsV2Support fails an older driver
 	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
-	if split && !SupportsStreamsV2(jobData.Version) {
-		return fmt.Errorf("job %d uses the v2 catalog, but source version %s is below %s: upgrade the source version", req.JobID, jobData.Version, constants.MinStreamsV2Version)
-	}
 	if split {
 		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
 		updates[constants.SelectedStreamsFile] = jobData.SelectedStreams
@@ -157,7 +154,6 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 	}
 
 	ApplyConfigUpdates(req, updates, addIfMissing)
-	return nil
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -169,7 +165,6 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 
 	// olake-ui always stages streams.json at the temp path, which an older worker reads as-is.
 	// For a split-format job it also stages available_streams.json and selected_streams.json
-	// next to it; those are used when the driver supports them.
 	stagedPath := filepath.Join(GetConfigDir(), req.TempPath)
 	data, err := os.ReadFile(stagedPath)
 	if err != nil {
@@ -181,13 +176,9 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 		"state.json":       jobDetails.State,
 	}
 
-	available, selected, staged, err := readStagedStreamsV2Catalog(filepath.Dir(stagedPath))
+	available, selected, split, err := readStagedStreamsV2Catalog(filepath.Dir(stagedPath))
 	if err != nil {
 		return err
-	}
-	split := staged && SupportsStreamsV2(jobDetails.Version)
-	if staged && !split {
-		logger.Warnf("job %d has a v2 catalog staged but source version %s is below %s; running with streams.json", req.JobID, jobDetails.Version, constants.MinStreamsV2Version)
 	}
 	if split {
 		updates[constants.AvailableStreamsFile] = available

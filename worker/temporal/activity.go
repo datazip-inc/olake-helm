@@ -98,10 +98,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 
 	// update the configs with latest job details first - this refreshes req.Version from
 	// the DB, since req may carry a stale version from when a recurring schedule was created
-	if err := utils.UpdateConfigWithJobDetails(jobDetails, req); err != nil {
-		telemetry.TrackSyncEvent(telemetry.BasePayload(req), telemetry.TelemetryEventFailed, "")
-		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedSourceVersion", err)
-	}
+	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)

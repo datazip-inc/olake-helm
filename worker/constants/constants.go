@@ -63,3 +63,12 @@ const (
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
+
+// StreamsV2Flags are the CLI flags that only drivers at MinStreamsV2Version or later accept.
+var StreamsV2Flags = []string{
+	AvailableStreamsFlag,
+	SelectedStreamsFlag,
+	"--difference-available-streams",
+	"--difference-selected-streams",
+	"--convert-streams",
+}
