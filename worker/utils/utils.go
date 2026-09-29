@@ -338,20 +338,17 @@ func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, 
 	return subdir, workdir
 }
 
-// ConnectorConfigDir is the config folder the connector should read and write.
-// NFS mounts the workflow dir at /mnt/config. S3 is s3://bucket/[prefix/]{workflow-dir}.
+// ConnectorConfigDir returns the S3 config path for S3 storage mode, empty string otherwise.
 func ConnectorConfigDir(command types.Command, workflowID string) string {
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
-		key := GetWorkflowDirectory(command, workflowID)
-		if prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/"); prefix != "" {
-			key = path.Join(prefix, key)
-		}
-		return fmt.Sprintf("s3://%s/%s", bucket, key)
-	default:
-		return constants.ContainerMountDir
+	if storagemode.Get() != constants.StorageModeS3 {
+		return ""
 	}
+	bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
+	key := GetWorkflowDirectory(command, workflowID)
+	if prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/"); prefix != "" {
+		key = path.Join(prefix, key)
+	}
+	return fmt.Sprintf("s3://%s/%s", bucket, key)
 }
 
 // RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
