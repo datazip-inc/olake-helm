@@ -28,6 +28,17 @@
 -   Kubernetes 1.19+
 -   Helm 3.2.0+
 
+## GitOps
+
+Manage OLake sources, destinations, jobs, and streams as labelled **ConfigMaps** (or **Secrets** for credentials) with the embedded reconciler in olake-ui. See **[docs/gitops.md](docs/gitops.md)** for Helm values, RBAC, example manifests, and Argo CD / Flux notes.
+
+```yaml
+gitops:
+  enabled: true
+olakeUI:
+  replicaCount: 1
+```
+
 ## Installation
 
 ### Step 1: Add the OLake Helm Repository

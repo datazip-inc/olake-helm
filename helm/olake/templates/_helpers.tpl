@@ -70,6 +70,19 @@ Create the name of the service account to use for job pods
 {{- end }}
 
 {{/*
+Service account used by the olake-ui pod (job SA when present, else dedicated UI SA for GitOps).
+*/}}
+{{- define "olake.uiServiceAccountName" -}}
+{{- if (include "olake.jobServiceAccountName" .) }}
+{{- include "olake.jobServiceAccountName" . }}
+{{- else if and .Values.gitops.enabled .Values.gitops.serviceAccount.create }}
+{{- default (printf "%s-ui" (include "olake.fullname" .)) .Values.gitops.serviceAccount.name }}
+{{- else }}
+{{- "" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Shared storage PVC name
 */}}
 {{- define "olake.sharedStoragePVC" -}}
@@ -105,6 +118,21 @@ Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to regis
 */}}
 {{- define "olake.registryBase" -}}
 {{- .Values.global.env.CONTAINER_REGISTRY_BASE | default "registry-1.docker.io" -}}
+{{- end -}}
+
+{{/*
+Return a container image reference. If repository is already a full registry path
+(e.g. asia-south1-docker.pkg.dev/.../ui), use it as-is; otherwise prefix registryBase.
+Usage: include "olake.containerImage" (dict "context" . "repository" .Values.olakeUI.image.repository "tag" .Values.olakeUI.image.tag)
+*/}}
+{{- define "olake.containerImage" -}}
+{{- $repo := .repository -}}
+{{- $tag := .tag -}}
+{{- if or (contains ".pkg.dev/" $repo) (contains "gcr.io/" $repo) (contains "amazonaws.com/" $repo) (hasPrefix "ghcr.io/" $repo) -}}
+{{- printf "%s:%s" $repo $tag -}}
+{{- else -}}
+{{- printf "%s/%s:%s" (include "olake.registryBase" .context) $repo $tag -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
