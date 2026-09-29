@@ -205,11 +205,12 @@ func GetTelemetryUserID() string {
 // getHostOutputDir returns the host output directory
 func GetHostOutputDir(outputDir string) string {
 	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
-	persistencePath := GetConfigDir()
 	if hostPersistencePath != "" {
+		persistencePath := GetConfigDir()
 		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
 		return hostOutputDir
 	}
+
 	return outputDir
 }
 

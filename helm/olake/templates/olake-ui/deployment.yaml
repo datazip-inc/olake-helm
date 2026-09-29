@@ -59,19 +59,39 @@ spec:
       {{- if or .Values.temporal.enabled .Values.fusion.enabled }}
       initContainers:
       {{- if .Values.temporal.enabled }}
-      - name: wait-for-temporal
-        image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
-        imagePullPolicy: IfNotPresent
+      - name: create-temporal-namespace
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.temporal.adminTools.image.repository }}:{{ .Values.temporal.adminTools.image.tag }}"
+        imagePullPolicy: {{ .Values.temporal.adminTools.image.pullPolicy }}
+        env:
+        - name: TEMPORAL_ADDRESS
+          value: "temporal.{{ include "olake.namespace" . }}.svc.cluster.local:7233"
+        - name: DEFAULT_NAMESPACE
+          value: "default"
         command:
         - /bin/sh
         - -c
         - |
-          echo "Waiting for Temporal to be ready..."
-          until nc -z temporal.{{ include "olake.namespace" . }}.svc.cluster.local 7233; do
-            echo "Temporal is not ready yet. Waiting..."
+          set -eu
+          echo "Creating namespace '$DEFAULT_NAMESPACE'..."
+          attempt=1
+          max_attempts=30
+          while :; do
+            if temporal operator namespace describe -n "$DEFAULT_NAMESPACE" --address "$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+              echo "Namespace '$DEFAULT_NAMESPACE' already exists"
+              break
+            fi
+            if temporal operator namespace create -n "$DEFAULT_NAMESPACE" --address "$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+              echo "Namespace '$DEFAULT_NAMESPACE' created"
+              break
+            fi
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Failed to create namespace '$DEFAULT_NAMESPACE' after $max_attempts attempts"
+              exit 1
+            fi
+            echo "Namespace operation not ready yet, waiting... (attempt $attempt/$max_attempts)"
+            attempt=$((attempt + 1))
             sleep 5
           done
-          echo "Temporal is ready!"
       {{- end }}
       {{- if .Values.fusion.enabled }}
       - name: wait-for-fusion

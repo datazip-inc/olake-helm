@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -26,6 +28,7 @@ type ConfigMapWatcher struct {
 	mu          sync.RWMutex
 	jobMapping  map[int]map[string]string // TODO: use sync.Map
 	jobProfiles map[int]JobSchedulingConfig
+	jobIndexes  JobIndexes
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -39,6 +42,7 @@ func NewConfigMapWatcher(ctx context.Context, clientset kubernetes.Interface, na
 		configMapName: "olake-workers-config",
 		jobMapping:    make(map[int]map[string]string),
 		jobProfiles:   make(map[int]JobSchedulingConfig),
+		jobIndexes:    JobIndexes{Jobs: map[int]IndexStorageConfig{}},
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -134,6 +138,43 @@ func (w *ConfigMapWatcher) GetJobProfile(jobID int) (JobSchedulingConfig, bool) 
 	return profile, exists
 }
 
+// GetDefaultJobIndex returns the settings every job starts from. A zero value
+// means jobIndexes carries no default, which merges as "change nothing".
+func (w *ConfigMapWatcher) GetDefaultJobIndex() IndexStorageConfig {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	return cloneIndexStorage(w.jobIndexes.Default)
+}
+
+// GetJobIndex returns one job's index settings, if it has any.
+func (w *ConfigMapWatcher) GetJobIndex(jobID int) (IndexStorageConfig, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	entry, exists := w.jobIndexes.Jobs[jobID]
+	if !exists {
+		return IndexStorageConfig{}, false
+	}
+	return cloneIndexStorage(entry), true
+}
+
+// cloneIndexStorage copies the maps and slices inside an entry so a caller
+// cannot write through the returned value into the settings the watcher
+// serves to every other job.
+func cloneIndexStorage(entry IndexStorageConfig) IndexStorageConfig {
+	if entry.AccessModes != nil {
+		entry.AccessModes = slices.Clone(entry.AccessModes)
+	}
+	if entry.Labels != nil {
+		entry.Labels = maps.Clone(entry.Labels)
+	}
+	if entry.Annotations != nil {
+		entry.Annotations = maps.Clone(entry.Annotations)
+	}
+	return entry
+}
+
 // GetAllJobMapping returns all job mappings (thread-safe)
 // Returns a deep copy to prevent external modification of internal state
 func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
@@ -172,5 +213,14 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	} else {
 		logger.Debugf("no OLAKE_JOB_PROFILES in ConfigMap %s", w.configMapName)
 		w.jobProfiles = map[int]JobSchedulingConfig{}
+	}
+
+	// 3. Load per-job index storage settings
+	if rawIndexes, exists := cm.Data["OLAKE_JOB_INDEXES"]; exists && rawIndexes != "" {
+		w.jobIndexes = LoadJobIndexes(rawIndexes)
+		logger.Infof("updated job index settings with %d job entries", len(w.jobIndexes.Jobs))
+	} else {
+		logger.Debugf("no OLAKE_JOB_INDEXES in ConfigMap %s", w.configMapName)
+		w.jobIndexes = JobIndexes{Jobs: map[int]IndexStorageConfig{}}
 	}
 }

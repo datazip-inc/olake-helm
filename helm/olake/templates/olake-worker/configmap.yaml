@@ -40,7 +40,23 @@ data:
   # Converted to JSON for consistent parsing by the worker
   OLAKE_JOB_PROFILES: {{ .Values.global.jobProfiles | toJson | quote }}
   {{- end }}
-  
+
+  # =================================================================
+  # JOB INDEX STORAGE CONFIGURATION
+  # =================================================================
+  # `default` holds the index settings every job starts from; entries under
+  # `jobs` are deep-merged over it field by field by the worker. Always rendered
+  # so `global.storageClass` reaches the index even when the block is empty. A
+  # job only gets a volume when its `index_required` advanced setting is true,
+  # whatever is configured here.
+  {{- $indexes := deepCopy (.Values.jobIndexes | default dict) }}
+  {{- $indexDefault := deepCopy (get $indexes "default" | default dict) }}
+  {{- if not (get $indexDefault "storageClass") }}
+  {{- $_ := set $indexDefault "storageClass" (.Values.global.storageClass | default "") }}
+  {{- end }}
+  {{- $_ := set $indexes "default" $indexDefault }}
+  OLAKE_JOB_INDEXES: {{ $indexes | toJson | quote }}
+
   # =================================================================
   # JOB SERVICE ACCOUNT CONFIGURATION
   # =================================================================
