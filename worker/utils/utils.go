@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,32 +135,103 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 	updates := map[string]string{
 		"source.json":      jobData.Source,
 		"destination.json": jobData.Destination,
-		"streams.json":     jobData.Streams,
 		"state.json":       jobData.State,
 	}
 
-	ApplyConfigUpdates(req, updates, nil)
+	// the job's catalog format decides the flags; CheckStreamsV2Support fails an older driver
+	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
+	if split {
+		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
+		updates[constants.SelectedStreamsFile] = jobData.SelectedStreams
+	} else {
+		updates[constants.StreamsFile] = jobData.Streams
+	}
+	req.Args = SetCatalogArgs(req.Args, split)
+
+	addIfMissing := make(map[string]string)
+	if !viper.GetBool(constants.EnvTelemetryDisabled) {
+		addIfMissing["user_id.txt"] = GetTelemetryUserID()
+	}
+
+	ApplyConfigUpdates(req, updates, addIfMissing)
 }
 
 func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
 
-	if req.TempPath != "" {
-		data, err := os.ReadFile(filepath.Join(GetConfigDir(), req.TempPath))
-		if err != nil {
-			return fmt.Errorf("failed to read streams file: %s", err)
-		}
-
-		updates := map[string]string{
-			"destination.json": jobDetails.Destination,
-			"state.json":       jobDetails.State,
-			"streams.json":     string(data),
-		}
-
-		ApplyConfigUpdates(req, updates, nil)
+	if req.TempPath == "" {
+		return nil
 	}
 
+	// olake-ui always stages streams.json at the temp path, which an older worker reads as-is.
+	// For a split-format job it also stages available_streams.json and selected_streams.json
+	stagedPath := filepath.Join(GetConfigDir(), req.TempPath)
+	data, err := os.ReadFile(stagedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read streams file: %s", err)
+	}
+
+	updates := map[string]string{
+		"destination.json": jobDetails.Destination,
+		"state.json":       jobDetails.State,
+	}
+
+	available, selected, split, err := readStagedStreamsV2Catalog(filepath.Dir(stagedPath))
+	if err != nil {
+		return err
+	}
+	if split {
+		updates[constants.AvailableStreamsFile] = available
+		updates[constants.SelectedStreamsFile] = selected
+	} else {
+		updates[constants.StreamsFile] = string(data)
+	}
+	req.Args = SetCatalogArgs(req.Args, split)
+
+	ApplyConfigUpdates(req, updates, nil)
 	return nil
+}
+
+// readStagedStreamsV2Catalog reads available_streams.json and selected_streams.json from dir.
+// staged is false when neither is there; only one of them is an error.
+func readStagedStreamsV2Catalog(dir string) (available, selected string, staged bool, err error) {
+	read := func(name string) (string, bool, error) {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, fmt.Errorf("failed to read %s: %s", name, err)
+		}
+		return string(data), true, nil
+	}
+
+	available, hasAvailable, err := read(constants.AvailableStreamsFile)
+	if err != nil {
+		return "", "", false, err
+	}
+	selected, hasSelected, err := read(constants.SelectedStreamsFile)
+	if err != nil {
+		return "", "", false, err
+	}
+	if hasAvailable != hasSelected {
+		return "", "", false, fmt.Errorf("%s and %s must be staged together", constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	}
+	return available, selected, hasAvailable, nil
+}
+
+// SetCatalogArgs replaces whatever catalog flags args carries with the ones for the given format.
+func SetCatalogArgs(args []string, split bool) []string {
+	for _, flag := range []string{constants.CatalogFlag, constants.StreamsFlag, constants.AvailableStreamsFlag, constants.SelectedStreamsFlag} {
+		args = RemoveFlagFromArgs(args, flag)
+	}
+	if split {
+		return append(args,
+			constants.AvailableStreamsFlag, filepath.Join(constants.ContainerMountDir, constants.AvailableStreamsFile),
+			constants.SelectedStreamsFlag, filepath.Join(constants.ContainerMountDir, constants.SelectedStreamsFile),
+		)
+	}
+	return append(args, constants.StreamsFlag, filepath.Join(constants.ContainerMountDir, constants.StreamsFile))
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
@@ -287,18 +360,19 @@ func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, 
 	return subdir, workdir
 }
 
-// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request
+// RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request.
+// The sync keeps the catalog format the clear-destination ran with.
 func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
+	split := slices.Contains(req.Args, constants.AvailableStreamsFlag)
 	args := []string{
 		"sync",
 		"--config", "/mnt/config/source.json",
 		"--destination", "/mnt/config/destination.json",
-		"--catalog", "/mnt/config/streams.json",
 		"--state", "/mnt/config/state.json",
 	}
 
 	req.Command = types.Sync
-	req.Args = args
+	req.Args = SetCatalogArgs(args, split)
 }
 
 // ExtractJSONAndMarshal extracts and returns the last valid JSON block from output
