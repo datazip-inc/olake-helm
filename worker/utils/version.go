@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -43,4 +44,19 @@ func CustomDriverVersion() string {
 // (--available-streams / --selected-streams). Older drivers only read streams.json.
 func SupportsStreamsV2(version string) bool {
 	return CustomDriverVersion() != "" || CompareAtLeast(version, constants.MinStreamsV2Version)
+}
+
+// CheckStreamsV2Support fails a command that passes a streams v2 flag to a driver below MinStreamsV2Version
+func CheckStreamsV2Support(args []string, version string) error {
+	if SupportsStreamsV2(version) {
+		return nil
+	}
+	for _, arg := range args {
+		for _, flag := range constants.StreamsV2Flags {
+			if arg == flag || strings.HasPrefix(arg, flag+"=") {
+				return fmt.Errorf("%s needs source version %s or later, got %s: upgrade the source version", flag, constants.MinStreamsV2Version, version)
+			}
+		}
+	}
+	return nil
 }
