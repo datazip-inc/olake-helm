@@ -85,6 +85,76 @@
           "additionalProperties": false
         }
       }
+    },
+    "jobIndexes": {
+      "type": "object",
+      "description": "Per-job index volume settings. \"default\" holds the settings every job starts from; entries under \"jobs\" are deep-merged over it field by field. A job only gets a volume when its index_required advanced setting is true.",
+      "properties": {
+        "default": { "$ref": "#/definitions/indexStorage" },
+        "jobs": {
+          "type": "object",
+          "description": "Per-JobID overrides, deep-merged over \"default\" field by field.",
+          "patternProperties": {
+            "^[0-9]+$": { "$ref": "#/definitions/indexStorage" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "indexStorage": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$",
+          "description": "Requested volume size, e.g. 50Gi. Grow-only; Kubernetes rejects shrinking."
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "StorageClass for the index PVC. Empty falls back to global.storageClass, then the cluster default. Must be block storage."
+        },
+        "accessModes": {
+          "type": "array",
+          "description": "Access modes for the index PVC.",
+          "items": {
+            "type": "string",
+            "enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany", "ReadOnlyMany"]
+          }
+        },
+        "mountPath": {
+          "type": "string",
+          "pattern": "^/.*",
+          "description": "Mount path inside the connector container."
+        },
+        "cacheSizeMB": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Pebble block cache size in megabytes, passed to the connector as OLAKE_INDEX_DB_CACHE_SIZE. Resident memory inside the connector pod, per stream."
+        },
+        "maxOpenFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum SSTable file descriptors Pebble keeps open, passed to the connector as OLAKE_INDEX_DB_MAX_OPEN_FILES."
+        },
+        "labels": {
+          "type": "object",
+          "description": "Labels merged into the index PVC. These override the worker's app.kubernetes.io/* defaults; only olake.io/job-id is reserved. Merged per key with the \"default\" entry rather than replacing it.",
+          "additionalProperties": { "type": "string" }
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations applied to the index PVC, for backup tooling and similar. Merged per key with the \"default\" entry rather than replacing it.",
+          "additionalProperties": { "type": "string" }
+        },
+        "existingClaim": {
+          "type": "string",
+          "description": "Name of an existing PVC to mount instead of provisioning one."
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

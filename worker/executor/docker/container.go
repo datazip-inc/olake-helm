@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	DockerPullTimeout = 2 * time.Minute
+	DockerPullTimeout       = 2 * time.Minute
+	DockerHeartbeatInterval = 5 * time.Second
 )
 
 type ContainerState struct {
@@ -33,7 +34,7 @@ type ContainerState struct {
 	ExitCode *int
 }
 
-func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
+func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if err != nil {
@@ -42,6 +43,25 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
+
+		done := make(chan struct{})
+		defer close(done)
+
+		if heartbeatFunc != nil {
+			go func() {
+				ticker := time.NewTicker(DockerHeartbeatInterval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						heartbeatFunc(ctx, fmt.Sprintf("pulling image %s", imageName))
+					case <-done:
+						return
+					}
+				}
+			}()
+		}
+
 		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{RegistryAuth: registryAuth()})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
