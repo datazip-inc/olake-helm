@@ -17,7 +17,11 @@ var (
 
 	// ansiColorRegex matches common ANSI color escape sequences (e.g., "\x1b[32m", "\x1b[0m").
 	ansiColorRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	workerID, _ = os.Hostname()
 )
+func WorkerID() string {
+	return workerID
+}
 
 func Init() {
 	level := viper.GetString(constants.EnvLogLevel)

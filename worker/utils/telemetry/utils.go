@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -116,25 +115,4 @@ func WriteConfigs(req *types.ExecutionRequest, payload TelemetryPayload) {
 // if version is unparsable then worker sends the events
 func SupportsCLITelemetry(version string) bool {
 	return semver.IsValid(version) && semver.Compare(version, cliTelemetryMinVersion) >= 0
-}
-
-// ExternalKillReason reports whether an ErrExecutionFailed error indicates
-// the connector was killed externally rather than exiting on its own, by
-// reading the reason kubernetes already puts in the error text. Returns ""
-// when it wasn't an external kill, or the reason can't be determined.
-//
-// NOTE: Docker's wait path only reports a bare exit code, so OOM kills go
-// undetected there. Needs an extra ContainerInspect for State.OOMKilled.
-func ExternalKillReason(err error) string {
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "OOMKilled"):
-		return "oom_killed"
-	case strings.Contains(msg, "Evicted"):
-		return "evicted"
-	case strings.Contains(msg, "DeadlineExceeded"):
-		return "deadline_exceeded"
-	default:
-		return ""
-	}
 }

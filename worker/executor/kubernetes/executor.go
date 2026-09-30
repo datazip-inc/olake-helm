@@ -128,7 +128,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	}
 
 	podSpec := k.CreatePodSpec(req, workdir, imageName, indexVolume)
-	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
+	log.Info(fmt.Sprintf("Starting pod %s with image %s", podSpec.Name, imageName))
 
 	if _, err := k.createPod(ctx, podSpec); err != nil {
 		log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
@@ -147,7 +147,9 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	}
 
 	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
-		log.Error("pod failed to complete", "podName", podSpec.Name, "error", err)
+		if req.Command != types.Sync { // SyncActivity explains sync failures itself
+			log.Error("pod failed to complete", "podName", podSpec.Name, "error", err)
+		}
 		return "", err
 	}
 
