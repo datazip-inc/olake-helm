@@ -10,11 +10,13 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/failure"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	tlog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -68,7 +70,7 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	log := logger.Log(ctx)
-	log.Info("executing sync activity", "jobID", req.JobID)
+	log.Debug("executing sync activity", "jobID", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -103,6 +105,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)
 	runCount := telemetry.GetOrIncrementSyncRunCount(ctx, a.tempClient, req, attempt)
+	log.Info(fmt.Sprintf("Worker %s picked up job %s (id %d), attempt %d", logger.WorkerID(), jobDetails.JobName, req.JobID, attempt))
 	cliTelemetry := telemetry.SupportsCLITelemetry(req.Version)
 	payload := telemetry.BuildPayload(req, jobDetails, runCount)
 	telemetry.WriteConfigs(req, payload)
@@ -125,18 +128,24 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
-		if errors.Is(err, constants.ErrExecutionFailed) {
+		// This is the one place a failed sync is explained to the user; the
+		// executors skip their generic error lines for syncs.
+		var execFailure *failure.ExecutionFailure
+		if errors.As(err, &execFailure) {
 			// if the connector was killed externally (OOM/eviction) it never ran its
 			// own exit telemetry, so the worker sends "failed" regardless of owner
-			reason := telemetry.ExternalKillReason(err)
+			reason := failure.TelemetryReason(execFailure)
 			if !cliTelemetry || reason != "" {
 				telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, reason)
 			}
-			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
+
+			userMsg := failure.Describe(execFailure)
+			logUserFailure(log, userMsg)
+			return nil, temporal.NewNonRetryableApplicationError(userMsg.Headline, "ExecutionFailed", err)
 		}
 
 		// connector never launched (e.g. image pull / container-create failure)
-		log.Error("sync command failed", "error", err)
+		log.Error(fmt.Sprintf("Sync failed: %s", err))
 		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, "")
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
@@ -144,9 +153,22 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	return result, nil
 }
 
+// logUserFailure writes the failure explanation to worker.log, where the UI
+// shows it under worker logs: headline, raw details, then the recommendation.
+func logUserFailure(log tlog.Logger, msg failure.UserMessage) {
+	category := string(msg.Category)
+	log.Error(msg.Headline, "category", category)
+	if msg.Details != "" {
+		log.Error(msg.Details, "category", category)
+	}
+	if msg.Tip != "" {
+		log.Info(msg.Tip, "category", category, "tip", true)
+	}
+}
+
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest, status syncStatus) error {
 	log := logger.Log(ctx)
-	log.Info("cleaning up sync for job", "jobID", req.JobID)
+	log.Debug("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {

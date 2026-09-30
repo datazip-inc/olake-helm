@@ -61,7 +61,10 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 
 	output, err := a.executor.Execute(ctx, req, workdir)
 	if err != nil {
-		log.Error("executor failed", "command", req.Command, "error", err)
+		// SyncActivity explains sync failures itself; log only the other commands
+		if req.Command != types.Sync {
+			log.Error("executor failed", "command", req.Command, "error", err)
+		}
 		return nil, err
 	}
 	if req.Command != types.Sync {

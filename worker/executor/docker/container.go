@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/failure"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
@@ -26,6 +28,7 @@ import (
 const (
 	DockerPullTimeout       = 2 * time.Minute
 	DockerHeartbeatInterval = 5 * time.Second
+	failureLogTailLines     = "50"
 )
 
 type ContainerState struct {
@@ -42,7 +45,8 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 		defer cancel()
 
 		// Image doesn't exist, pull it
-		log.Info("image not found locally, pulling", "image", imageName)
+		log.Info(fmt.Sprintf("Pulling image %s", imageName))
+		pullStart := time.Now()
 
 		done := make(chan struct{})
 		defer close(done)
@@ -80,10 +84,11 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 			}
 			log.Warn("failed to read image pull output", "image", imageName, "error", err)
 		}
+		log.Info(fmt.Sprintf("Pulled image %s in %s", imageName, time.Since(pullStart).Round(time.Second)))
 		return nil
 	}
 
-	log.Info("using existing local image", "image", imageName)
+	log.Info(fmt.Sprintf("Using image %s (found in local cache)", imageName))
 	return nil
 }
 
@@ -133,6 +138,67 @@ func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID strin
 		return append(stdoutBuf.Bytes(), []byte("\n"+stderrBuf.String())...), nil
 	}
 	return stdoutBuf.Bytes(), nil
+}
+
+// getContainerLogTail returns the last lines of the container output.
+func (d *DockerExecutor) getContainerLogTail(ctx context.Context, containerID string) string {
+	reader, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       failureLogTailLines,
+	})
+	if err != nil {
+		return ""
+	}
+	defer reader.Close()
+
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, reader); err != nil {
+		return ""
+	}
+	return buf.String()
+}
+
+// containerFailure describes a container that exited with a non-zero code.
+func (d *DockerExecutor) containerFailure(ctx context.Context, containerID string, exitCode int) *failure.ExecutionFailure {
+	containerFailure := &failure.ExecutionFailure{
+		Kind:     "container",
+		Name:     containerID,
+		ExitCode: &exitCode,
+		LogTail:  d.getContainerLogTail(ctx, containerID),
+	}
+
+	inspect, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return containerFailure
+	}
+	// report the container name (as in the other worker lines), not its ID
+	if name := strings.TrimPrefix(inspect.Container.Name, "/"); name != "" {
+		containerFailure.Name = name
+	}
+	if state := inspect.Container.State; state != nil {
+		// report docker's OOM flag the way kubernetes does
+		if state.OOMKilled {
+			containerFailure.Reason = failure.ReasonOOMKilled
+		}
+		containerFailure.Message = state.Error
+	}
+	if hostConfig := inspect.Container.HostConfig; hostConfig != nil && hostConfig.Memory > 0 {
+		containerFailure.MemoryLimit = formatBytes(hostConfig.Memory)
+	}
+	return containerFailure
+}
+
+// formatBytes renders a memory size the way users configure it (e.g. 512Mi, 4Gi).
+func formatBytes(size int64) string {
+	const unit = 1024
+	units := []string{"", "Ki", "Mi", "Gi", "Ti"}
+	value, i := float64(size), 0
+	for value >= unit && i < len(units)-1 {
+		value /= unit
+		i++
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64) + units[i]
 }
 
 // getContainerState inspects a container and returns its state
@@ -230,18 +296,12 @@ func (d *DockerExecutor) waitForContainerCompletion(ctx context.Context, contain
 
 		select {
 		case <-ctx.Done():
-			log.Warn("context cancelled while waiting for container", "containerID", containerID)
+			log.Debug("context cancelled while waiting for container", "containerID", containerID)
 			return ctx.Err()
 
 		case status := <-statusCh:
 			if status.StatusCode != 0 {
-				logOutput, _ := d.getContainerLogs(ctx, containerID)
-				log.Error("container exited with non-zero status", "containerID", containerID, "statusCode", status.StatusCode)
-				return fmt.Errorf("%w: container %s exited with status %d: %s",
-					constants.ErrExecutionFailed,
-					containerID,
-					status.StatusCode,
-					string(logOutput))
+				return d.containerFailure(ctx, containerID, int(status.StatusCode))
 			}
 			return nil
 
@@ -294,7 +354,7 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 			return &types.Result{OK: true}, nil
 		}
 
-		return nil, fmt.Errorf("workflowID %s: container %s exit %d", req.WorkflowID, containerName, *state.ExitCode)
+		return nil, d.containerFailure(ctx, containerName, *state.ExitCode)
 	}
 
 	// First launch path: only if we never launched and nothing is running

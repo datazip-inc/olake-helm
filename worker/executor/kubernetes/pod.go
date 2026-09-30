@@ -18,8 +18,13 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils/failure"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
+
+// failureLogTailLines is how much connector output is kept to spot an
+// out-of-memory crash that the exit code alone does not show.
+const failureLogTailLines = 50
 
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
@@ -31,6 +36,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 	// transient stall is visible in the worker log without repeating every poll.
 	var unschedulableSince time.Time
 	var lastSchedulingCondition string
+	scheduledLogged := false
 
 	for time.Now().Before(deadline) {
 		// Record heartbeat to enable cancellation detection if heartbeat function is provided
@@ -40,8 +46,17 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 		pod, err := k.client.CoreV1().Pods(k.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
+			// the pod vanished mid-run (force-deleted or evicted and garbage collected)
+			if apierrors.IsNotFound(err) && ctx.Err() == nil {
+				return &failure.ExecutionFailure{Kind: "pod", Name: podName, NotFound: true}
+			}
 			log.Error("failed to get pod status", "podName", podName, "error", err)
 			return fmt.Errorf("failed to get pod status: %s", err)
+		}
+
+		if !scheduledLogged && pod.Spec.NodeName != "" {
+			log.Info(fmt.Sprintf("Pod %s scheduled on node %s, %s", podName, pod.Spec.NodeName, describeResources(pod)))
+			scheduledLogged = true
 		}
 
 		// A pod that cannot be scheduled stays Pending forever, and the heartbeat
@@ -58,13 +73,16 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 				lastSchedulingCondition = condition
 			}
 
-			if failure := permanentSchedulingFailure(reason, message); failure != "" {
+			if schedulingIssue := permanentSchedulingFailure(reason, message); schedulingIssue != "" {
 				if unschedulableSince.IsZero() {
 					unschedulableSince = time.Now()
 				} else if time.Since(unschedulableSince) > constants.UnschedulableGracePeriod {
-					log.Error("pod permanently unschedulable", "podName", podName, "reason", failure)
-					return fmt.Errorf("%w: pod %s could not be scheduled for %v: %s",
-						constants.ErrExecutionFailed, podName, constants.UnschedulableGracePeriod, failure)
+					return &failure.ExecutionFailure{
+						Kind:    "pod",
+						Name:    podName,
+						Reason:  corev1.PodReasonUnschedulable,
+						Message: fmt.Sprintf("could not be scheduled for %v: %s", constants.UnschedulableGracePeriod, schedulingIssue),
+					}
 				}
 			} else {
 				unschedulableSince = time.Time{}
@@ -75,7 +93,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 		// Check if pod completed successfully
 		if pod.Status.Phase == corev1.PodSucceeded {
-			log.Info("pod completed successfully", "podName", podName)
+			log.Info(fmt.Sprintf("Pod %s completed successfully", podName))
 			return nil
 		}
 
@@ -94,23 +112,30 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			// - Exit 2: Misuse of shell command or manual termination
 			// - Exit 137: SIGKILL (OOMKilled or manual kill)
 			// - Exit 143: SIGTERM (graceful termination)
-			var containerInfo string
-			if len(pod.Status.ContainerStatuses) > 0 {
-				status := pod.Status.ContainerStatuses[0]
-				if status.State.Terminated != nil {
-					term := status.State.Terminated
-					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
-				} else {
-					// The only other two ContainerState options are Waiting and Running, so if it's not Terminated, it must be one of those
-					// refer: https://pkg.go.dev/k8s.io/api/core/v1#ContainerState
-					// Not expected as the pod is in Failed state with only one container, the container shouldnot be in Waiting or Running state, but logging for debugging purposes
-					containerInfo = fmt.Sprintf("container not terminated; reason: %s, message: %s", pod.Status.Reason, pod.Status.Message)
-				}
-			} else {
-				containerInfo = fmt.Sprintf("containerStatus not found; reason: %s, message: %s", pod.Status.Reason, pod.Status.Message)
+			podFailure := &failure.ExecutionFailure{
+				Kind:        "pod",
+				Name:        podName,
+				Node:        pod.Spec.NodeName,
+				Reason:      pod.Status.Reason,
+				Message:     pod.Status.Message,
+				MemoryLimit: memoryLimit(pod),
 			}
-			log.Error("pod failed", "podName", podName, "containerInfo", containerInfo)
-			return fmt.Errorf("%w: pod %s failed (%s)", constants.ErrExecutionFailed, podName, containerInfo)
+			// A pod-level reason (Evicted, DeadlineExceeded) explains the kill better than
+			// the container's own, which is usually just "Error" with exit 137.
+			// refer: https://pkg.go.dev/k8s.io/api/core/v1#ContainerState
+			if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Terminated != nil {
+				term := pod.Status.ContainerStatuses[0].State.Terminated
+				exitCode := int(term.ExitCode)
+				podFailure.ExitCode = &exitCode
+				if podFailure.Reason == "" {
+					podFailure.Reason, podFailure.Message = term.Reason, term.Message
+				}
+			}
+			// logs are gone once the pod is evicted before the container started
+			if tail, err := k.getPodLogTail(ctx, podName, failureLogTailLines); err == nil {
+				podFailure.LogTail = tail
+			}
+			return podFailure
 		}
 
 		// Wait before checking again, with responsive cancellation
@@ -118,7 +143,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		case <-time.After(5 * time.Second):
 			// Continue to next iteration
 		case <-ctx.Done():
-			log.Warn("context cancelled while waiting for pod", "podName", podName)
+			log.Debug("context cancelled while waiting for pod", "podName", podName)
 			return ctx.Err()
 		}
 	}
@@ -182,14 +207,22 @@ func permanentSchedulingFailure(reason, message string) string {
 }
 
 func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (string, error) {
-	log := logger.Log(ctx)
-	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: "connector",
-	})
+	return k.readPodLogs(ctx, podName, &corev1.PodLogOptions{Container: "connector"})
+}
 
+// getPodLogTail returns the last lines of the connector output.
+func (k *KubernetesExecutor) getPodLogTail(ctx context.Context, podName string, lines int64) (string, error) {
+	return k.readPodLogs(ctx, podName, &corev1.PodLogOptions{Container: "connector", TailLines: ptr.To(lines)})
+}
+
+func (k *KubernetesExecutor) readPodLogs(ctx context.Context, podName string, opts *corev1.PodLogOptions) (string, error) {
+	log := logger.Log(ctx)
+	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, opts)
+
+	// no error logs here: getPodLogs' caller reports failures, and the failure
+	// tail is best-effort (an evicted pod may have no logs left)
 	logs, err := req.Stream(ctx)
 	if err != nil {
-		log.Error("failed to stream pod logs", "podName", podName, "error", err)
 		return "", fmt.Errorf("failed to get pod logs: %s", err)
 	}
 	defer func() {
@@ -201,7 +234,6 @@ func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (st
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
 	if err != nil {
-		log.Error("failed to read pod logs", "podName", podName, "error", err)
 		return "", fmt.Errorf("failed to read pod logs: %s", err)
 	}
 
@@ -410,4 +442,30 @@ func (k *KubernetesExecutor) createPod(ctx context.Context, podSpec *corev1.Pod)
 
 	log.Info("successfully created pod", "podName", podSpec.Name)
 	return result, nil
+}
+
+// describeResources renders the connector container's memory/cpu requests and
+// limits for the user-facing worker log.
+func describeResources(pod *corev1.Pod) string {
+	if len(pod.Spec.Containers) == 0 {
+		return "resources unknown"
+	}
+	res := pod.Spec.Containers[0].Resources
+	limits := "none"
+	if len(res.Limits) > 0 {
+		limits = fmt.Sprintf("cpu=%s mem=%s", res.Limits.Cpu(), res.Limits.Memory())
+	}
+	return fmt.Sprintf("requests cpu=%s mem=%s, limits: %s", res.Requests.Cpu(), res.Requests.Memory(), limits)
+}
+
+// memoryLimit returns the connector container's memory limit, or "" when unset.
+func memoryLimit(pod *corev1.Pod) string {
+	if len(pod.Spec.Containers) == 0 {
+		return ""
+	}
+	limit, ok := pod.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		return ""
+	}
+	return limit.String()
 }
