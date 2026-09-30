@@ -12,6 +12,6 @@ data:
     {
       "name": "smoke-source-test_1",
       "type": "postgres",
-      "version": "latest",
+      "version": "v0.11.0",
       "config": "{\"host\":\"pg.example\",\"port\":5432,\"database\":\"smoke\",\"username\":\"smoke\",\"password\":\"smoke\"}"
     }

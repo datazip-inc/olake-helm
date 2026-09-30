@@ -11,11 +11,12 @@ data:
   config: |
     {
       "selected_streams": {
-        "public": {
-          "users": {
+        "public": [
+          {
+            "stream_name": "users",
             "sync_mode": "incremental",
-            "cursor_field": ["updated_at"]
+            "cursor_field": "updated_at"
           }
-        }
+        ]
       }
     }
