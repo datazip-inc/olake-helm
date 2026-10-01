@@ -54,13 +54,14 @@
 
 {{- end }}
 
-{{- if eq .Values.global.localStorageMode "nfs" }}
-⚠️  DEPRECATION WARNING:
-   NFS storage mode is currently enabled and is the default.
-   It is DEPRECATED and will be removed at the end of 2026.
-   Migrate to S3 by setting global.localStorageMode: "s3" and configuring s3LogFileStorage.
+{{- if eq .Values.global.logFileStorageMode "nfs" }}
 
+⚠️  DEPRECATION WARNING:
+   NFS mode is enabled by default for log file storage.
+   It is marked for deprecation and will be removed by the end of 2026.
+   Migrate to S3 by setting "global.logFileStorageMode: s3" and configuring s3LogFileStorage.
 {{- end }}
+
 📚 NEXT STEPS:
 
 1. Log into the OLake UI using the admin credentials

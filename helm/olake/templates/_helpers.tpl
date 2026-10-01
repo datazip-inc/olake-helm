@@ -115,24 +115,24 @@ External S3-compatible endpoints (e.g. external MinIO) use enabled: false with e
 {{- end -}}
 
 {{/*
-Log storage mode from global.localStorageMode (default nfs).
+Log storage mode from global.logFileStorageMode (default nfs).
 When s3, validates s3LogFileStorage is complete before render.
 Fusion still requires the shared RWX volume and is not supported in s3 mode.
 */}}
 {{- define "olake.storageMode" -}}
-{{- $mode := .Values.global.localStorageMode | default "nfs" -}}
+{{- $mode := .Values.global.logFileStorageMode | default "nfs" -}}
 {{- if eq $mode "s3" -}}
 {{- if not (and .Values.s3LogFileStorage.bucket .Values.s3LogFileStorage.region) -}}
-{{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.localStorageMode is s3" -}}
+{{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.logFileStorageMode is s3" -}}
 {{- end -}}
 {{- if and .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.role.enabled -}}
 {{- fail "s3LogFileStorage.enabled and s3LogFileStorage.role.enabled cannot both be true; the bundled MinIO uses a credentials secret, while role.enabled is for IRSA / EKS Pod Identity against external S3" -}}
 {{- end -}}
 {{- if not (or .Values.s3LogFileStorage.enabled .Values.s3LogFileStorage.role.enabled .Values.s3LogFileStorage.existingSecret) -}}
-{{- fail "S3 credentials are required when global.localStorageMode is s3 and s3LogFileStorage.enabled is false; set s3LogFileStorage.role.enabled (IRSA / EKS Pod Identity) or s3LogFileStorage.existingSecret" -}}
+{{- fail "S3 credentials are required when global.logFileStorageMode is s3 and s3LogFileStorage.enabled is false; set s3LogFileStorage.role.enabled (IRSA / EKS Pod Identity) or s3LogFileStorage.existingSecret" -}}
 {{- end -}}
 {{- if .Values.fusion.enabled -}}
-{{- fail "Fusion is not supported when global.localStorageMode is s3; set fusion.enabled to false or use nfs" -}}
+{{- fail "Fusion is not supported when global.logFileStorageMode is s3; set fusion.enabled to false or use nfs" -}}
 {{- end -}}
 {{- end -}}
 {{- $mode -}}

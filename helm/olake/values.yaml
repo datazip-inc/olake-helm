@@ -112,7 +112,7 @@ global:
   # -- Local storage mode for job config and log files
   #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
   #   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; migrate to "s3")
-  localStorageMode: "nfs"
+  logFileStorageMode: "nfs"
 
 # -- Per-job index volume for the Pebble index used by the Iceberg
 # positional-delete / deletion-vector write path. `default` holds the settings
@@ -352,7 +352,7 @@ olakeWorker:
       level: info
       format: console
 
-# S3 Log File Storage (used when global.localStorageMode is "s3")
+# S3 Log File Storage (used when global.logFileStorageMode is "s3")
 s3LogFileStorage:
   # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
   #   - true:  deploy built-in MinIO (endpoint and credentials are managed by the chart)
@@ -420,8 +420,8 @@ s3LogFileStorage:
     annotations: {}
 
 # DEPRECATED: NFS shared storage. Currently default. Will be removed at end of 2026.
-# Migrate to S3: set global.localStorageMode: "s3" and configure s3LogFileStorage.
-# Still used when global.localStorageMode is "nfs".
+# Migrate to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
+# Still used when global.logFileStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.
@@ -752,7 +752,7 @@ elasticsearch:
 fusion:
   # -- Enable Fusion (Amoro) components.
   # Set to false to disable all Fusion resources.
-  # Fusion requires NFS/RWX shared storage and is not supported when global.localStorageMode is s3.
+  # Fusion requires NFS/RWX shared storage and is not supported when global.logFileStorageMode is s3.
   # NOTE: NFS mode is deprecated and will be removed end of 2026.
   enabled: false
 
