@@ -56,7 +56,6 @@ const (
 	StorageModeS3  = "s3"
 
 	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
-	// TODO: change to v0.11.0 when the connector is released
 	MinS3StorageModeVersion = "v0.12.0"
 
 	// Kubernetes ConfigMap names
