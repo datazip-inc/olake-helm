@@ -57,18 +57,6 @@ const (
 	StreamsFile          = "streams.json"
 	AvailableStreamsFile = "available_streams.json"
 	SelectedStreamsFile  = "selected_streams.json"
-
-	// TODO(BEFORE_MERGE): set to the release that ships streams v2
-	MinStreamsV2Version = "v0.11.0"
 )
 
 var AsyncCommands = []types.Command{types.Sync, types.ClearDestination}
-
-// StreamsV2Flags are the CLI flags that only drivers at MinStreamsV2Version or later accept.
-var StreamsV2Flags = []string{
-	AvailableStreamsFlag,
-	SelectedStreamsFlag,
-	"--difference-available-streams",
-	"--difference-selected-streams",
-	"--convert-streams",
-}

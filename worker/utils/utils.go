@@ -138,7 +138,7 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	// the job's catalog format decides the flags; CheckStreamsV2Support fails an older driver
+	// the job's catalog format decides the flags
 	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
 	if split {
 		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
@@ -163,28 +163,23 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 		return nil
 	}
 
-	// olake-ui always stages streams.json at the temp path, which an older worker reads as-is.
-	// For a split-format job it also stages available_streams.json and selected_streams.json
-	stagedPath := filepath.Join(GetConfigDir(), req.TempPath)
-	data, err := os.ReadFile(stagedPath)
+	// olake-ui stages the catalog in the format the clear-destination runs with: streams.json, or
+	// available_streams.json + selected_streams.json, in the temp path's directory
+	streams, available, selected, err := readStagedCatalog(filepath.Dir(filepath.Join(GetConfigDir(), req.TempPath)))
 	if err != nil {
-		return fmt.Errorf("failed to read streams file: %s", err)
+		return err
 	}
 
 	updates := map[string]string{
 		"destination.json": jobDetails.Destination,
 		"state.json":       jobDetails.State,
 	}
-
-	available, selected, split, err := readStagedStreamsV2Catalog(filepath.Dir(stagedPath))
-	if err != nil {
-		return err
-	}
+	split := available != "" && selected != ""
 	if split {
 		updates[constants.AvailableStreamsFile] = available
 		updates[constants.SelectedStreamsFile] = selected
 	} else {
-		updates[constants.StreamsFile] = string(data)
+		updates[constants.StreamsFile] = streams
 	}
 	req.Args = SetCatalogArgs(req.Args, split)
 
@@ -192,32 +187,36 @@ func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.Execut
 	return nil
 }
 
-// readStagedStreamsV2Catalog reads available_streams.json and selected_streams.json from dir.
-// staged is false when neither is there; only one of them is an error.
-func readStagedStreamsV2Catalog(dir string) (available, selected string, staged bool, err error) {
-	read := func(name string) (string, bool, error) {
+// readStagedCatalog reads the catalog staged in dir: streams.json, or available_streams.json +
+// selected_streams.json. Exactly one format must be staged; a missing file reads as empty.
+func readStagedCatalog(dir string) (streams, available, selected string, err error) {
+	read := func(name string) (string, error) {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", false, nil
+			return "", nil
 		}
 		if err != nil {
-			return "", false, fmt.Errorf("failed to read %s: %s", name, err)
+			return "", fmt.Errorf("failed to read %s: %s", name, err)
 		}
-		return string(data), true, nil
+		return string(data), nil
 	}
 
-	available, hasAvailable, err := read(constants.AvailableStreamsFile)
-	if err != nil {
-		return "", "", false, err
+	if streams, err = read(constants.StreamsFile); err != nil {
+		return "", "", "", err
 	}
-	selected, hasSelected, err := read(constants.SelectedStreamsFile)
-	if err != nil {
-		return "", "", false, err
+	if available, err = read(constants.AvailableStreamsFile); err != nil {
+		return "", "", "", err
 	}
-	if hasAvailable != hasSelected {
-		return "", "", false, fmt.Errorf("%s and %s must be staged together", constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	if selected, err = read(constants.SelectedStreamsFile); err != nil {
+		return "", "", "", err
 	}
-	return available, selected, hasAvailable, nil
+	switch {
+	case (available == "") != (selected == ""):
+		return "", "", "", fmt.Errorf("%s and %s must be staged together", constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	case (available == "") == (streams == ""):
+		return "", "", "", fmt.Errorf("stage either %s or %s and %s", constants.StreamsFile, constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	}
+	return streams, available, selected, nil
 }
 
 // SetCatalogArgs replaces whatever catalog flags args carries with the ones for the given format.

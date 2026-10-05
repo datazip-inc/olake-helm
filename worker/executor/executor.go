@@ -51,11 +51,6 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	log := logger.Log(ctx)
 	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
-	if err := utils.CheckStreamsV2Support(req.Args, req.Version); err != nil {
-		log.Error("unsupported source version", "command", req.Command, "error", err)
-		return nil, err
-	}
-
 	// write config files only for the first/scheduled workflow execution (not for retries)
 	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
 		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
