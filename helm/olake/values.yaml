@@ -111,7 +111,7 @@ global:
 
   # -- Local storage mode for job config and log files
   #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
-  #   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; migrate to "s3")
+  #   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; switch to "s3")
   logFileStorageMode: "nfs"
 
 # -- Per-job index volume for the Pebble index used by the Iceberg
@@ -420,7 +420,7 @@ s3LogFileStorage:
     annotations: {}
 
 # DEPRECATED: NFS shared storage. Currently default. Will be removed at end of 2026.
-# Migrate to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
+# Switch to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
 # Still used when global.logFileStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning

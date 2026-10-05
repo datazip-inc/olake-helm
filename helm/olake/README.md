@@ -22,7 +22,7 @@
 -   **PostgreSQL**: Primary data store for both OLake application and Temporal
 -   **Elasticsearch**: Advanced visibility and search capabilities for Temporal
 -   **S3 Storage**(Optional): S3-compatible storage for job config and log files. Uses in-cluster MinIO by default, or an external S3-compatible endpoint (AWS S3, MinIO, GCS S3 API, etc.)
--   **NFS Server**(Optional): Self-managed in-cluster NFS server with dynamic provisioning for shared storage. **DEPRECATED** — currently default, but NFS support will be removed at end of 2026. Migrate to S3 (`global.logFileStorageMode: s3`).
+-   **NFS Server**(Optional): Self-managed in-cluster NFS server with dynamic provisioning for shared storage. **DEPRECATED** — currently default, but NFS support will be removed at end of 2026. Switch to S3 (`global.logFileStorageMode: s3`).
 
 ## Prerequisites
 
@@ -299,7 +299,7 @@ global:
 
 ### Shared Storage Configuration
 
-OLake requires **one** shared storage backend for job config and log files: **S3** or **NFS**. Only one is used at a time, selected with `global.logFileStorageMode`. NFS (`nfs`) is currently the default but is **deprecated** and will be removed at end of 2026. Migrate to S3 by setting `global.logFileStorageMode: s3` and configuring `s3LogFileStorage`. Fusion is currently not supported with S3.
+OLake requires **one** shared storage backend for job config and log files: **S3** or **NFS**. Only one is used at a time, selected with `global.logFileStorageMode`. NFS (`nfs`) is currently the default but is **deprecated** and will be removed at end of 2026. Switch to S3 by setting `global.logFileStorageMode: s3` and configuring `s3LogFileStorage`. Fusion is currently not supported with S3.
 
 OLake can store job config and log files in S3-compatible storage. For production, a hosted S3-compatible service such as AWS S3, GCS (S3 API), or an existing MinIO cluster should be used. This is achieved by disabling the built-in MinIO and providing an existing bucket. An example is given below:
 
