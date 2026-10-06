@@ -109,6 +109,11 @@ global:
   #     RUN_MODE: "production"
   env: {}
 
+  # -- Local storage mode for job config and log files
+  #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
+  #   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; switch to "s3")
+  logFileStorageMode: "nfs"
+
 # -- Per-job index volume for the Pebble index used by the Iceberg
 # positional-delete / deletion-vector write path. `default` holds the settings
 # every job starts from; entries under `jobs` are deep-merged over it field by
@@ -347,7 +352,76 @@ olakeWorker:
       level: info
       format: console
 
-# Storage configuration for shared data exchange between pods
+# S3 Log File Storage (used when global.logFileStorageMode is "s3")
+s3LogFileStorage:
+  # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
+  #   - true:  deploy built-in MinIO (endpoint and credentials are managed by the chart)
+  #   - false: hosted / external S3 (AWS S3, external MinIO, GCS S3 API, etc.)
+  enabled: true
+  # -- S3-compatible endpoint override. Auto-set when enabled: true. Required for external MinIO.
+  endpoint: ""
+  bucket: "olake"
+  region: "us-east-1"
+  prefix: ""
+  # -- Static credentials secret for external S3/MinIO/GCS S3 API when role.enabled is false.
+  # For GCS, use HMAC credentials via this secret.
+  # kubectl create secret generic s3-log-file-storage-secret \
+  #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+  #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+  existingSecret: ""
+  auth:
+    # -- MinIO root credentials when enabled: true (also used as OLAKE_S3_* keys)
+    # Note: Override auth.rootPassword with a secure password for non-local environments.
+    rootUser: "olake"
+    rootPassword: "password"
+  persistence:
+    # -- Backing volume size for in-cluster MinIO (uses global.storageClass when set)
+    size: 20Gi
+  image:
+    repository: olakego/minio
+    tag: RELEASE.2025-04-03T14-56-28Z
+    pullPolicy: IfNotPresent
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+
+  # -- Tolerations for pod assignment
+  tolerations: []
+
+  # -- Affinity settings for pod assignment
+  affinity: {}
+
+  # -- Additional pod annotations
+  podAnnotations: {}
+
+  # -- Additional pod labels
+  podLabels: {}
+
+  # -- MinIO resource requirements (optional overrides)
+  # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
+  resources: {}
+
+  # -- MinIO security context
+  # Example customizations:
+  # securityContext:
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   fsGroup: 1000
+  securityContext: {}
+
+  role:
+    # Use an IAM role for hosted S3 authentication; supports EKS IRSA and EKS Pod Identity.
+    # When true, existingSecret is not required.
+    enabled: false
+    # Required for EKS IRSA; leave empty when using EKS Pod Identity.
+    # Example:
+    #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
+    annotations: {}
+
+# DEPRECATED: NFS shared storage. Currently default. Will be removed at end of 2026.
+# Switch to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
+# Still used when global.logFileStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.
@@ -678,6 +752,8 @@ elasticsearch:
 fusion:
   # -- Enable Fusion (Amoro) components.
   # Set to false to disable all Fusion resources.
+  # Fusion requires NFS/RWX shared storage and is not supported when global.logFileStorageMode is s3.
+  # NOTE: NFS mode is deprecated and will be removed end of 2026.
   enabled: false
 
   # -- Service Account configuration

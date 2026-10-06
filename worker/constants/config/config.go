@@ -6,6 +6,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -46,6 +47,9 @@ func setDefaults() {
 	// API defaults
 	viper.SetDefault("OLAKE_CALLBACK_URL", "http://olake-ui:8000/internal/worker/callback")
 
+	// Storage defaults (matches UI: unset OLAKE_STORAGE_MODE → nfs)
+	viper.SetDefault(constants.EnvStorageMode, constants.StorageModeNFS)
+
 	// database defaults
 	viper.SetDefault("DB_HOST", "postgresql")
 	viper.SetDefault("DB_PORT", 5432)
@@ -77,21 +81,33 @@ func requiredEnvVars() error {
 	// k8s required
 	k8sRequiredEnv := []string{
 		constants.EnvNamespace,
-		constants.EnvStoragePVCName,
 		constants.EnvPodName,
 		constants.EnvKubernetesServiceHost,
 	}
 
-	// Docker required
-	dockerRequiredEnv := []string{
-		constants.EnvHostPersistentDir,
+	s3RequiredEnv := []string{
+		constants.EnvS3Bucket,
+		constants.EnvS3Region,
 	}
 
-	execEnv := utils.GetExecutorEnvironment()
-	if execEnv == string(types.Docker) {
-		requiredEnv = append(requiredEnv, dockerRequiredEnv...)
-	} else {
+	onKubernetes := utils.GetExecutorEnvironment() == string(types.Kubernetes)
+	onDocker := utils.GetExecutorEnvironment() == string(types.Docker)
+	onS3 := storagemode.Get() == constants.StorageModeS3
+	// NFS is the default storage mode
+	onNFS := storagemode.Get() != constants.StorageModeS3
+
+	switch {
+	case onKubernetes && onS3:
 		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+		requiredEnv = append(requiredEnv, s3RequiredEnv...)
+	case onKubernetes && onNFS:
+		requiredEnv = append(requiredEnv, k8sRequiredEnv...)
+		requiredEnv = append(requiredEnv, constants.EnvStoragePVCName)
+	case onS3 && onDocker:
+		requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
+		requiredEnv = append(requiredEnv, s3RequiredEnv...)
+	case onDocker && onNFS:
+		requiredEnv = append(requiredEnv, constants.EnvHostPersistentDir)
 	}
 
 	var missing []string
