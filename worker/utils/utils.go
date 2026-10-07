@@ -133,7 +133,7 @@ func ApplyConfigUpdates(req *types.ExecutionRequest, updates map[string]string, 
 	}
 }
 
-func UpdateConfigWithJobDetails(ctx context.Context, jobData types.JobData, req *types.ExecutionRequest) {
+func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionRequest) {
 	req.Version = jobData.Version
 
 	updates := map[string]string{
@@ -143,21 +143,9 @@ func UpdateConfigWithJobDetails(ctx context.Context, jobData types.JobData, req 
 	}
 
 	// the job's catalog format decides the flags
-	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
-	if split {
-		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
-		updates[constants.SelectedStreamsFile] = jobData.SelectedStreams
-	} else {
-		updates[constants.StreamsFile] = jobData.Streams
-	}
-	req.Args = SetCatalogArgs(req.Args, split)
+	setCatalog(req, updates, jobData.Streams, jobData.AvailableStreams, jobData.SelectedStreams)
 
-	addIfMissing := make(map[string]string)
-	if !viper.GetBool(constants.EnvTelemetryDisabled) {
-		addIfMissing["user_id.txt"] = GetTelemetryUserID(ctx)
-	}
-
-	ApplyConfigUpdates(req, updates, addIfMissing)
+	ApplyConfigUpdates(req, updates, nil)
 }
 
 func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobData, req *types.ExecutionRequest) error {
@@ -178,22 +166,15 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 		"destination.json": jobDetails.Destination,
 		"state.json":       jobDetails.State,
 	}
-	split := available != "" && selected != ""
-	if split {
-		updates[constants.AvailableStreamsFile] = available
-		updates[constants.SelectedStreamsFile] = selected
-	} else {
-		updates[constants.StreamsFile] = streams
-	}
-	req.Args = SetCatalogArgs(req.Args, split)
+	setCatalog(req, updates, streams, available, selected)
 
 	ApplyConfigUpdates(req, updates, nil)
 	return nil
 }
 
 // readStagedCatalog reads the catalog staged in dir (relative to the config dir / S3 prefix):
-// streams.json, or available_streams.json + selected_streams.json. Exactly one format must be
-// staged; a missing file reads as empty.
+// streams.json, or available_streams.json + selected_streams.json. A missing file reads as empty;
+// nothing staged at all is an error.
 func readStagedCatalog(ctx context.Context, dir string) (streams, available, selected string, err error) {
 	read := func(name string) (string, error) {
 		data, err := storage.ReadFile(ctx, storage.ConfigDir(), filepath.Join(dir, name), true)
@@ -215,13 +196,23 @@ func readStagedCatalog(ctx context.Context, dir string) (streams, available, sel
 	if selected, err = read(constants.SelectedStreamsFile); err != nil {
 		return "", "", "", err
 	}
-	switch {
-	case (available == "") != (selected == ""):
-		return "", "", "", fmt.Errorf("%s and %s must be staged together", constants.AvailableStreamsFile, constants.SelectedStreamsFile)
-	case (available == "") == (streams == ""):
-		return "", "", "", fmt.Errorf("stage either %s or %s and %s", constants.StreamsFile, constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	if streams == "" && available == "" && selected == "" {
+		return "", "", "", fmt.Errorf("no catalog staged in %s", dir)
 	}
 	return streams, available, selected, nil
+}
+
+// setCatalog adds the catalog files to updates and points req.Args at them. olake-ui guarantees
+// exactly one format: a split catalog (available + selected) or a legacy streams catalog.
+func setCatalog(req *types.ExecutionRequest, updates map[string]string, streams, available, selected string) {
+	split := available != "" && selected != ""
+	if split {
+		updates[constants.AvailableStreamsFile] = available
+		updates[constants.SelectedStreamsFile] = selected
+	} else {
+		updates[constants.StreamsFile] = streams
+	}
+	req.Args = SetCatalogArgs(req.Args, split)
 }
 
 // SetCatalogArgs replaces whatever catalog flags args carries with the ones for the given format.
@@ -235,7 +226,7 @@ func SetCatalogArgs(args []string, split bool) []string {
 			constants.SelectedStreamsFlag, filepath.Join(constants.ContainerMountDir, constants.SelectedStreamsFile),
 		)
 	}
-	return append(args, constants.StreamsFlag, filepath.Join(constants.ContainerMountDir, constants.StreamsFile))
+	return append(args, constants.CatalogFlag, filepath.Join(constants.ContainerMountDir, constants.StreamsFile))
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
@@ -388,7 +379,8 @@ func ConnectorConfigDir(command types.Command, workflowID string) string {
 }
 
 // RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request.
-// The sync keeps the catalog format the clear-destination ran with.
+// The catalog flags only keep the stored args well-formed: SyncActivity resets them from the
+// job's catalog format on every run.
 func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 	split := slices.Contains(req.Args, constants.AvailableStreamsFlag)
 	args := []string{
@@ -514,12 +506,12 @@ func IsAsyncCommand(command types.Command) bool {
 // Worker retries before the first chunk is uploaded still look like a first launch.
 // List/path errors are unknown, not "never launched".
 func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, error) {
-	logsPath, err := storage.Key(workDir, "logs", true)
+	logsPath, err := storage.S3Key(workDir, "logs", true)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve logs path: %s", err)
 	}
 
-	s3Objects, err := storage.ListObjects(ctx, logsPath)
+	s3Objects, err := storage.ListS3Objects(ctx, logsPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to list objects in %s: %s", logsPath, err)
 	}

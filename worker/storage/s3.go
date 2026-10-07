@@ -27,8 +27,8 @@ var (
 	s3Bucket string
 )
 
-// Object is an S3 object listing entry.
-type Object struct {
+// S3Object is an S3 object listing entry.
+type S3Object struct {
 	Key          string
 	LastModified time.Time
 }
@@ -147,7 +147,7 @@ func writeFilesS3(ctx context.Context, workDir string, configs []types.JobConfig
 	}
 
 	for _, jobConfig := range configs {
-		key, err := Key(workDir, jobConfig.Name, false)
+		key, err := S3Key(workDir, jobConfig.Name, false)
 		if err != nil {
 			return err
 		}
@@ -167,7 +167,7 @@ func writeFilesS3(ctx context.Context, workDir string, configs []types.JobConfig
 
 // readFileS3 reads a file from the S3 bucket.
 func readFileS3(ctx context.Context, workDir, relativePath string, validateJSON bool) (string, error) {
-	key, err := Key(workDir, relativePath, false)
+	key, err := S3Key(workDir, relativePath, false)
 	if err != nil {
 		return "", err
 	}
@@ -206,14 +206,14 @@ func readFileS3(ctx context.Context, workDir, relativePath string, validateJSON 
 	return string(body), nil
 }
 
-// ListObjects lists S3 objects under the given prefix, including LastModified.
-func ListObjects(ctx context.Context, prefix string) ([]Object, error) {
+// ListS3Objects lists S3 objects under the given prefix, including LastModified.
+func ListS3Objects(ctx context.Context, prefix string) ([]S3Object, error) {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return nil, err
 	}
 
-	var s3Objects []Object
+	var s3Objects []S3Object
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 		Bucket: &bucket,
 		Prefix: &prefix,
@@ -224,7 +224,7 @@ func ListObjects(ctx context.Context, prefix string) ([]Object, error) {
 			return nil, fmt.Errorf("failed to list objects in s3://%s/%s: %s", bucket, prefix, err)
 		}
 		for _, obj := range page.Contents {
-			s3Objects = append(s3Objects, Object{
+			s3Objects = append(s3Objects, S3Object{
 				Key:          aws.ToString(obj.Key),
 				LastModified: aws.ToTime(obj.LastModified),
 			})
@@ -233,8 +233,8 @@ func ListObjects(ctx context.Context, prefix string) ([]Object, error) {
 	return s3Objects, nil
 }
 
-// DeleteObject deletes a single object from the configured S3 bucket.
-func DeleteObject(ctx context.Context, key string) error {
+// DeleteS3Object deletes a single object from the configured S3 bucket.
+func DeleteS3Object(ctx context.Context, key string) error {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return err
@@ -250,10 +250,10 @@ func DeleteObject(ctx context.Context, key string) error {
 	return nil
 }
 
-// Key mirrors the NFS layout as an S3 object key.
+// S3Key mirrors the NFS layout as an S3 object key.
 // With isDirectory true, returns a directory prefix ending with "/".
 // Otherwise returns <prefix>/<workflow-dir>/<relativePath> as an object key without a trailing slash.
-func Key(workDir, relativePath string, isDirectory bool) (string, error) {
+func S3Key(workDir, relativePath string, isDirectory bool) (string, error) {
 	workRel, err := filepath.Rel(ConfigDir(), workDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve storage path for %s: %s", workDir, err)
@@ -267,8 +267,8 @@ func Key(workDir, relativePath string, isDirectory bool) (string, error) {
 	return key, nil
 }
 
-// Put uploads body to the object key (a full key, as returned by Key).
-func Put(ctx context.Context, key string, body io.Reader) error {
+// PutS3Object uploads body to the object key (a full key, as returned by S3Key).
+func PutS3Object(ctx context.Context, key string, body io.Reader) error {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return err
