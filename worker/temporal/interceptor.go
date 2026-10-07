@@ -45,7 +45,13 @@ func (a *loggingActivityInterceptor) ExecuteActivity(
 		logger.Warnf("failed to prepare workflow logger for workflowID=%s: %s", req.WorkflowID, err)
 		return a.Next.ExecuteActivity(ctx, in)
 	}
-	defer logFile.Close()
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	defer func() {
+		logFile.Close()
+		if !utils.IsAsyncCommand(req.Command) {
+			utils.ReleaseWorkerLogWriter(workDir)
+		}
+	}()
 
 	return a.Next.ExecuteActivity(ctxWithLogger, in)
 }
@@ -58,4 +64,3 @@ func extractExecutionRequest(args []interface{}) *types.ExecutionRequest {
 	}
 	return nil
 }
-

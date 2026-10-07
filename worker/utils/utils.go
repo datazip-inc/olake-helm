@@ -8,15 +8,19 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/acarl005/stripansi"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/spf13/viper"
+	"golang.org/x/mod/semver"
 )
 
 // Ternary returns trueValue if condition is true, otherwise returns falseValue
@@ -138,86 +142,77 @@ func UpdateConfigWithJobDetails(jobData types.JobData, req *types.ExecutionReque
 		"state.json":       jobData.State,
 	}
 
-	// the job's catalog format decides the flags; CheckStreamsV2Support fails an older driver
-	split := jobData.AvailableStreams != "" && jobData.SelectedStreams != ""
-	if split {
-		updates[constants.AvailableStreamsFile] = jobData.AvailableStreams
-		updates[constants.SelectedStreamsFile] = jobData.SelectedStreams
-	} else {
-		updates[constants.StreamsFile] = jobData.Streams
-	}
-	req.Args = SetCatalogArgs(req.Args, split)
+	// the job's catalog format decides the flags
+	setCatalog(req, updates, jobData.Streams, jobData.AvailableStreams, jobData.SelectedStreams)
 
-	addIfMissing := make(map[string]string)
-	if !viper.GetBool(constants.EnvTelemetryDisabled) {
-		addIfMissing["user_id.txt"] = GetTelemetryUserID()
-	}
-
-	ApplyConfigUpdates(req, updates, addIfMissing)
+	ApplyConfigUpdates(req, updates, nil)
 }
 
-func UpdateConfigForClearDestination(jobDetails types.JobData, req *types.ExecutionRequest) error {
+func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobData, req *types.ExecutionRequest) error {
 	req.Version = jobDetails.Version
 
 	if req.TempPath == "" {
 		return nil
 	}
 
-	// olake-ui always stages streams.json at the temp path, which an older worker reads as-is.
-	// For a split-format job it also stages available_streams.json and selected_streams.json
-	stagedPath := filepath.Join(GetConfigDir(), req.TempPath)
-	data, err := os.ReadFile(stagedPath)
+	// olake-ui stages the catalog in the format the clear-destination runs with: streams.json, or
+	// available_streams.json + selected_streams.json, in the temp path's directory
+	streams, available, selected, err := readStagedCatalog(ctx, filepath.Dir(req.TempPath))
 	if err != nil {
-		return fmt.Errorf("failed to read streams file: %s", err)
+		return err
 	}
 
 	updates := map[string]string{
 		"destination.json": jobDetails.Destination,
 		"state.json":       jobDetails.State,
 	}
-
-	available, selected, split, err := readStagedStreamsV2Catalog(filepath.Dir(stagedPath))
-	if err != nil {
-		return err
-	}
-	if split {
-		updates[constants.AvailableStreamsFile] = available
-		updates[constants.SelectedStreamsFile] = selected
-	} else {
-		updates[constants.StreamsFile] = string(data)
-	}
-	req.Args = SetCatalogArgs(req.Args, split)
+	setCatalog(req, updates, streams, available, selected)
 
 	ApplyConfigUpdates(req, updates, nil)
 	return nil
 }
 
-// readStagedStreamsV2Catalog reads available_streams.json and selected_streams.json from dir.
-// staged is false when neither is there; only one of them is an error.
-func readStagedStreamsV2Catalog(dir string) (available, selected string, staged bool, err error) {
-	read := func(name string) (string, bool, error) {
-		data, err := os.ReadFile(filepath.Join(dir, name))
+// readStagedCatalog reads the catalog staged in dir (relative to the config dir / S3 prefix):
+// streams.json, or available_streams.json + selected_streams.json. A missing file reads as empty;
+// nothing staged at all is an error.
+func readStagedCatalog(ctx context.Context, dir string) (streams, available, selected string, err error) {
+	read := func(name string) (string, error) {
+		data, err := storage.ReadFile(ctx, storage.ConfigDir(), filepath.Join(dir, name), true)
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", false, nil
+			return "", nil
 		}
 		if err != nil {
-			return "", false, fmt.Errorf("failed to read %s: %s", name, err)
+			return "", fmt.Errorf("failed to read %s: %s", name, err)
 		}
-		return string(data), true, nil
+		return data, nil
 	}
 
-	available, hasAvailable, err := read(constants.AvailableStreamsFile)
-	if err != nil {
-		return "", "", false, err
+	if streams, err = read(constants.StreamsFile); err != nil {
+		return "", "", "", err
 	}
-	selected, hasSelected, err := read(constants.SelectedStreamsFile)
-	if err != nil {
-		return "", "", false, err
+	if available, err = read(constants.AvailableStreamsFile); err != nil {
+		return "", "", "", err
 	}
-	if hasAvailable != hasSelected {
-		return "", "", false, fmt.Errorf("%s and %s must be staged together", constants.AvailableStreamsFile, constants.SelectedStreamsFile)
+	if selected, err = read(constants.SelectedStreamsFile); err != nil {
+		return "", "", "", err
 	}
-	return available, selected, hasAvailable, nil
+	if streams == "" && available == "" && selected == "" {
+		return "", "", "", fmt.Errorf("no catalog staged in %s", dir)
+	}
+	return streams, available, selected, nil
+}
+
+// setCatalog adds the catalog files to updates and points req.Args at them. olake-ui guarantees
+// exactly one format: a split catalog (available + selected) or a legacy streams catalog.
+func setCatalog(req *types.ExecutionRequest, updates map[string]string, streams, available, selected string) {
+	split := available != "" && selected != ""
+	if split {
+		updates[constants.AvailableStreamsFile] = available
+		updates[constants.SelectedStreamsFile] = selected
+	} else {
+		updates[constants.StreamsFile] = streams
+	}
+	req.Args = SetCatalogArgs(req.Args, split)
 }
 
 // SetCatalogArgs replaces whatever catalog flags args carries with the ones for the given format.
@@ -231,55 +226,43 @@ func SetCatalogArgs(args []string, split bool) []string {
 			constants.SelectedStreamsFlag, filepath.Join(constants.ContainerMountDir, constants.SelectedStreamsFile),
 		)
 	}
-	return append(args, constants.StreamsFlag, filepath.Join(constants.ContainerMountDir, constants.StreamsFile))
+	return append(args, constants.CatalogFlag, filepath.Join(constants.ContainerMountDir, constants.StreamsFile))
 }
 
 // GetWorkflowDirectory determines the directory name based on operation and workflow ID
 func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) string {
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if IsAsyncCommand(operation) {
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(originalWorkflowID)))
 	} else {
 		return originalWorkflowID
 	}
 }
 
-func GetStateFileFromWorkdir(workflowID string, command types.Command) (string, error) {
-	stateFilePath := filepath.Join(GetConfigDir(), GetWorkflowDirectory(command, workflowID), "state.json")
-	stateFile, err := ReadFile(stateFilePath)
+func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command types.Command) (string, error) {
+	_, workDir := GetWorkflowDirAndSubDir(workflowID, command)
+
+	stateFile, err := storage.ReadFile(ctx, workDir, "state.json", true)
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
 	}
 	return stateFile, nil
 }
 
-func GetConfigDir() string {
-	switch types.ExecutorEnvironment(GetExecutorEnvironment()) {
-	case types.Kubernetes:
-		return constants.K8sPersistentDir
-	case types.Docker:
-		return constants.DockerPersistentDir
-	default:
-		return ""
-	}
-}
-
-func GetTelemetryUserID() string {
-	root := GetConfigDir()
-	telemetryPath := filepath.Join(root, "telemetry", "user_id")
-
-	userID, err := os.ReadFile(telemetryPath)
+// GetTelemetryUserID reads the telemetry user ID from the active storage mode.
+func GetTelemetryUserID(ctx context.Context) string {
+	userID, err := storage.ReadFile(ctx, storage.ConfigDir(), constants.TelemetryUserIDPath, false)
 	if err != nil {
-		logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
+		logger.Errorf("failed to read telemetry user ID: %s", err)
 		return ""
 	}
-	return string(userID)
+	return userID
 }
 
 // getHostOutputDir returns the host output directory
 func GetHostOutputDir(outputDir string) string {
 	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
 	if hostPersistencePath != "" {
-		persistencePath := GetConfigDir()
+		persistencePath := storage.ConfigDir()
 		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
 		return hostOutputDir
 	}
@@ -287,26 +270,48 @@ func GetHostOutputDir(outputDir string) string {
 	return outputDir
 }
 
-// WorkflowAlreadyLaunched checks for olake.log file in the workdir/logs
-//
-// workdir/logs/sync_<timestamp>/olake.log - present -> workflow has started already
-// not present -> workflow is running for the first time
-func WorkflowAlreadyLaunched(workdir string) bool {
-	logDir := filepath.Join(workdir, "logs")
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return false
+// s3 mode only supports connector versions that are at least the minimum version "v0.9.2"
+func ValidateConnectorVersionForStorageMode(version string) error {
+	if storage.Mode() != constants.StorageModeS3 {
+		return nil
 	}
+	if !semver.IsValid(version) {
+		return nil
+	}
+	if semver.Compare(version, constants.MinS3StorageModeVersion) < 0 {
+		return fmt.Errorf("connector version %s does not support S3 storage mode: requires %s or later", version, constants.MinS3StorageModeVersion)
+	}
+	return nil
+}
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
-			if _, err := os.Stat(olakeLogPath); err == nil {
-				return true
+// WorkflowAlreadyLaunched reports whether this workflow has already started a connector run.
+// Config files alone do not count — they are written before the container/pod is launched.
+func WorkflowAlreadyLaunched(ctx context.Context, workdir string) (bool, error) {
+	switch storage.Mode() {
+	case constants.StorageModeS3:
+		alreadyLaunched, err := workflowConnectorLogsExistInS3(ctx, workdir)
+		if err != nil {
+			return false, err
+		}
+		return alreadyLaunched, nil
+	default:
+		logDir := filepath.Join(workdir, "logs")
+		// Comment: Check how functions error handling works here and can be improved.
+		entries, err := os.ReadDir(logDir)
+		if err != nil {
+			return false, nil
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				olakeLogPath := filepath.Join(logDir, entry.Name(), "olake.log")
+				if _, err := os.Stat(olakeLogPath); err == nil {
+					return true, nil
+				}
 			}
 		}
+		return false, nil
 	}
-	return false
 }
 
 // WorkflowHash returns a deterministic hash string for a given workflowID
@@ -356,12 +361,26 @@ func GetExecutorEnvironment() string {
 
 func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, string) {
 	subdir := GetWorkflowDirectory(command, workflowID)
-	workdir := filepath.Join(GetConfigDir(), subdir)
+	workdir := filepath.Join(storage.ConfigDir(), subdir)
 	return subdir, workdir
 }
 
+// ConnectorConfigDir returns the S3 config path for S3 storage mode, empty string otherwise.
+func ConnectorConfigDir(command types.Command, workflowID string) string {
+	if storage.Mode() != constants.StorageModeS3 {
+		return ""
+	}
+	bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
+	key := GetWorkflowDirectory(command, workflowID)
+	if prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/"); prefix != "" {
+		key = path.Join(prefix, key)
+	}
+	return fmt.Sprintf("s3://%s/%s", bucket, key)
+}
+
 // RevertUpdatesInSchedule reverts the updates made to the schedule for clear-destination request.
-// The sync keeps the catalog format the clear-destination ran with.
+// The catalog flags only keep the stored args well-formed: SyncActivity resets them from the
+// job's catalog format on every run.
 func RevertUpdatesInSchedule(req *types.ExecutionRequest) {
 	split := slices.Contains(req.Args, constants.AvailableStreamsFlag)
 	args := []string{
@@ -394,29 +413,41 @@ func ExtractJSONAndMarshal(output string) ([]byte, error) {
 		start := strings.Index(line, "{")
 		end := strings.LastIndex(line, "}")
 		if start != -1 && end != -1 && end > start {
+			// NFS console output: a debug line can carry JSON in its text (e.g. a telemetry
+			// error response body) and must not be mistaken for the protocol message.
+			if strings.Contains(stripansi.Strip(line[:start]), "DEBUG") {
+				continue
+			}
 			jsonPart := line[start : end+1]
 			var result map[string]interface{}
 			if err := json.Unmarshal([]byte(jsonPart), &result); err != nil {
 				continue // Skip invalid JSON
 			}
-			return json.Marshal(result)
+			message, ok := unwrapZerologProtocolMessage(result)
+			if !ok {
+				continue // S3-mode plain log line (string message), not the protocol message
+			}
+			return json.Marshal(message)
 		}
 	}
 
 	return nil, fmt.Errorf("no valid JSON block found in output")
 }
 
-// PrepareWorkflowLogger ensures the workflow directory exists and initializes the workflow logger.
-// It returns the new context with the workflow logger attached, and the log file handle that must be closed when the workflow finishes.
-func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
-	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
-	workflowLogPath := filepath.Join(workdirPath, "logs")
-	if err := SetupWorkDirectory(workflowLogPath); err != nil {
-		return ctx, nil, err
+// unwrapZerologProtocolMessage returns the inner OLake protocol object when stdout is
+// S3-mode zerolog JSON: {"level":"info","message":{"type":"CONNECTION_STATUS",...}}.
+// It reports false for a zerolog line whose message is not an object (a plain log line,
+// e.g. a telemetry debug message printed after the result). NFS console output already
+// yields the inner object, so it is returned unchanged.
+func unwrapZerologProtocolMessage(result map[string]interface{}) (map[string]interface{}, bool) {
+	if _, ok := result["level"].(string); !ok {
+		return result, true // not a zerolog line (NFS output): use it as is
 	}
-
-	ctxWithLogger, logFile, err := logger.InitWorkflowLogger(ctx, workflowLogPath)
-	return ctxWithLogger, logFile, err
+	message, ok := result["message"].(map[string]interface{})
+	if !ok || message == nil {
+		return nil, false // zerolog line with a text message: not the result, skip
+	}
+	return message, true // zerolog line with an object message: that object is the result
 }
 
 // IsStateEmpty returns true if the state is empty or an empty JSON object
@@ -439,4 +470,60 @@ func RemoveFlagFromArgs(arguments []string, flagName string) []string {
 	}
 
 	return result
+}
+
+// PrepareWorkflowLogger attaches a workflow logger to ctx. In S3 mode worker logs are written
+// directly to S3 chunks and the returned handle is nil. In NFS mode it creates logs/ and
+// opens worker.log; close that handle when the activity finishes.
+func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
+	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
+
+	switch storage.Mode() {
+	case constants.StorageModeS3:
+		workerWriter, err := acquireWorkerLogWriter(ctx, workdirPath)
+		if err != nil {
+			return ctx, nil, err
+		}
+
+		ctxWithLogger, err := logger.InitWorkflowLoggerForS3(ctx, workflowID, string(command), workerWriter, workerWriter.nextSeq)
+		return ctxWithLogger, nil, err
+	default:
+		workflowLogPath := filepath.Join(workdirPath, "logs")
+		if err := SetupWorkDirectory(workflowLogPath); err != nil {
+			return ctx, nil, err
+		}
+		return logger.InitWorkflowLoggerForNFS(ctx, workflowLogPath)
+	}
+}
+
+// IsAsyncCommand returns true if the command is an asynchronous command(sync, clear-destination)
+func IsAsyncCommand(command types.Command) bool {
+	return slices.Contains(constants.AsyncCommands, command)
+}
+
+// workflowConnectorLogsExistInS3 mirrors the NFS check for logs/sync_*/olake.log:
+// true only when connector log chunks have been uploaded for this workflow.
+// Worker retries before the first chunk is uploaded still look like a first launch.
+// List/path errors are unknown, not "never launched".
+func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, error) {
+	logsPath, err := storage.S3Key(workDir, "logs", true)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve logs path: %s", err)
+	}
+
+	s3Objects, err := storage.ListS3Objects(ctx, logsPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to list objects in %s: %s", logsPath, err)
+	}
+
+	for _, s3object := range s3Objects {
+		parts := strings.Split(strings.TrimPrefix(s3object.Key, logsPath), "/")
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.HasPrefix(parts[0], constants.ConnectorLogDirPrefix) && strings.HasPrefix(parts[1], constants.PodLogFilenamePref) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

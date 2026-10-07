@@ -56,13 +56,17 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 		}
 		req.IndexRequired = indexRequired
 
-		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
+		if err := utils.UpdateConfigForClearDestination(ctx, jobDetails, req); err != nil {
 			return nil, err
 		}
 	}
 
 	// base telemetry payload for non-sync commands; old CLI versions just ignore the file
-	telemetry.WriteConfigs(req, telemetry.BasePayload(req))
+	telemetry.WriteConfigs(req, telemetry.BasePayload(ctx, req))
+
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
+	}
 
 	return a.executor.Execute(ctx, req)
 }
@@ -78,7 +82,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// Update the configs with latest
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		telemetry.TrackSyncEvent(telemetry.BasePayload(req), telemetry.TelemetryEventFailed, "")
+		telemetry.TrackSyncEvent(telemetry.BasePayload(ctx, req), telemetry.TelemetryEventFailed, "")
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
@@ -105,7 +109,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	attempt := int(activity.GetInfo(ctx).Attempt)
 	runCount := telemetry.GetOrIncrementSyncRunCount(ctx, a.tempClient, req, attempt)
 	cliTelemetry := telemetry.SupportsCLITelemetry(req.Version)
-	payload := telemetry.BuildPayload(req, jobDetails, runCount)
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, runCount)
 	telemetry.WriteConfigs(req, payload)
 
 	// Remove --state flag if state is empty
@@ -116,6 +120,11 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// worker sends "started" only when the connector doesn't support it.
 	if !cliTelemetry {
 		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventStarted, "")
+	}
+
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, "")
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
 	}
 
 	result, err := a.executor.Execute(ctx, req)
@@ -146,6 +155,10 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 }
 
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest, status syncStatus) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	// After telemetry below, not in Cleanup: this activity still logs on the writer.
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
 	log.Info("cleaning up sync for job", "jobID", req.JobID)
 
@@ -165,7 +178,7 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	payload := telemetry.BuildPayload(req, jobDetails, telemetry.ReadSyncRunCount(req.JobID))
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, telemetry.ReadSyncRunCount(ctx, req.JobID))
 
 	switch status {
 	case syncStatusSuccess:
@@ -194,6 +207,9 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
 	log.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 
