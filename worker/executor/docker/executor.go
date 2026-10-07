@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -29,7 +29,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
 
-	return &DockerExecutor{client: client, workingDir: utils.GetConfigDir()}, nil
+	return &DockerExecutor{client: client, workingDir: storage.ConfigDir()}, nil
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
@@ -87,7 +87,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 
 	hostConfig := &container.HostConfig{}
-	if workdir != "" && storagemode.Get() == constants.StorageModeNFS {
+	if workdir != "" && storage.Mode() == constants.StorageModeNFS {
 		hostOutputDir := utils.GetHostOutputDir(workdir)
 		hostConfig.Mounts = []mount.Mount{
 			{Type: mount.TypeBind, Source: hostOutputDir, Target: constants.ContainerMountDir},
@@ -122,7 +122,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		return "", err
 	}
 
-	if storagemode.Get() == constants.StorageModeS3 {
+	if storage.Mode() == constants.StorageModeS3 {
 		// Stream connector logs to S3 while the container runs; Release later stops it with a final catch-up and flush.
 		err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
 			return NewContainerLogCollector(ctx, d, containerID, workdir)
@@ -151,7 +151,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 // Acquire reuses or starts a follow collector (follow ends by itself on an exited container);
 // Release then stops it and runs the final catch-up and flush before returning.
 func (d *DockerExecutor) flushExitedConnectorLogs(ctx context.Context, workDir, containerName string) error {
-	if storagemode.Get() != constants.StorageModeS3 {
+	if storage.Mode() != constants.StorageModeS3 {
 		return nil
 	}
 	err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
@@ -175,7 +175,7 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 		return nil, nil
 	}
 
-	indexDir := filepath.Join(utils.GetConfigDir(), constants.IndexDirName, fmt.Sprintf("olake-index-%d", jobID))
+	indexDir := filepath.Join(storage.ConfigDir(), constants.IndexDirName, fmt.Sprintf("olake-index-%d", jobID))
 	if err := os.MkdirAll(indexDir, constants.DefaultDirPermissions); err != nil {
 		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
 	}

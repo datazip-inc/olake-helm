@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -68,7 +68,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	secretKey := viper.GetString(constants.EnvSecretKey)
-	basePath := utils.GetConfigDir()
+	basePath := storage.ConfigDir()
 
 	// Parse security context JSON if available
 	var securityContext *corev1.PodSecurityContext
@@ -150,7 +150,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 		}()
 	}
 
-	if storagemode.Get() == constants.StorageModeS3 {
+	if storage.Mode() == constants.StorageModeS3 {
 		// Stream connector logs to S3 while the pod runs; Release later stops it with a final catch-up and flush.
 		if err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
 			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)

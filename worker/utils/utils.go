@@ -15,11 +15,10 @@ import (
 	"time"
 
 	"github.com/acarl005/stripansi"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 	"golang.org/x/mod/semver"
 )
@@ -197,21 +196,9 @@ func UpdateConfigForClearDestination(ctx context.Context, jobDetails types.JobDa
 // staged; a missing file reads as empty.
 func readStagedCatalog(ctx context.Context, dir string) (streams, available, selected string, err error) {
 	read := func(name string) (string, error) {
-		rel := filepath.Join(dir, name)
-		var data string
-		var err error
-		switch storagemode.Get() {
-		case constants.StorageModeS3:
-			data, err = ReadFileFromS3(ctx, "", rel, true)
-			var noKey *s3types.NoSuchKey
-			if errors.As(err, &noKey) {
-				return "", nil
-			}
-		default:
-			data, err = ReadFileFromNFS(GetConfigDir(), rel)
-			if errors.Is(err, fs.ErrNotExist) {
-				return "", nil
-			}
+		data, err := storage.ReadFile(ctx, storage.ConfigDir(), filepath.Join(dir, name), true)
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
 		}
 		if err != nil {
 			return "", fmt.Errorf("failed to read %s: %s", name, err)
@@ -263,58 +250,28 @@ func GetWorkflowDirectory(operation types.Command, originalWorkflowID string) st
 func GetStateFileFromWorkdir(ctx context.Context, workflowID string, command types.Command) (string, error) {
 	_, workDir := GetWorkflowDirAndSubDir(workflowID, command)
 
-	var stateFile string
-	var err error
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		stateFile, err = ReadFileFromS3(ctx, workDir, "state.json", true)
-	default:
-		stateFile, err = ReadFileFromNFS(workDir, "state.json")
-	}
+	stateFile, err := storage.ReadFile(ctx, workDir, "state.json", true)
 	if err != nil {
 		return "", fmt.Errorf("failed to read state file: %s", err)
 	}
 	return stateFile, nil
 }
 
-func GetConfigDir() string {
-	switch types.ExecutorEnvironment(GetExecutorEnvironment()) {
-	case types.Kubernetes:
-		return constants.K8sPersistentDir
-	case types.Docker:
-		return constants.DockerPersistentDir
-	default:
+// GetTelemetryUserID reads the telemetry user ID from the active storage mode.
+func GetTelemetryUserID(ctx context.Context) string {
+	userID, err := storage.ReadFile(ctx, storage.ConfigDir(), constants.TelemetryUserIDPath, false)
+	if err != nil {
+		logger.Errorf("failed to read telemetry user ID: %s", err)
 		return ""
 	}
-}
-
-// GetTelemetryUserID reads the telemetry user ID from the appropriate storage mode.
-func GetTelemetryUserID(ctx context.Context) string {
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		data, err := ReadFileFromS3(ctx, "", constants.TelemetryUserIDPath, false)
-		if err != nil {
-			logger.Errorf("failed to read telemetry user ID: %s", err)
-			return ""
-		}
-		return data
-	default:
-		telemetryPath := filepath.Join(GetConfigDir(), constants.TelemetryUserIDPath)
-
-		userID, err := os.ReadFile(telemetryPath)
-		if err != nil {
-			logger.Errorf("failed to read telemetry user ID from file %s: %s", telemetryPath, err)
-			return ""
-		}
-		return string(userID)
-	}
+	return userID
 }
 
 // getHostOutputDir returns the host output directory
 func GetHostOutputDir(outputDir string) string {
 	hostPersistencePath := viper.GetString(constants.EnvHostPersistentDir)
 	if hostPersistencePath != "" {
-		persistencePath := GetConfigDir()
+		persistencePath := storage.ConfigDir()
 		hostOutputDir := strings.Replace(outputDir, persistencePath, hostPersistencePath, 1)
 		return hostOutputDir
 	}
@@ -324,7 +281,7 @@ func GetHostOutputDir(outputDir string) string {
 
 // s3 mode only supports connector versions that are at least the minimum version "v0.9.2"
 func ValidateConnectorVersionForStorageMode(version string) error {
-	if storagemode.Get() != constants.StorageModeS3 {
+	if storage.Mode() != constants.StorageModeS3 {
 		return nil
 	}
 	if !semver.IsValid(version) {
@@ -339,7 +296,7 @@ func ValidateConnectorVersionForStorageMode(version string) error {
 // WorkflowAlreadyLaunched reports whether this workflow has already started a connector run.
 // Config files alone do not count — they are written before the container/pod is launched.
 func WorkflowAlreadyLaunched(ctx context.Context, workdir string) (bool, error) {
-	switch storagemode.Get() {
+	switch storage.Mode() {
 	case constants.StorageModeS3:
 		alreadyLaunched, err := workflowConnectorLogsExistInS3(ctx, workdir)
 		if err != nil {
@@ -413,13 +370,13 @@ func GetExecutorEnvironment() string {
 
 func GetWorkflowDirAndSubDir(workflowID string, command types.Command) (string, string) {
 	subdir := GetWorkflowDirectory(command, workflowID)
-	workdir := filepath.Join(GetConfigDir(), subdir)
+	workdir := filepath.Join(storage.ConfigDir(), subdir)
 	return subdir, workdir
 }
 
 // ConnectorConfigDir returns the S3 config path for S3 storage mode, empty string otherwise.
 func ConnectorConfigDir(command types.Command, workflowID string) string {
-	if storagemode.Get() != constants.StorageModeS3 {
+	if storage.Mode() != constants.StorageModeS3 {
 		return ""
 	}
 	bucket := strings.TrimSpace(viper.GetString(constants.EnvS3Bucket))
@@ -529,7 +486,7 @@ func RemoveFlagFromArgs(arguments []string, flagName string) []string {
 func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types.Command) (context.Context, *logger.WorkflowLogFile, error) {
 	_, workdirPath := GetWorkflowDirAndSubDir(workflowID, command)
 
-	switch storagemode.Get() {
+	switch storage.Mode() {
 	case constants.StorageModeS3:
 		workerWriter, err := acquireWorkerLogWriter(ctx, workdirPath)
 		if err != nil {
@@ -550,4 +507,31 @@ func PrepareWorkflowLogger(ctx context.Context, workflowID string, command types
 // IsAsyncCommand returns true if the command is an asynchronous command(sync, clear-destination)
 func IsAsyncCommand(command types.Command) bool {
 	return slices.Contains(constants.AsyncCommands, command)
+}
+
+// workflowConnectorLogsExistInS3 mirrors the NFS check for logs/sync_*/olake.log:
+// true only when connector log chunks have been uploaded for this workflow.
+// Worker retries before the first chunk is uploaded still look like a first launch.
+// List/path errors are unknown, not "never launched".
+func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, error) {
+	logsPath, err := storage.Key(workDir, "logs", true)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve logs path: %s", err)
+	}
+
+	s3Objects, err := storage.ListObjects(ctx, logsPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to list objects in %s: %s", logsPath, err)
+	}
+
+	for _, s3object := range s3Objects {
+		parts := strings.Split(strings.TrimPrefix(s3object.Key, logsPath), "/")
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.HasPrefix(parts[0], constants.ConnectorLogDirPrefix) && strings.HasPrefix(parts[1], constants.PodLogFilenamePref) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

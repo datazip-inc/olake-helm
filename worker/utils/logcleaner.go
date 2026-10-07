@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
@@ -20,7 +20,7 @@ func InitLogCleaner(ctx context.Context, logDir string, retentionPeriod int) {
 	c := cron.New()
 
 	err := c.AddFunc("@midnight", func() {
-		switch storagemode.Get() {
+		switch storage.Mode() {
 		case constants.StorageModeS3:
 			cleanS3OldLogs(ctx, retentionPeriod)
 		default:
@@ -96,13 +96,13 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 		s3path += "/"
 	}
 
-	s3Objects, err := listS3Objects(ctx, s3path)
+	s3Objects, err := storage.ListObjects(ctx, s3path)
 	if err != nil {
 		logger.Errorf("failed to list s3 objects: %s", err)
 		return
 	}
 
-	groups := map[string][]s3Object{}
+	groups := map[string][]storage.Object{}
 
 	for _, s3object := range s3Objects {
 		relativePath := strings.TrimPrefix(s3object.Key, s3path)
@@ -119,7 +119,7 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 				continue
 			}
 			for _, s3object := range group {
-				if err := deleteS3Object(ctx, s3object.Key); err != nil {
+				if err := storage.DeleteObject(ctx, s3object.Key); err != nil {
 					logger.Errorf("failed to delete s3 object %s: %s", s3object.Key, err)
 				}
 			}

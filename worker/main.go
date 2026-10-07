@@ -11,6 +11,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/constants/config"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/temporal"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
@@ -36,7 +37,7 @@ func main() {
 	logger.Infof("executor environment: %s", utils.GetExecutorEnvironment())
 
 	// Initialize s3 client for S3 storage mode
-	if err := utils.InitStorage(ctx); err != nil {
+	if err := storage.Init(ctx); err != nil {
 		logger.Fatalf("failed to initialize storage: %s", err)
 	}
 
@@ -99,7 +100,7 @@ func main() {
 	}()
 
 	// Initialize log cleaner (NFS directories or S3 workflow prefixes)
-	utils.InitLogCleaner(ctx, utils.GetConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
+	utils.InitLogCleaner(ctx, storage.ConfigDir(), viper.GetInt(constants.EnvLogRetentionPeriod))
 
 	// setup signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
