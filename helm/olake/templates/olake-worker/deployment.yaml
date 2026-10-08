@@ -53,7 +53,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "olake.workerServiceAccountName" . }}
-      {{- if or .Values.temporal.enabled (and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3")) }}
+      {{- if or .Values.temporal.enabled (and .Values.s3LogFileStorage.minio.enabled (eq (include "olake.storageMode" .) "s3")) }}
       initContainers:
       {{- if .Values.temporal.enabled }}
       - name: wait-for-temporal
@@ -103,7 +103,7 @@ spec:
             sleep 5
           done
       {{- end }}
-      {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+      {{- if and .Values.s3LogFileStorage.minio.enabled (eq (include "olake.storageMode" .) "s3") }}
       - name: wait-for-minio
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent

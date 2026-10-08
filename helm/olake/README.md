@@ -308,13 +308,17 @@ global:
   logFileStorageMode: "s3"
 
 s3LogFileStorage:
-  # 1. The development MinIO server is disabled
-  enabled: false
-
-  # 2. Hosted / external S3 bucket
   bucket: "olake"
   region: "us-east-1"
-  existingSecret: "s3-log-file-storage-secret"
+
+  # 1. The development MinIO server is disabled
+  minio:
+    enabled: false
+
+  # 2. Hosted / external S3
+  external:
+    endpoint: ""   # empty for AWS S3; set for GCS or external MinIO
+    existingSecret: "s3-log-file-storage-secret"
 ```
 
 Create the credentials secret before installing:
@@ -325,9 +329,9 @@ kubectl create secret generic s3-log-file-storage-secret \
   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
 ```
 
-For IAM role auth (EKS IRSA) instead of static keys, set `s3LogFileStorage.role.enabled: true` and add role annotations. `existingSecret` is not required in that case.
+For IAM role auth (EKS IRSA or EKS Pod Identity) instead of static keys, set `s3LogFileStorage.external.role.enabled: true`. For IRSA, also add the role ARN under `s3LogFileStorage.external.role.annotations`; for Pod Identity, leave it empty. `existingSecret` is not required in either case.
 
-**Note:** For development and quick starts, in-cluster MinIO is included and used when `s3LogFileStorage.enabled: true`. This provides an out-of-the-box S3 solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
+**Note:** For development and quick starts, in-cluster MinIO is included and used when `s3LogFileStorage.minio.enabled: true` (the default). This provides an out-of-the-box S3 solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
 
 **⚠️ Fusion:** Fusion requires NFS/RWX shared storage and is not supported when `global.logFileStorageMode` is `s3`. Set `fusion.enabled: false` to use S3 storage.
 

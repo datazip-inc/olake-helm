@@ -56,7 +56,7 @@ spec:
       {{- if (include "olake.jobServiceAccountName" .) }}
       serviceAccountName: {{ include "olake.jobServiceAccountName" . }}
       {{- end }}
-      {{- if or .Values.temporal.enabled .Values.fusion.enabled (and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3")) }}
+      {{- if or .Values.temporal.enabled .Values.fusion.enabled (and .Values.s3LogFileStorage.minio.enabled (eq (include "olake.storageMode" .) "s3")) }}
       initContainers:
       {{- if .Values.temporal.enabled }}
       - name: create-temporal-namespace
@@ -108,7 +108,7 @@ spec:
           done
           echo "Fusion REST service is ready!"
       {{- end }}
-      {{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+      {{- if and .Values.s3LogFileStorage.minio.enabled (eq (include "olake.storageMode" .) "s3") }}
       - name: wait-for-minio
         image: "{{ include "olake.registryBase" . }}/library/busybox:latest"
         imagePullPolicy: IfNotPresent
