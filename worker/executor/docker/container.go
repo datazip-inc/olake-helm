@@ -16,6 +16,7 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/registry"
@@ -24,7 +25,8 @@ import (
 )
 
 const (
-	DockerPullTimeout = 2 * time.Minute
+	DockerPullTimeout       = 2 * time.Minute
+	DockerHeartbeatInterval = 5 * time.Second
 )
 
 type ContainerState struct {
@@ -33,7 +35,7 @@ type ContainerState struct {
 	ExitCode *int
 }
 
-func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string) error {
+func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version string, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	_, err := d.client.ImageInspect(ctx, imageName)
 	if err != nil {
@@ -42,6 +44,25 @@ func (d *DockerExecutor) PullImage(ctx context.Context, imageName, version strin
 
 		// Image doesn't exist, pull it
 		log.Info("image not found locally, pulling", "image", imageName)
+
+		done := make(chan struct{})
+		defer close(done)
+
+		if heartbeatFunc != nil {
+			go func() {
+				ticker := time.NewTicker(DockerHeartbeatInterval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						heartbeatFunc(ctx, fmt.Sprintf("pulling image %s", imageName))
+					case <-done:
+						return
+					}
+				}
+			}()
+		}
+
 		reader, err := d.client.ImagePull(pullCtx, imageName, client.ImagePullOptions{RegistryAuth: registryAuth()})
 		if err != nil {
 			if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
@@ -248,13 +269,28 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	// Inspect container state
 	state := d.getContainerState(ctx, containerName, req.WorkflowID)
 
-	// If container is running, adopt and wait for completion
+	// If container is running, adopt it: reattach the S3 log collector, then wait for completion.
+	// Execute must not continue for it, since ContainerStart would rerun the sync if it exits first.
 	if state.Exists && state.Running {
 		log.Info("adopting running container", "workflowID", req.WorkflowID, "containerName", containerName)
+		if storagemode.Get() == constants.StorageModeS3 {
+			err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
+				return NewContainerLogCollector(ctx, d, containerName, workDir)
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to start connector log collector: %s", err)
+			}
+		}
 		if err := d.waitForContainerCompletion(ctx, containerName, req.HeartbeatFunc); err != nil {
 			return nil, err
 		}
 		state = d.getContainerState(ctx, containerName, req.WorkflowID)
+	}
+
+	if state.Exists && !state.Running {
+		if err := d.flushExitedConnectorLogs(ctx, workDir, containerName); err != nil {
+			return nil, err
+		}
 	}
 
 	// If container exists and exited, treat as finished: cleanup and return status
@@ -278,7 +314,11 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	}
 
 	// First launch path: only if we never launched and nothing is running
-	if !utils.WorkflowAlreadyLaunched(workDir) {
+	alreadyLaunched, err := utils.WorkflowAlreadyLaunched(ctx, workDir)
+	if err != nil {
+		return nil, err
+	}
+	if !alreadyLaunched {
 		return &types.Result{OK: true}, nil
 	}
 
