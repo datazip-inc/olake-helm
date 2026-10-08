@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,8 +14,8 @@ import (
 	"time"
 
 	"github.com/acarl005/stripansi"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -27,7 +26,7 @@ const (
 
 type PodLogBuffer struct {
 	path                  string
-	s3LogDir              string // S3 key prefix for this log directory (configStorageKey(workDir, logRelDir))
+	s3LogDir              string // S3 key prefix for this log directory (storage.S3Key(workDir, logRelDir))
 	filenamePrefix        string // chunk filename prefix, e.g. connector- or worker-
 	counter               int
 	lastLocalLogTimestamp time.Time // k8s/docker line timestamp for chunk naming
@@ -108,7 +107,7 @@ func NewPodLogBuffer(workDir, logRelDir, filenamePrefix string, counter int) (*P
 		return nil, err
 	}
 
-	s3LogDir, err := configStorageKey(workDir, logRelDir, false)
+	s3LogDir, err := storage.S3Key(workDir, logRelDir, false)
 	if err != nil {
 		return nil, err
 	}
@@ -167,12 +166,12 @@ func parseLogChunkMetadata(name, filenamePrefix string) (logChunkMetadata, bool)
 
 // loadResumePoint lists chunks under logRelDir and returns the latest timestamp/seq/chunkCounter.
 func loadResumePoint(ctx context.Context, workDir, logRelDir, prefix string) (resumePoint, error) {
-	s3LogDir, err := configStorageKey(workDir, logRelDir, true)
+	s3LogDir, err := storage.S3Key(workDir, logRelDir, true)
 	if err != nil {
 		return resumePoint{}, err
 	}
 
-	s3Objects, err := listS3Objects(ctx, s3LogDir)
+	s3Objects, err := storage.ListS3Objects(ctx, s3LogDir)
 	if err != nil {
 		return resumePoint{}, err
 	}
@@ -203,12 +202,12 @@ func loadResumePoint(ctx context.Context, workDir, logRelDir, prefix string) (re
 // under logs/ for the given workDir. It reuses an existing sync_* folder from S3
 // when present; otherwise it returns a new sync_<timestamp> name for this run.
 func resolveCurrentLogDir(ctx context.Context, workDir string) (string, error) {
-	logsPrefix, err := configStorageKey(workDir, "logs", true)
+	logsPrefix, err := storage.S3Key(workDir, "logs", true)
 	if err != nil {
 		return "", err
 	}
 
-	s3Objects, err := listS3Objects(ctx, logsPrefix)
+	s3Objects, err := storage.ListS3Objects(ctx, logsPrefix)
 	if err != nil {
 		return "", err
 	}
@@ -359,17 +358,7 @@ func (b *PodLogBuffer) upload(ctx context.Context, normalizedLogLine podLogLineE
 	filename := b.nextFilename(normalizedLogLine)
 	key := path.Join(b.s3LogDir, filename)
 
-	client, bucket, err := getS3Client()
-	if err != nil {
-		return err
-	}
-
-	_, err = client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: &bucket,
-		Key:    &key,
-		Body:   bytes.NewReader([]byte(normalizedLogLine.normalizedLogLine)),
-	})
-	return err
+	return storage.PutS3Object(ctx, key, strings.NewReader(normalizedLogLine.normalizedLogLine))
 }
 
 // nextFilename returns the next S3 chunk filename and increments the counter.

@@ -17,10 +17,10 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
@@ -237,7 +237,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 
 	var volumeMounts []corev1.VolumeMount
 	var volumes []corev1.Volume
-	if storagemode.Get() == constants.StorageModeNFS {
+	if storage.Mode() == constants.StorageModeNFS {
 		volumes = []corev1.Volume{{
 			Name: "job-storage",
 			VolumeSource: corev1.VolumeSource{
@@ -263,7 +263,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		},
 	}
-	if storagemode.Get() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
+	if storage.Mode() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
 		envFrom = append(envFrom, corev1.EnvFromSource{
 			SecretRef: &corev1.SecretEnvSource{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -386,7 +386,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	}
 
 	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
-	if utils.IsAsyncCommand(req.Command) && storagemode.Get() == constants.StorageModeNFS {
+	if utils.IsAsyncCommand(req.Command) && storage.Mode() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

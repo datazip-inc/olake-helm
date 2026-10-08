@@ -13,10 +13,10 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/registry"
@@ -273,7 +273,7 @@ func (d *DockerExecutor) shouldStartOperation(ctx context.Context, req *types.Ex
 	// Execute must not continue for it, since ContainerStart would rerun the sync if it exits first.
 	if state.Exists && state.Running {
 		log.Info("adopting running container", "workflowID", req.WorkflowID, "containerName", containerName)
-		if storagemode.Get() == constants.StorageModeS3 {
+		if storage.Mode() == constants.StorageModeS3 {
 			err := utils.AcquireConnectorLogCollector(ctx, workDir, func() (*utils.ConnectorLogCollector, error) {
 				return NewContainerLogCollector(ctx, d, containerName, workDir)
 			})

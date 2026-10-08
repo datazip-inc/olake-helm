@@ -1,4 +1,4 @@
-package utils
+package storage
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/spf13/viper"
 )
 
@@ -27,14 +27,15 @@ var (
 	s3Bucket string
 )
 
-type s3Object struct {
+// S3Object is an S3 object listing entry.
+type S3Object struct {
 	Key          string
 	LastModified time.Time
 }
 
-// InitStorage initializes the shared S3 client when storage mode is S3. No-op for NFS.
-func InitStorage(ctx context.Context) error {
-	if storagemode.Get() != constants.StorageModeS3 {
+// Init initializes the shared S3 client when storage mode is S3. No-op for NFS.
+func Init(ctx context.Context) error {
+	if Mode() != constants.StorageModeS3 {
 		return nil
 	}
 
@@ -138,46 +139,15 @@ func getS3Client() (*s3.Client, string, error) {
 	return s3Client, s3Bucket, nil
 }
 
-// WriteConfigFiles writes job configs to the active shared storage backend (NFS or S3).
-func WriteConfigFiles(ctx context.Context, workDir string, configs []types.JobConfig) error {
-	if len(configs) == 0 {
-		return nil
-	}
-
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		return WriteFilesToS3(ctx, workDir, configs)
-	default:
-		return WriteFilesToNFS(workDir, configs)
-	}
-}
-
-// WriteFilesToNFS writes job configs to the local filesystem.
-func WriteFilesToNFS(workDir string, configs []types.JobConfig) error {
-	for _, jobConfig := range configs {
-		filePath := filepath.Join(workDir, jobConfig.Name)
-		if err := WriteFile(filePath, []byte(jobConfig.Data)); err != nil {
-			return fmt.Errorf("failed to write %s: %s", jobConfig.Name, err)
-		}
-	}
-	return nil
-}
-
-// ReadFileFromNFS reads a file from the local filesystem.
-func ReadFileFromNFS(workDir, relativePath string) (string, error) {
-	filePath := filepath.Join(workDir, relativePath)
-	return ReadFile(filePath)
-}
-
-// WriteFilesToS3 writes job configs to the S3 bucket.
-func WriteFilesToS3(ctx context.Context, workDir string, configs []types.JobConfig) error {
+// writeFilesS3 writes job configs to the S3 bucket.
+func writeFilesS3(ctx context.Context, workDir string, configs []types.JobConfig) error {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return err
 	}
 
 	for _, jobConfig := range configs {
-		key, err := configStorageKey(workDir, jobConfig.Name, false)
+		key, err := S3Key(workDir, jobConfig.Name, false)
 		if err != nil {
 			return err
 		}
@@ -195,18 +165,11 @@ func WriteFilesToS3(ctx context.Context, workDir string, configs []types.JobConf
 	return nil
 }
 
-// ReadFileFromS3 reads a file from the S3 bucket.
-func ReadFileFromS3(ctx context.Context, workDir, relativePath string, validateJSON bool) (string, error) {
-	var key string
-	var err error
-	if workDir == "" {
-		prefix := strings.Trim(viper.GetString(constants.EnvS3Prefix), "/")
-		key = path.Join(prefix, path.Clean(strings.Trim(relativePath, "/")))
-	} else {
-		key, err = configStorageKey(workDir, relativePath, false)
-		if err != nil {
-			return "", err
-		}
+// readFileS3 reads a file from the S3 bucket.
+func readFileS3(ctx context.Context, workDir, relativePath string, validateJSON bool) (string, error) {
+	key, err := S3Key(workDir, relativePath, false)
+	if err != nil {
+		return "", err
 	}
 
 	client, bucket, err := getS3Client()
@@ -219,6 +182,10 @@ func ReadFileFromS3(ctx context.Context, workDir, relativePath string, validateJ
 		Key:    &key,
 	})
 	if err != nil {
+		var noSuchKey *s3types.NoSuchKey
+		if errors.As(err, &noSuchKey) {
+			return "", fmt.Errorf("s3://%s/%s: %w", bucket, key, fs.ErrNotExist)
+		}
 		return "", fmt.Errorf("failed to download %s from s3://%s/%s: %s", relativePath, bucket, key, err)
 	}
 	defer out.Body.Close()
@@ -239,41 +206,14 @@ func ReadFileFromS3(ctx context.Context, workDir, relativePath string, validateJ
 	return string(body), nil
 }
 
-// workflowConnectorLogsExistInS3 mirrors the NFS check for logs/sync_*/olake.log:
-// true only when connector log chunks have been uploaded for this workflow.
-// Worker retries before the first chunk is uploaded still look like a first launch.
-// List/path errors are unknown, not "never launched".
-func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, error) {
-	logsPath, err := configStorageKey(workDir, "logs", true)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve logs path: %s", err)
-	}
-
-	s3Objects, err := listS3Objects(ctx, logsPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to list objects in %s: %s", logsPath, err)
-	}
-
-	for _, s3object := range s3Objects {
-		parts := strings.Split(strings.TrimPrefix(s3object.Key, logsPath), "/")
-		if len(parts) != 2 {
-			continue
-		}
-		if strings.HasPrefix(parts[0], constants.ConnectorLogDirPrefix) && strings.HasPrefix(parts[1], constants.PodLogFilenamePref) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// listS3Objects lists S3 objects under the given prefix, including LastModified.
-func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
+// ListS3Objects lists S3 objects under the given prefix, including LastModified.
+func ListS3Objects(ctx context.Context, prefix string) ([]S3Object, error) {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return nil, err
 	}
 
-	var s3Objects []s3Object
+	var s3Objects []S3Object
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 		Bucket: &bucket,
 		Prefix: &prefix,
@@ -284,7 +224,7 @@ func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
 			return nil, fmt.Errorf("failed to list objects in s3://%s/%s: %s", bucket, prefix, err)
 		}
 		for _, obj := range page.Contents {
-			s3Objects = append(s3Objects, s3Object{
+			s3Objects = append(s3Objects, S3Object{
 				Key:          aws.ToString(obj.Key),
 				LastModified: aws.ToTime(obj.LastModified),
 			})
@@ -293,8 +233,8 @@ func listS3Objects(ctx context.Context, prefix string) ([]s3Object, error) {
 	return s3Objects, nil
 }
 
-// deleteS3Object deletes a single object from the configured S3 bucket.
-func deleteS3Object(ctx context.Context, key string) error {
+// DeleteS3Object deletes a single object from the configured S3 bucket.
+func DeleteS3Object(ctx context.Context, key string) error {
 	client, bucket, err := getS3Client()
 	if err != nil {
 		return err
@@ -310,11 +250,11 @@ func deleteS3Object(ctx context.Context, key string) error {
 	return nil
 }
 
-// configStorageKey mirrors the NFS layout as an S3 object key.
+// S3Key mirrors the NFS layout as an S3 object key.
 // With isDirectory true, returns a directory prefix ending with "/".
 // Otherwise returns <prefix>/<workflow-dir>/<relativePath> as an object key without a trailing slash.
-func configStorageKey(workDir, relativePath string, isDirectory bool) (string, error) {
-	workRel, err := filepath.Rel(GetConfigDir(), workDir)
+func S3Key(workDir, relativePath string, isDirectory bool) (string, error) {
+	workRel, err := filepath.Rel(ConfigDir(), workDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve storage path for %s: %s", workDir, err)
 	}
@@ -325,4 +265,19 @@ func configStorageKey(workDir, relativePath string, isDirectory bool) (string, e
 		return strings.TrimSuffix(key, "/") + "/", nil
 	}
 	return key, nil
+}
+
+// PutS3Object uploads body to the object key (a full key, as returned by S3Key).
+func PutS3Object(ctx context.Context, key string, body io.Reader) error {
+	client, bucket, err := getS3Client()
+	if err != nil {
+		return err
+	}
+
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+		Body:   body,
+	})
+	return err
 }
