@@ -6,29 +6,23 @@ import (
 	"fmt"
 
 	"github.com/containerd/errdefs"
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
 
-const (
-	indicatorDockerImage    = "busybox"
-	indicatorTerminationMax = 4096
-	labelIndicatorDocker    = "olake.io/indicator"
-	labelKindDocker         = "olake.io/kind"
-	labelResourceDocker     = "olake.io/resource"
-	labelPhaseDocker        = "olake.io/phase"
-	// Log the error, then stay alive so the container remains visible in `docker ps`.
-	// Phase=Failed label marks it as a GitOps failure indicator (not a healthy workload).
-	indicatorDockerCmd = `printf '%s\n' "$OLAKE_ERROR" | tee /dev/termination-log >&2; exec sleep infinity`
-)
+// Log the error, then stay alive so the container remains visible in `docker ps`.
+// The phase=Failed label marks it as a GitOps failure indicator (not a healthy workload).
+const indicatorCmd = `printf '%s\n' "$OLAKE_ERROR" | tee /dev/termination-log >&2; exec sleep infinity`
 
 func (d *DockerExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
 	switch req.Action {
-	case "delete":
+	case types.IndicatorActionDelete:
 		return d.deleteIndicatorContainer(ctx, req.Name)
-	case "spawn":
+	case types.IndicatorActionSpawn:
 		return d.spawnIndicatorContainer(ctx, req)
 	default:
 		return fmt.Errorf("unknown indicator action %q", req.Action)
@@ -49,21 +43,21 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 	// remove any existing container with the same name to update the error message
 	_, _ = d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 
-	if err := d.PullImage(ctx, indicatorDockerImage, "", req.HeartbeatFunc); err != nil {
-		log.Error("pull indicator image failed", "image", indicatorDockerImage, "error", err)
-		return fmt.Errorf("pull indicator image %s: %w", indicatorDockerImage, err)
+	image := utils.GetRegistryImage(constants.IndicatorImage)
+	if err := d.PullImage(ctx, image, "", req.HeartbeatFunc); err != nil {
+		log.Error("pull indicator image failed", "image", image, "error", err)
+		return fmt.Errorf("pull indicator image %s: %w", image, err)
 	}
 
-	msg := truncateIndicatorDocker(req.Message, indicatorTerminationMax)
 	containerConfig := &container.Config{
-		Image: indicatorDockerImage,
-		Cmd:   []string{"sh", "-c", indicatorDockerCmd},
-		Env:   []string{fmt.Sprintf("OLAKE_ERROR=%s", msg)},
+		Image: image,
+		Cmd:   []string{"sh", "-c", indicatorCmd},
+		Env:   []string{fmt.Sprintf("OLAKE_ERROR=%s", utils.Truncate(req.Message, constants.IndicatorMessageMax))},
 		Labels: map[string]string{
-			labelIndicatorDocker: "true",
-			labelKindDocker:      req.Kind,
-			labelResourceDocker:  req.ResourceName,
-			labelPhaseDocker:     "Failed",
+			constants.LabelIndicator:         "true",
+			constants.LabelIndicatorKind:     req.Kind,
+			constants.LabelIndicatorResource: req.ResourceName,
+			constants.LabelIndicatorPhase:    "Failed",
 		},
 	}
 
@@ -81,11 +75,4 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 		return fmt.Errorf("start indicator container: %w", err)
 	}
 	return nil
-}
-
-func truncateIndicatorDocker(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
 }

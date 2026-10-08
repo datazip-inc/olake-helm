@@ -11,27 +11,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-)
-
-const (
-	indicatorImage          = "busybox"
-	indicatorTerminationMax = 4096
-	indicatorAnnotationMax  = 1024
-
-	labelIndicator  = "olake.io/indicator"
-	labelKind       = "olake.io/kind"
-	labelResource   = "olake.io/resource"
-	annotationError = "olake.io/error"
 )
 
 func (k *KubernetesExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
 	ns := k.indicatorNamespace(req)
 	switch req.Action {
-	case "delete":
+	case types.IndicatorActionDelete:
 		return k.deleteIndicatorPod(ctx, ns, req.Name)
-	case "spawn":
+	case types.IndicatorActionSpawn:
 		return k.spawnIndicatorPod(ctx, ns, req)
 	default:
 		return fmt.Errorf("unknown indicator action %q", req.Action)
@@ -61,29 +52,29 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 	zero := int64(0)
 	_ = k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
 
-	msg := truncateIndicator(req.Message, indicatorTerminationMax)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 			Labels: map[string]string{
-				labelIndicator:   "true",
-				labelKind:        req.Kind,
-				labelResource:    req.ResourceName,
-				"olake.io/phase": "Failed",
+				constants.LabelIndicator:         "true",
+				constants.LabelIndicatorKind:     req.Kind,
+				constants.LabelIndicatorResource: req.ResourceName,
+				constants.LabelIndicatorPhase:    "Failed",
 			},
 			Annotations: map[string]string{
-				annotationError: annotationSafeIndicator(req.Message),
+				constants.AnnotationIndicatorError: utils.Truncate(strings.ReplaceAll(req.Message, "\n", " "), constants.IndicatorAnnotationMax),
 			},
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{{
-				Name:  "indicator",
-				Image: indicatorImage,
+				Name:            "indicator",
+				Image:           utils.GetRegistryImage(constants.IndicatorImage),
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				Env: []corev1.EnvVar{{
 					Name:  "OLAKE_ERROR",
-					Value: msg,
+					Value: utils.Truncate(req.Message, constants.IndicatorMessageMax),
 				}},
 				Command:                  []string{"sh", "-c", `printf '%s\n' "$OLAKE_ERROR" | tee /dev/termination-log >&2; exit 1`},
 				TerminationMessagePath:   "/dev/termination-log",
@@ -108,16 +99,4 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 		return fmt.Errorf("spawn indicator pod: %w", err)
 	}
 	return nil
-}
-
-func truncateIndicator(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
-func annotationSafeIndicator(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	return truncateIndicator(s, indicatorAnnotationMax)
 }

@@ -93,6 +93,12 @@ type ProjectSettings struct {
 	WebhookAlertURL string
 }
 
+// IndicatorRequest actions
+const (
+	IndicatorActionSpawn  = "spawn"
+	IndicatorActionDelete = "delete"
+)
+
 // IndicatorRequest is GitOps-only: sent from olake-ui via IndicatorWorkflow to spawn/delete failure indicators.
 type IndicatorRequest struct {
 	Action       string `json:"action"`        // spawn | delete
