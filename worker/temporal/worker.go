@@ -37,6 +37,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	// regsiter workflows
 	w.RegisterWorkflow(RunSyncWorkflow)
 	w.RegisterWorkflow(ExecuteWorkflow)
+	w.RegisterWorkflow(IndicatorWorkflow)
 	// w.RegisterWorkflow(ExecuteClearWorkflow)
 
 	// regsiter activities
@@ -46,6 +47,7 @@ func NewWorker(ctx context.Context, t *Temporal, e *executor.AbstractExecutor, d
 	w.RegisterActivity(activitiesInstance.PostSyncActivity)
 	w.RegisterActivity(activitiesInstance.PostClearActivity)
 	w.RegisterActivity(activitiesInstance.SendWebhookNotificationActivity)
+	w.RegisterActivity(activitiesInstance.IndicatorActivity)
 
 	searchAttributes := map[string]enums.IndexedValueType{constants.OperationTypeKey: enums.INDEXED_VALUE_TYPE_KEYWORD}
 
