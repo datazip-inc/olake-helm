@@ -166,6 +166,44 @@ global:
 - If `"0"` (Default) is configured, it is used for all unmapped jobs and other activities (Fetch, Test, Discover).
 - If `"0"` is NOT configured, unmapped jobs are scheduled by the standard Kubernetes scheduler on any available node.
 
+#### Job Pod Resources
+
+By default, every job pod requests `256Mi` memory and `100m` CPU with no limits, so it can use whatever the node has free. A profile can set `resources` to size job pods explicitly; nothing changes unless it is set.
+
+```yaml
+global:
+  jobProfiles:
+    0: # Default for all jobs
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          memory: "2Gi"
+    123: # Heavy job
+      nodeSelector:
+        olake.io/workload-type: "heavy"
+      resources:
+        requests:
+          cpu: "2"
+          memory: "8Gi"
+        limits:
+          memory: "8Gi"
+```
+
+| Operation | Resources used |
+|---|---|
+| Sync, clear destination | Profile `<JobID>` → profile `"0"` → built-in default |
+| Test, discover, spec | Profile `"0"` → built-in default |
+
+- A profile without `resources` falls back to the next level, even if it sets `nodeSelector` or other fields.
+- A profile's `resources` replace the fallback as a whole; fields are not merged.
+- If only a limit is set, Kubernetes uses the same value as the request.
+- A request larger than its limit is ignored (the worker logs a warning and uses the fallback).
+- Changes apply on each job's next run after `helm upgrade`, without restarting the worker.
+
+**Tips:** always set a memory request so the scheduler and cluster autoscaler can place pods correctly. A memory limit protects the node from a runaway sync; a sync that exceeds it fails with `OOMKilled` (exit code 137). CPU limits throttle the pod, so leave them unset unless you need a hard cap.
+
 **Deprecation Notice:** The legacy `global.jobMapping` configuration (which only supported `nodeSelector`) is deprecated and will be removed in a future release. Users are strongly advised to migrate to `global.jobProfiles`, which provides feature-rich scheduling capabilities including tolerations and affinity rules.
 
 ### Per-Job Index Storage

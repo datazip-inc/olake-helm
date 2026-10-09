@@ -77,7 +77,8 @@
                   "type": "object",
                   "description": "Kubernetes affinity/anti-affinity rules.",
                   "additionalProperties": true
-                }
+                },
+                "resources": { "$ref": "#/definitions/resourceRequirements" }
               },
               "additionalProperties": false
             }
@@ -104,6 +105,28 @@
     }
   },
   "definitions": {
+    "resourceQuantity": {
+      "type": ["string", "number"],
+      "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$",
+      "description": "Kubernetes quantity, e.g. 500m, 2, 512Mi, 4Gi."
+    },
+    "resourceList": {
+      "type": "object",
+      "properties": {
+        "cpu": { "$ref": "#/definitions/resourceQuantity" },
+        "memory": { "$ref": "#/definitions/resourceQuantity" }
+      },
+      "additionalProperties": false
+    },
+    "resourceRequirements": {
+      "type": "object",
+      "description": "CPU/memory requests and limits for job pods using this profile. Replaces the fallback profile's resources as a whole.",
+      "properties": {
+        "requests": { "$ref": "#/definitions/resourceList" },
+        "limits": { "$ref": "#/definitions/resourceList" }
+      },
+      "additionalProperties": false
+    },
     "indexStorage": {
       "type": "object",
       "properties": {

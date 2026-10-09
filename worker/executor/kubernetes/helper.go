@@ -79,6 +79,41 @@ func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Com
 	return []corev1.Toleration{}
 }
 
+// defaultJobResources applies when no job profile sets resources: a small request
+// so the pod schedules, and no limits for flexibility.
+func defaultJobResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+		},
+	}
+}
+
+// hasResources treats `resources: {}` as unset so it cannot strip the pod's requests
+func hasResources(r *corev1.ResourceRequirements) bool {
+	return r != nil && (len(r.Requests) > 0 || len(r.Limits) > 0)
+}
+
+// GetResourcesForJob returns container resources for the given jobID.
+// A job's own profile applies only to async operations (sync, clear destination).
+// A profile without resources falls back to the default profile, then to the built-in default.
+func (k *KubernetesExecutor) GetResourcesForJob(jobID int, operation types.Command) corev1.ResourceRequirements {
+	// 1. Check specific profile
+	if utils.IsAsyncCommand(operation) {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists && hasResources(profile.Resources) {
+			return *profile.Resources.DeepCopy()
+		}
+	}
+
+	// 2. Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists && hasResources(profile.Resources) {
+		return *profile.Resources.DeepCopy()
+	}
+
+	return defaultJobResources()
+}
+
 func (k *KubernetesExecutor) sanitizeName(name string) string {
 	name = strings.ToLower(name)
 
@@ -96,11 +131,6 @@ func (k *KubernetesExecutor) sanitizeName(name string) string {
 	}
 
 	return name
-}
-
-func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
-	q, _ := resource.ParseQuantity(s)
-	return q
 }
 
 // buildPodAnnotations merges global job pod annotations with olake-internal ones.
