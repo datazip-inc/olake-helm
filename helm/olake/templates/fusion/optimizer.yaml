@@ -1,0 +1,150 @@
+{{- if .Values.fusion.enabled }}
+{{/*
+  The Spark optimizer. The pod runs spark-submit in client mode, so the pod itself is the Spark
+  driver and Kubernetes owns its lifecycle: it is restarted when it dies, and rolled out when the
+  Spark configuration changes. The optimizer registers itself into Fusion's external optimizer
+  group; Fusion neither starts nor stops it.
+*/}}
+# Headless service giving the driver a stable address for its executors to connect back to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-optimizer
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion-optimizer
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion-optimizer
+  ports:
+    - name: driver-rpc
+      port: 7078
+      targetPort: 7078
+    - name: block-manager
+      port: 7079
+      targetPort: 7079
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-optimizer
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion-optimizer
+spec:
+  replicas: 1
+  # The driver holds in-flight optimizing tasks; replacing it outright is cleaner than running two.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: fusion-optimizer
+  template:
+    metadata:
+      annotations:
+        # Any change to the optimizer's own configuration rolls the driver pod. An ams-only
+        # setting change does not, because it lives in a different ConfigMap.
+        checksum/config: {{ include (print $.Template.BasePath "/fusion/optimizer-configmap.yaml") . | sha256sum }}
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: fusion-optimizer
+        olake.io/workload: fusion-master
+    spec:
+      serviceAccountName: {{ include "olake.fusionServiceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.fusion.optimizer.nodeSelector | default .Values.fusion.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.fusion.optimizer.tolerations | default .Values.fusion.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.fusion.optimizer.affinity | default .Values.fusion.affinity) }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: optimizer-config
+          configMap:
+            name: {{ include "olake.fullname" . }}-fusion-optimizer-config
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ include "olake.sharedStoragePVC" . }}
+      containers:
+        - name: optimizer
+          image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
+          imagePullPolicy: {{ .Values.fusion.optimizer.spark.image.pullPolicy }}
+          ports:
+            - name: driver-rpc
+              containerPort: 7078
+            - name: block-manager
+              containerPort: 7079
+          volumeMounts:
+            - name: optimizer-config
+              mountPath: /usr/local/amoro/conf/spark-defaults.conf
+              subPath: spark-defaults.conf
+            - name: optimizer-config
+              mountPath: /usr/local/amoro/conf/executor-pod-template.yaml
+              subPath: executor-pod-template.yaml
+            - name: shared-storage
+              mountPath: /data/fusion-logs
+              subPath: fusion-logs
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: LOG_DIR
+              value: "/data/fusion-logs"
+            {{- range $key, $value := .Values.global.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.fusion.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          command:
+            - /opt/spark/bin/spark-submit
+          args:
+            - --properties-file
+            - /usr/local/amoro/conf/spark-defaults.conf
+            - --deploy-mode
+            - client
+            - --conf
+            - spark.driver.bindAddress=$(POD_IP)
+            - --class
+            - org.apache.amoro.optimizer.spark.SparkOptimizer
+            - {{ .Values.fusion.optimizer.spark.jobUri | quote }}
+            - -a
+            - thrift://{{ include "olake.fullname" . }}-fusion-optimizing.{{ include "olake.namespace" . }}.svc.cluster.local:1261
+            - -p
+            - {{ .Values.fusion.optimizer.spark.desiredParallelism | quote }}
+            - -g
+            - spark-container
+            - -id
+            - {{ include "olake.fullname" . }}-fusion-optimizer
+          {{- $defaultResources := dict
+            "requests" (dict "memory" "2Gi" "cpu" "500m")
+          }}
+          {{- $resources := mergeOverwrite $defaultResources (.Values.fusion.optimizer.resources | default dict) }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+{{- end }}

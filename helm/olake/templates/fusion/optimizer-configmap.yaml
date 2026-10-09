@@ -1,0 +1,82 @@
+{{- if .Values.fusion.enabled }}
+{{/*
+  Configuration for the optimizer pod only. It is deliberately a separate ConfigMap from
+  ams's config.yaml: the optimizer deployment checksums this file, so an ams-only setting
+  change does not restart the optimizer, and an optimizer setting change does not need ams
+  to be restarted to take effect.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "olake.fullname" . }}-fusion-optimizer-config
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion-optimizer
+data:
+  # Spark configuration for the optimizer pod, which runs spark-submit in client mode and is
+  # therefore itself the Spark driver. Fusion does not read this file.
+  spark-defaults.conf: |
+    spark.master                                     k8s://https://kubernetes.default.svc:443
+    spark.kubernetes.namespace                       {{ include "olake.namespace" . }}
+    spark.kubernetes.container.image                 {{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}
+    spark.kubernetes.container.image.pullPolicy      {{ .Values.fusion.optimizer.spark.image.pullPolicy }}
+    spark.kubernetes.authenticate.executor.serviceAccountName {{ include "olake.fusionServiceAccountName" . }}
+    spark.kubernetes.executor.podTemplateFile        /usr/local/amoro/conf/executor-pod-template.yaml
+    spark.kubernetes.executor.podNamePrefix          {{ include "olake.fullname" . }}-fusion-optimizer-executor
+    spark.kubernetes.executor.label.olake.io/workload fusion-executor
+    spark.kubernetes.executor.deleteOnTermination    true
+    # The driver is the optimizer pod: it publishes the headless service name, which stays the same
+    # when Kubernetes replaces the pod. spark.driver.bindAddress is passed on the command line,
+    # because only Kubernetes expands the pod IP.
+    spark.driver.host                                {{ include "olake.fullname" . }}-fusion-optimizer.{{ include "olake.namespace" . }}.svc.cluster.local
+    spark.driver.port                                7078
+    spark.driver.blockManager.port                   7079
+    # Keep the Spark context alive across executor failures.
+    # Number of retries by spark = spark.task.maxFailures - 1
+    spark.executor.maxNumFailures                    2147483647
+    spark.executor.failuresValidityInterval          10ms
+    spark.task.maxFailures                           4
+    # Shared storage for logs
+    spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.path /data/fusion-logs
+    spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly false
+    spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.subPath fusion-logs
+    spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.options.claimName {{ include "olake.sharedStoragePVC" . }}
+    spark.executorEnv.LOG_DIR                        /data/fusion-logs
+    # Force Log4j2 to use the routing config (belt-and-suspenders with the Dockerfile COPY)
+    spark.driver.extraJavaOptions                    -Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
+    spark.executor.extraJavaOptions                  -Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
+    {{- range $key, $value := .Values.fusion.optimizer.spark.extraConfig }}
+    {{ $key }} {{ $value }}
+    {{- end }}
+
+  executor-pod-template.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      {{- with .Values.global.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if empty (.Values.fusion.optimizer.spark.executor.nodeSelector | default .Values.fusion.nodeSelector) }}
+      nodeSelector: {}
+      {{- else }}
+      nodeSelector:
+        {{- toYaml (.Values.fusion.optimizer.spark.executor.nodeSelector | default .Values.fusion.nodeSelector) | nindent 8 }}
+      {{- end }}
+      {{- if empty (.Values.fusion.optimizer.spark.executor.tolerations | default .Values.fusion.tolerations) }}
+      tolerations: []
+      {{- else }}
+      tolerations:
+        {{- toYaml (.Values.fusion.optimizer.spark.executor.tolerations | default .Values.fusion.tolerations) | nindent 8 }}
+      {{- end }}
+      {{- if empty (.Values.fusion.optimizer.spark.executor.affinity | default .Values.fusion.affinity) }}
+      affinity: {}
+      {{- else }}
+      affinity:
+        {{- toYaml (.Values.fusion.optimizer.spark.executor.affinity | default .Values.fusion.affinity) | nindent 8 }}
+      {{- end }}
+
+{{- end }}

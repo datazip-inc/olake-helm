@@ -272,8 +272,7 @@ olakeUI:
 
     # -- Credentials for the initial admin user.
     # These values are used only if `existingSecret` is not provided.
-    # When Fusion is enabled, the same credentials are used for the Fusion UI
-    # and the Fusion optimizer bootstrap job.
+    # When Fusion is enabled, the same credentials are used for the Fusion UI.
     adminUser:
       # -- Admin username
       username: "admin"
@@ -836,6 +835,9 @@ fusion:
     nodeSelector: {}
     tolerations: []
     affinity: {}
+    # Resources of the optimizer pod, which is the Spark driver. Must leave room for
+    # spark.driver.memory plus JVM overhead.
+    resources: {}
 
     spark:
       # Desired Spark optimizer parallelism.
