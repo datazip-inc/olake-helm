@@ -134,6 +134,11 @@ global:
   #     RUN_MODE: "production"
   env: {}
 
+  # -- Local storage mode for job config and log files
+  #   - "s3": S3-compatible storage (configure s3LogFileStorage below)
+  #   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; switch to "s3")
+  logFileStorageMode: "nfs"
+
 # -- Per-job index volume for the Pebble index used by the Iceberg
 # positional-delete / deletion-vector write path. `default` holds the settings
 # every job starts from; entries under `jobs` are deep-merged over it field by
@@ -373,7 +378,91 @@ olakeWorker:
       level: info
       format: console
 
-# Storage configuration for shared data exchange between pods
+# S3 Log File Storage
+# Used only when global.logFileStorageMode is "s3"; ignored in "nfs" mode.
+# Pick one backend:
+#   - In-cluster MinIO: minio.enabled: true (default). Dev and quick starts only.
+#   - External S3:      minio.enabled: false, then configure `external` below.
+s3LogFileStorage:
+  # -- Settings shared by MinIO and external S3
+  bucket: "olake"
+  # -- Required by OLake. MinIO accepts any value; for AWS S3 use the bucket's region.
+  region: "us-east-1"
+  # -- Optional key prefix inside the bucket
+  prefix: ""
+
+  # -- In-cluster MinIO. Runs as a single pod, so it is a single point of failure.
+  # Not recommended for production; use `external` instead.
+  # Endpoint and credentials secret are managed by the chart.
+  minio:
+    enabled: true
+    auth:
+      # -- MinIO root credentials, also used by OLake as OLAKE_S3_* keys.
+      # Override rootPassword for any non-local environment.
+      rootUser: "olake"
+      rootPassword: "password"
+    persistence:
+      # -- Backing volume size (uses global.storageClass when set)
+      size: 20Gi
+    image:
+      repository: olakego/minio
+      tag: RELEASE.2025-04-03T14-56-28Z
+      pullPolicy: IfNotPresent
+
+    # -- MinIO resource requirements (optional overrides)
+    # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
+    resources: {}
+
+    # -- Pod scheduling constraints
+    nodeSelector: {}
+
+    # -- Tolerations for pod assignment
+    tolerations: []
+
+    # -- Affinity settings for pod assignment
+    affinity: {}
+
+    # -- Additional pod annotations
+    podAnnotations: {}
+
+    # -- Additional pod labels
+    podLabels: {}
+
+    # -- MinIO security context
+    # Example customizations:
+    # securityContext:
+    #   runAsNonRoot: true
+    #   runAsUser: 1000
+    #   runAsGroup: 1000
+    #   fsGroup: 1000
+    securityContext: {}
+
+  # -- External S3 (AWS S3, GCS S3 API, external MinIO). Used only when minio.enabled is false.
+  # Credentials: set either existingSecret or role.enabled.
+  external:
+    # -- S3-compatible endpoint. Leave empty for AWS S3.
+    # Set for anything else, e.g. "https://storage.googleapis.com" or "http://minio.example.com:9000".
+    endpoint: ""
+
+    # -- Secret with static credentials. Not needed when role.enabled is true.
+    # For GCS, use HMAC keys.
+    # kubectl create secret generic s3-log-file-storage-secret \
+    #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+    #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+    existingSecret: ""
+
+    # -- IAM role auth for AWS S3 (EKS IRSA or EKS Pod Identity) instead of a secret.
+    role:
+      enabled: false
+      # -- IRSA only; leave empty for EKS Pod Identity. Added to the worker and job
+      # service accounts.
+      # Example:
+      #   eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
+      annotations: {}
+
+# DEPRECATED: NFS shared storage. Currently default. Will be removed at end of 2026.
+# Switch to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
+# Still used when global.logFileStorageMode is "nfs".
 nfsServer:
   # -- Enable NFS server deployment with dynamic provisioning
   # IMPORTANT: NFS components are created once and persist across helm operations.
@@ -704,6 +793,8 @@ elasticsearch:
 fusion:
   # -- Enable Fusion (Amoro) components.
   # Set to false to disable all Fusion resources.
+  # Fusion requires NFS/RWX shared storage and is not supported when global.logFileStorageMode is s3.
+  # NOTE: NFS mode is deprecated and will be removed end of 2026.
   enabled: false
 
   # -- Service Account configuration

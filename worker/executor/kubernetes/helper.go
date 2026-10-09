@@ -1,15 +1,14 @@
 package kubernetes
 
 import (
-	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -18,7 +17,7 @@ import (
 // Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
 	// Check profiles for async operations
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if profile.NodeSelector != nil {
 				return profile.NodeSelector
@@ -37,7 +36,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 
 	// [TO BE DEPRECATED]
 	// Try specific mapping (Preferred)
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 			logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
 			return mapping
@@ -58,7 +57,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 // GetTolerationsForJob returns tolerations for the given jobID
 func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Command) []corev1.Toleration {
 	// 1. Check specific profile
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if len(profile.Tolerations) > 0 {
 				return profile.Tolerations
@@ -101,7 +100,7 @@ func hasResources(r *corev1.ResourceRequirements) bool {
 // A profile without resources falls back to the default profile, then to the built-in default.
 func (k *KubernetesExecutor) GetResourcesForJob(jobID int, operation types.Command) corev1.ResourceRequirements {
 	// 1. Check specific profile
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists && hasResources(profile.Resources) {
 			return *profile.Resources.DeepCopy()
 		}
@@ -182,7 +181,7 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 
 	// For non-async operations, don't auto-generate anti-affinity
 	// They should only use explicit configs (profiles or mappings)
-	if !slices.Contains(constants.AsyncCommands, operation) {
+	if !utils.IsAsyncCommand(operation) {
 		return nil
 	}
 
