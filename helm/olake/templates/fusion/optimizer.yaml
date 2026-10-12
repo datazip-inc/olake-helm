@@ -40,9 +40,8 @@ metadata:
     app.kubernetes.io/component: fusion-optimizer
 spec:
   replicas: 1
-  # The driver holds in-flight optimizing tasks; replacing it outright is cleaner than running two.
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
