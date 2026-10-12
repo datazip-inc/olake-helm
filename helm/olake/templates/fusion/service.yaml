@@ -18,6 +18,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
     app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion
 
 ---
 apiVersion: v1
@@ -38,6 +39,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
     app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion
 
 ---
 apiVersion: v1
@@ -58,4 +60,5 @@ spec:
   selector:
     app.kubernetes.io/name: {{ include "olake.name" . }}-fusion
     app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fusion
 {{- end }}
