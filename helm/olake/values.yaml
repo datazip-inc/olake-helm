@@ -352,72 +352,87 @@ olakeWorker:
       level: info
       format: console
 
-# S3 Log File Storage (used when global.logFileStorageMode is "s3")
+# S3 Log File Storage
+# Used only when global.logFileStorageMode is "s3"; ignored in "nfs" mode.
+# Pick one backend:
+#   - In-cluster MinIO: minio.enabled: true (default). Dev and quick starts only.
+#   - External S3:      minio.enabled: false, then configure `external` below.
 s3LogFileStorage:
-  # -- Enable in-cluster MinIO for S3 log storage (like nfsServer.enabled for NFS).
-  #   - true:  deploy built-in MinIO (endpoint and credentials are managed by the chart)
-  #   - false: hosted / external S3 (AWS S3, external MinIO, GCS S3 API, etc.)
-  enabled: true
-  # -- S3-compatible endpoint override. Auto-set when enabled: true. Required for external MinIO.
-  endpoint: ""
+  # -- Settings shared by MinIO and external S3
   bucket: "olake"
+  # -- Required by OLake. MinIO accepts any value; for AWS S3 use the bucket's region.
   region: "us-east-1"
+  # -- Optional key prefix inside the bucket
   prefix: ""
-  # -- Static credentials secret for external S3/MinIO/GCS S3 API when role.enabled is false.
-  # For GCS, use HMAC credentials via this secret.
-  # kubectl create secret generic s3-log-file-storage-secret \
-  #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
-  #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
-  existingSecret: ""
-  auth:
-    # -- MinIO root credentials when enabled: true (also used as OLAKE_S3_* keys)
-    # Note: Override auth.rootPassword with a secure password for non-local environments.
-    rootUser: "olake"
-    rootPassword: "password"
-  persistence:
-    # -- Backing volume size for in-cluster MinIO (uses global.storageClass when set)
-    size: 20Gi
-  image:
-    repository: olakego/minio
-    tag: RELEASE.2025-04-03T14-56-28Z
-    pullPolicy: IfNotPresent
 
-  # -- Pod scheduling constraints
-  nodeSelector: {}
+  # -- In-cluster MinIO. Runs as a single pod, so it is a single point of failure.
+  # Not recommended for production; use `external` instead.
+  # Endpoint and credentials secret are managed by the chart.
+  minio:
+    enabled: true
+    auth:
+      # -- MinIO root credentials, also used by OLake as OLAKE_S3_* keys.
+      # Override rootPassword for any non-local environment.
+      rootUser: "olake"
+      rootPassword: "password"
+    persistence:
+      # -- Backing volume size (uses global.storageClass when set)
+      size: 20Gi
+    image:
+      repository: olakego/minio
+      tag: RELEASE.2025-04-03T14-56-28Z
+      pullPolicy: IfNotPresent
 
-  # -- Tolerations for pod assignment
-  tolerations: []
+    # -- MinIO resource requirements (optional overrides)
+    # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
+    resources: {}
 
-  # -- Affinity settings for pod assignment
-  affinity: {}
+    # -- Pod scheduling constraints
+    nodeSelector: {}
 
-  # -- Additional pod annotations
-  podAnnotations: {}
+    # -- Tolerations for pod assignment
+    tolerations: []
 
-  # -- Additional pod labels
-  podLabels: {}
+    # -- Affinity settings for pod assignment
+    affinity: {}
 
-  # -- MinIO resource requirements (optional overrides)
-  # Defaults: requests: cpu=250m, memory=256Mi ; limits: cpu=500m, memory=512Mi
-  resources: {}
+    # -- Additional pod annotations
+    podAnnotations: {}
 
-  # -- MinIO security context
-  # Example customizations:
-  # securityContext:
-  #   runAsNonRoot: true
-  #   runAsUser: 1000
-  #   runAsGroup: 1000
-  #   fsGroup: 1000
-  securityContext: {}
+    # -- Additional pod labels
+    podLabels: {}
 
-  role:
-    # Use an IAM role for hosted S3 authentication; supports EKS IRSA and EKS Pod Identity.
-    # When true, existingSecret is not required.
-    enabled: false
-    # Required for EKS IRSA; leave empty when using EKS Pod Identity.
-    # Example:
-    #   AWS IRSA: eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
-    annotations: {}
+    # -- MinIO security context
+    # Example customizations:
+    # securityContext:
+    #   runAsNonRoot: true
+    #   runAsUser: 1000
+    #   runAsGroup: 1000
+    #   fsGroup: 1000
+    securityContext: {}
+
+  # -- External S3 (AWS S3, GCS S3 API, external MinIO). Used only when minio.enabled is false.
+  # Credentials: set either existingSecret or role.enabled.
+  external:
+    # -- S3-compatible endpoint. Leave empty for AWS S3.
+    # Set for anything else, e.g. "https://storage.googleapis.com" or "http://minio.example.com:9000".
+    endpoint: ""
+
+    # -- Secret with static credentials. Not needed when role.enabled is true.
+    # For GCS, use HMAC keys.
+    # kubectl create secret generic s3-log-file-storage-secret \
+    #   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \
+    #   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key>
+    existingSecret: ""
+
+    # -- IAM role auth for AWS S3 (EKS IRSA or EKS Pod Identity) instead of a secret.
+    role:
+      enabled: false
+      # -- IRSA only; leave empty for EKS Pod Identity. Added to the worker and job
+      # service accounts.
+      # Example:
+      #   eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role"
+      annotations: {}
 
 # DEPRECATED: NFS shared storage. Currently default. Will be removed at end of 2026.
 # Switch to S3: set global.logFileStorageMode: "s3" and configure s3LogFileStorage.
