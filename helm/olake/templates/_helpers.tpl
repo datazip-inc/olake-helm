@@ -70,6 +70,100 @@ Create the name of the service account to use for job pods
 {{- end }}
 
 {{/*
+Worker/UI probe shell: include shared-storage write only in NFS mode.
+*/}}
+{{- define "olake.workerReadinessProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /data/olake-jobs/.healthcheck && {{ end }}wget -q --spider --timeout=2 http://localhost:8090/ready
+{{- end -}}
+
+{{- define "olake.workerLivenessProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /data/olake-jobs/.healthcheck && {{ end }}wget -q --spider --timeout=2 http://localhost:8090/health
+{{- end -}}
+
+{{- define "olake.uiProbeShell" -}}
+{{- if eq (include "olake.storageMode" .) "nfs" }}echo ok > /tmp/olake-config/.healthcheck-ui && {{ end }}nc -z localhost {{ .Values.olakeUI.env.HTTP_PORT | default "8000" }}
+{{- end -}}
+
+{{/*
+S3 log file storage: in-cluster MinIO (minio.enabled: true) or external S3 (minio.enabled: false).
+External covers AWS S3 (no endpoint) and S3-compatible stores like GCS or external MinIO (endpoint set).
+*/}}
+{{- define "olake.minio.serviceName" -}}
+{{- printf "%s-minio" (include "olake.fullname" .) -}}
+{{- end -}}
+
+{{- define "olake.minio.secretName" -}}
+{{- printf "%s-minio-secret" (include "olake.fullname" .) -}}
+{{- end -}}
+
+{{/* Empty for AWS S3, the SDK resolves the regional endpoint itself. */}}
+{{- define "olake.s3Endpoint" -}}
+{{- if .Values.s3LogFileStorage.minio.enabled -}}
+{{- printf "http://%s.%s.svc.cluster.local:9000" (include "olake.minio.serviceName" .) (include "olake.namespace" .) -}}
+{{- else -}}
+{{- .Values.s3LogFileStorage.external.endpoint -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Empty when external.role.enabled; access then comes from IRSA / Pod Identity. */}}
+{{- define "olake.s3CredentialsSecretName" -}}
+{{- if .Values.s3LogFileStorage.minio.enabled -}}
+{{- include "olake.minio.secretName" . -}}
+{{- else if not .Values.s3LogFileStorage.external.role.enabled -}}
+{{- .Values.s3LogFileStorage.external.existingSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Log storage mode from global.logFileStorageMode (default nfs).
+When s3, validates s3LogFileStorage is complete before render.
+Fusion still requires the shared RWX volume and is not supported in s3 mode.
+*/}}
+{{- define "olake.storageMode" -}}
+{{- $mode := .Values.global.logFileStorageMode | default "nfs" -}}
+{{- if eq $mode "s3" -}}
+{{- $s3 := .Values.s3LogFileStorage -}}
+{{- if not (and $s3.bucket $s3.region) -}}
+{{- fail "s3LogFileStorage.bucket and s3LogFileStorage.region are required when global.logFileStorageMode is s3" -}}
+{{- end -}}
+{{- if not (or $s3.minio.enabled $s3.external.role.enabled $s3.external.existingSecret) -}}
+{{- fail "S3 credentials are required when s3LogFileStorage.minio.enabled is false; set s3LogFileStorage.external.existingSecret or s3LogFileStorage.external.role.enabled (IRSA / EKS Pod Identity)" -}}
+{{- end -}}
+{{- if .Values.fusion.enabled -}}
+{{- fail "Fusion is not supported when global.logFileStorageMode is s3; set fusion.enabled to false or use nfs" -}}
+{{- end -}}
+{{- end -}}
+{{- $mode -}}
+{{- end -}}
+
+{{/*
+S3 IRSA annotations for external log storage (worker and job service accounts).
+Returns a YAML map when active, empty otherwise.
+*/}}
+{{- define "olake.s3IRSAAnnotations" -}}
+{{- if and (eq (include "olake.storageMode" .) "s3") (not .Values.s3LogFileStorage.minio.enabled) .Values.s3LogFileStorage.external.role.enabled }}
+{{- .Values.s3LogFileStorage.external.role.annotations | default dict | toYaml }}
+{{- end }}
+{{- end -}}
+
+{{/*
+S3 log file storage environment variables for olake-global-env.
+*/}}
+{{- define "olake.storageEnv" -}}
+{{- if eq (include "olake.storageMode" .) "s3" }}
+OLAKE_S3_BUCKET: {{ required "s3LogFileStorage.bucket is required when S3 log storage is active" .Values.s3LogFileStorage.bucket | quote }}
+OLAKE_S3_REGION: {{ required "s3LogFileStorage.region is required when S3 log storage is active" .Values.s3LogFileStorage.region | quote }}
+{{- if .Values.s3LogFileStorage.prefix }}
+OLAKE_S3_PREFIX: {{ .Values.s3LogFileStorage.prefix | quote }}
+{{- end }}
+{{- $endpoint := include "olake.s3Endpoint" . -}}
+{{- if $endpoint }}
+OLAKE_S3_ENDPOINT: {{ $endpoint | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Shared storage PVC name
 */}}
 {{- define "olake.sharedStoragePVC" -}}

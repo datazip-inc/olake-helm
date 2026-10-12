@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
@@ -39,12 +40,12 @@ type TelemetryPayload struct {
 }
 
 // BuildPayload assembles the full sync telemetry payload.
-func BuildPayload(req *types.ExecutionRequest, job types.JobData, runCount int) TelemetryPayload {
+func BuildPayload(ctx context.Context, req *types.ExecutionRequest, job types.JobData, runCount int) TelemetryPayload {
 	return TelemetryPayload{
 		WorkflowID:         req.WorkflowID,
 		SchemaVersion:      schemaVersion,
 		Service:            serviceUI,
-		DistinctID:         utils.GetTelemetryUserID(),
+		DistinctID:         utils.GetTelemetryUserID(ctx),
 		JobID:              req.JobID,
 		JobName:            job.JobName,
 		Environment:        utils.GetExecutorEnvironment(),
@@ -60,12 +61,12 @@ func BuildPayload(req *types.ExecutionRequest, job types.JobData, runCount int) 
 
 // BasePayload assembles telemetry payload for commands with no job data
 // (discover/check/spec), or as a fallback when job data can't be fetched.
-func BasePayload(req *types.ExecutionRequest) TelemetryPayload {
+func BasePayload(ctx context.Context, req *types.ExecutionRequest) TelemetryPayload {
 	return TelemetryPayload{
 		WorkflowID:    req.WorkflowID,
 		SchemaVersion: schemaVersion,
 		Service:       serviceUI,
-		DistinctID:    utils.GetTelemetryUserID(),
+		DistinctID:    utils.GetTelemetryUserID(ctx),
 		JobID:         req.JobID,
 		Environment:   utils.GetExecutorEnvironment(),
 	}

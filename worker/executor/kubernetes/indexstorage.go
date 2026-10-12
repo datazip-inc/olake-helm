@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -52,7 +52,7 @@ func (k *KubernetesExecutor) resolveIndexStorage(jobID int) IndexStorageConfig {
 // does a job that did not ask for one.
 func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, operation types.Command, indexRequired bool, heartbeat func(context.Context, ...interface{})) (*indexVolume, error) {
 	// Only sync and clear-destination touch the Iceberg index.
-	if !slices.Contains(constants.AsyncCommands, operation) || !indexRequired {
+	if !utils.IsAsyncCommand(operation) || !indexRequired {
 		return nil, nil
 	}
 

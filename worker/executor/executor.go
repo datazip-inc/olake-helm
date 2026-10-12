@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/acarl005/stripansi"
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -52,8 +54,12 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	subdir, workdir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
 
 	// write config files only for the first/scheduled workflow execution (not for retries)
-	if !utils.WorkflowAlreadyLaunched(workdir) && req.Configs != nil {
-		if err := utils.WriteConfigFiles(workdir, req.Configs); err != nil {
+	alreadyLaunched, err := utils.WorkflowAlreadyLaunched(ctx, workdir)
+	if err != nil {
+		return nil, err
+	}
+	if !alreadyLaunched && req.Configs != nil {
+		if err := storage.WriteFiles(ctx, workdir, req.Configs); err != nil {
 			log.Error("failed to write config files", "workdir", workdir, "error", err)
 			return nil, err
 		}
@@ -65,7 +71,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return nil, err
 	}
 	if req.Command != types.Sync {
-		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", logger.StripANSI(output))
+		log.Info("executor output", "environment", utils.GetExecutorEnvironment(), "output", stripansi.Strip(output))
 	}
 
 	// generated file as response
@@ -80,9 +86,9 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return nil, err
 	}
 
-	outputPath := filepath.Join(workdir, constants.OutputFileName)
-	if err := utils.WriteFile(outputPath, outputJSON); err != nil {
-		log.Error("failed to write output file", "path", outputPath, "error", err)
+	outputFile := []types.JobConfig{{Name: constants.OutputFileName, Data: string(outputJSON)}}
+	if err := storage.WriteFiles(ctx, workdir, outputFile); err != nil {
+		log.Error("failed to write output file", "workdir", workdir, "filename", constants.OutputFileName, "error", err)
 		return nil, err
 	}
 
@@ -99,7 +105,7 @@ func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *type
 		return err
 	}
 
-	stateFile, err := utils.GetStateFileFromWorkdir(req.WorkflowID, req.Command)
+	stateFile, err := utils.GetStateFileFromWorkdir(ctx, req.WorkflowID, req.Command)
 	if err != nil {
 		log.Error("failed to read state file", "workflowID", req.WorkflowID, "error", err)
 		return err
@@ -116,4 +122,19 @@ func (a *AbstractExecutor) CleanupAndPersistState(ctx context.Context, req *type
 
 func (a *AbstractExecutor) Close() {
 	a.executor.Close()
+}
+
+// RecoverWorkerLogs uploads worker logs from the previous container/pod on startup (S3 mode).
+func (a *AbstractExecutor) RecoverWorkerLogs(ctx context.Context) error {
+	if storage.Mode() != constants.StorageModeS3 {
+		return nil
+	}
+	switch e := a.executor.(type) {
+	case *docker.DockerExecutor:
+		return docker.RecoverWorkerLogs(ctx, e)
+	case *kubernetes.KubernetesExecutor:
+		return kubernetes.RecoverWorkerLogs(ctx, e)
+	default:
+		return nil
+	}
 }

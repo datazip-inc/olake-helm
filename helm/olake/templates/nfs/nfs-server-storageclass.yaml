@@ -1,4 +1,4 @@
-{{- if .Values.nfsServer.enabled }}
+{{- if and .Values.nfsServer.enabled (eq (include "olake.storageMode" .) "nfs") }}
 {{- /* Define a static name for the StorageClass */}}
 {{- $scName := .Values.nfsServer.storageClass.name | default "nfs-server" -}}
 
