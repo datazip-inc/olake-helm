@@ -73,7 +73,7 @@ func GetDockerImageName(sourceType, version string) string {
 // GetRegistryImage prefixes image with CONTAINER_REGISTRY_BASE unless it is Docker Hub.
 func GetRegistryImage(image string) string {
 	registryBase := strings.TrimRight(viper.GetString(constants.ContainerRegistryBase), "/")
-	if registryBase == "" || registryBase == "registry-1.docker.io" {
+	if registryBase == "" || registryBase == "docker.io" {
 		return image
 	}
 	return fmt.Sprintf("%s/%s", registryBase, image)

@@ -1,4 +1,4 @@
-{{- if and .Values.s3LogFileStorage.enabled (eq (include "olake.storageMode" .) "s3") }}
+{{- if and .Values.s3LogFileStorage.minio.enabled (eq (include "olake.storageMode" .) "s3") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -20,26 +20,26 @@ spec:
   template:
     metadata:
       annotations:
-        {{- with .Values.s3LogFileStorage.podAnnotations }}
+        {{- with .Values.s3LogFileStorage.minio.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
         app.kubernetes.io/name: {{ include "olake.name" . }}-minio
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: minio
-        {{- with .Values.s3LogFileStorage.podLabels }}
+        {{- with .Values.s3LogFileStorage.minio.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.s3LogFileStorage.nodeSelector }}
+      {{- with .Values.s3LogFileStorage.minio.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.s3LogFileStorage.affinity }}
+      {{- with .Values.s3LogFileStorage.minio.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.s3LogFileStorage.tolerations }}
+      {{- with .Values.s3LogFileStorage.minio.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -47,14 +47,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.s3LogFileStorage.securityContext }}
+      {{- with .Values.s3LogFileStorage.minio.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
       - name: minio
-        image: "{{ include "olake.registryBase" . }}/{{ .Values.s3LogFileStorage.image.repository }}:{{ .Values.s3LogFileStorage.image.tag }}"
-        imagePullPolicy: {{ .Values.s3LogFileStorage.image.pullPolicy }}
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.s3LogFileStorage.minio.image.repository }}:{{ .Values.s3LogFileStorage.minio.image.tag }}"
+        imagePullPolicy: {{ .Values.s3LogFileStorage.minio.image.pullPolicy }}
         ports:
         - name: api
           containerPort: 9000
@@ -100,7 +100,7 @@ spec:
           "requests" (dict "cpu" "250m" "memory" "256Mi")
           "limits" (dict "cpu" "500m" "memory" "512Mi")
         }}
-        {{- $resources := mergeOverwrite $defaultResources (.Values.s3LogFileStorage.resources | default dict) }}
+        {{- $resources := mergeOverwrite $defaultResources (.Values.s3LogFileStorage.minio.resources | default dict) }}
         resources:
           {{- toYaml $resources | nindent 10 }}
   volumeClaimTemplates:
@@ -111,7 +111,7 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: {{ .Values.s3LogFileStorage.persistence.size | default "20Gi" }}
+          storage: {{ .Values.s3LogFileStorage.minio.persistence.size | default "20Gi" }}
       {{- if .Values.global.storageClass }}
       storageClassName: {{ .Values.global.storageClass }}
       {{- end }}
