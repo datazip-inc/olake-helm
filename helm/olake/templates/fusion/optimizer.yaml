@@ -110,6 +110,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: LOG_DIR
               value: "/data/fusion-logs"
             {{- range $key, $value := .Values.global.env }}
@@ -129,6 +133,9 @@ spec:
             - client
             - --conf
             - spark.driver.bindAddress=$(POD_IP)
+            # The pod owns its executors, so Kubernetes deletes them together with the pod.
+            - --conf
+            - spark.kubernetes.driver.pod.name=$(POD_NAME)
             - --class
             - org.apache.amoro.optimizer.spark.SparkOptimizer
             - {{ .Values.fusion.optimizer.spark.jobUri | quote }}

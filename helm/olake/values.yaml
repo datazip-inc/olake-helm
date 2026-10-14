@@ -867,15 +867,5 @@ fusion:
         spark.executor.memory: "4g"
         spark.executor.cores: "1"
 
-      # Additional container properties for the Spark optimizer container (map of key->value).
-      # This can be used to set properties like:
-      #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
-      # Example:
-      #   properties:
-      #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
-      properties:
-        spark-home: "/opt/spark/"
-        master: "k8s://https://kubernetes.default.svc:443"
-        deploy-mode: "cluster"
-        export.HADOOP_USER_NAME: "spark"
-        export.SPARK_CONF_DIR: "/opt/spark/conf/"
+      # fusion.optimizer.spark.properties is no longer used. Set environment variables in
+      # fusion.env, and Spark settings in extraConfig above.

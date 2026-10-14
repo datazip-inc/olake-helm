@@ -24,7 +24,8 @@ data:
     spark.kubernetes.container.image.pullPolicy      {{ .Values.fusion.optimizer.spark.image.pullPolicy }}
     spark.kubernetes.authenticate.executor.serviceAccountName {{ include "olake.fusionServiceAccountName" . }}
     spark.kubernetes.executor.podTemplateFile        /usr/local/amoro/conf/executor-pod-template.yaml
-    spark.kubernetes.executor.podNamePrefix          {{ include "olake.fullname" . }}-fusion-optimizer-executor
+    # No spark.kubernetes.executor.podNamePrefix: Spark then generates one per driver run, so the
+    # executors of a restarted driver never collide with executor pods left by the previous one.
     spark.kubernetes.executor.label.olake.io/workload fusion-executor
     spark.kubernetes.executor.deleteOnTermination    true
     # The driver is the optimizer pod: it publishes the headless service name, which stays the same
