@@ -65,6 +65,16 @@ const (
 	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
 	MinS3StorageModeVersion = "v0.12.0"
 
+	// GitOps failure indicators (pods in Kubernetes, containers in Docker)
+	IndicatorImage           = "busybox:1.36.1" // pinned so it is pulled once, then reused
+	IndicatorMessageMax      = 4096             // kubelet caps the termination message at 4096 bytes
+	IndicatorAnnotationMax   = 1024
+	LabelIndicator           = "olake.io/indicator"
+	LabelIndicatorKind       = "olake.io/kind"
+	LabelIndicatorResource   = "olake.io/resource"
+	LabelIndicatorPhase      = "olake.io/phase"
+	AnnotationIndicatorError = "olake.io/error"
+
 	// Kubernetes ConfigMap names
 	GlobalEnvConfigMap  = "olake-global-env"
 	WorkersConfigMap    = "olake-workers-config"
