@@ -108,6 +108,7 @@
     "resourceQuantity": {
       "type": ["string", "number"],
       "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$",
+      "minimum": 0,
       "description": "Kubernetes quantity, e.g. 500m, 2, 512Mi, 4Gi."
     },
     "resourceList": {

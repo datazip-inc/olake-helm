@@ -43,6 +43,51 @@ func TestLoadJobProfilesResources(t *testing.T) {
 	}
 }
 
+func TestLoadJobProfilesRejectsNegativeResources(t *testing.T) {
+	raw := `{
+		"1": {"nodeSelector": {"node-type": "big"}, "resources": {"requests": {"cpu": -1}}},
+		"2": {"resources": {"limits": {"memory": "-1Gi"}}}
+	}`
+
+	profiles := LoadJobProfiles(raw)
+	for jobID, profile := range profiles {
+		if profile.Resources != nil {
+			t.Errorf("job %d: negative resources should be dropped", jobID)
+		}
+	}
+	if profiles[1].NodeSelector["node-type"] != "big" {
+		t.Errorf("job 1 nodeSelector should be kept when resources are dropped")
+	}
+}
+
+func TestLoadJobProfilesIsolatesBadProfiles(t *testing.T) {
+	raw := `{
+		"0":   {"nodeSelector": {"node-type": "standard"}, "resources": {"requests": {"memory": "1Gi"}}},
+		"123": {"nodeSelector": {"node-type": "big"}, "resources": {"limits": {"memory": "2GB"}}},
+		"456": {"nodeSelector": "not-a-map"}
+	}`
+
+	profiles := LoadJobProfiles(raw)
+
+	// A good profile survives a bad neighbour
+	if mem := profiles[0].Resources.Requests[corev1.ResourceMemory]; mem.String() != "1Gi" {
+		t.Errorf("job 0 memory request = %s, want 1Gi", mem.String())
+	}
+
+	// An unparsable quantity drops only that profile's resources
+	if profiles[123].Resources != nil {
+		t.Errorf("job 123 resources should be dropped when a quantity cannot be parsed")
+	}
+	if profiles[123].NodeSelector["node-type"] != "big" {
+		t.Errorf("job 123 nodeSelector should be kept when only resources are invalid")
+	}
+
+	// A profile broken outside resources is skipped entirely
+	if _, exists := profiles[456]; exists {
+		t.Errorf("job 456 should be skipped when its scheduling fields are invalid")
+	}
+}
+
 func TestLoadJobProfilesWithoutResources(t *testing.T) {
 	profiles := LoadJobProfiles(`{"0": {"nodeSelector": {"node-type": "standard"}}}`)
 	if profiles[0].Resources != nil {
