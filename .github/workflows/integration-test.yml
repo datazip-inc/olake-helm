@@ -4,12 +4,14 @@ on:
     branches:
       - master
     paths:
-      - '**/*.go'
+      - 'worker/**'
+      - '.github/workflows/integration-test.yml'
   pull_request:
     branches:
       - '*'
     paths:
-      - '**/*.go'
+      - 'worker/**'
+      - '.github/workflows/integration-test.yml'
 
 jobs:
   integration-tests:
