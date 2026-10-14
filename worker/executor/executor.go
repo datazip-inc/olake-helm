@@ -10,10 +10,10 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/database"
 	"github.com/datazip-inc/olake-helm/worker/executor/docker"
 	"github.com/datazip-inc/olake-helm/worker/executor/kubernetes"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
 // Executor interface for k8s and docker executor
@@ -59,7 +59,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 		return nil, err
 	}
 	if !alreadyLaunched && req.Configs != nil {
-		if err := utils.WriteConfigFiles(ctx, workdir, req.Configs); err != nil {
+		if err := storage.WriteFiles(ctx, workdir, req.Configs); err != nil {
 			log.Error("failed to write config files", "workdir", workdir, "error", err)
 			return nil, err
 		}
@@ -87,7 +87,7 @@ func (a *AbstractExecutor) Execute(ctx context.Context, req *types.ExecutionRequ
 	}
 
 	outputFile := []types.JobConfig{{Name: constants.OutputFileName, Data: string(outputJSON)}}
-	if err := utils.WriteConfigFiles(ctx, workdir, outputFile); err != nil {
+	if err := storage.WriteFiles(ctx, workdir, outputFile); err != nil {
 		log.Error("failed to write output file", "workdir", workdir, "filename", constants.OutputFileName, "error", err)
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (a *AbstractExecutor) Close() {
 
 // RecoverWorkerLogs uploads worker logs from the previous container/pod on startup (S3 mode).
 func (a *AbstractExecutor) RecoverWorkerLogs(ctx context.Context) error {
-	if storagemode.Get() != constants.StorageModeS3 {
+	if storage.Mode() != constants.StorageModeS3 {
 		return nil
 	}
 	switch e := a.executor.(type) {

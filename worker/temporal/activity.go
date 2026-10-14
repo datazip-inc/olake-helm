@@ -102,7 +102,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 
 	// update the configs with latest job details first - this refreshes req.Version from
 	// the DB, since req may carry a stale version from when a recurring schedule was created
-	utils.UpdateConfigWithJobDetails(ctx, jobDetails, req)
+	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)

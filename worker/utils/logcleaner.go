@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
@@ -20,7 +20,7 @@ func InitLogCleaner(ctx context.Context, logDir string, retentionPeriod int) {
 	c := cron.New()
 
 	err := c.AddFunc("@midnight", func() {
-		switch storagemode.Get() {
+		switch storage.Mode() {
 		case constants.StorageModeS3:
 			cleanS3OldLogs(ctx, retentionPeriod)
 		default:
@@ -38,7 +38,9 @@ func InitLogCleaner(ctx context.Context, logDir string, retentionPeriod int) {
 func shouldCheckModTime(fileName string) bool {
 	return strings.HasSuffix(fileName, ".log") ||
 		strings.HasSuffix(fileName, ".log.gz") ||
-		fileName == "streams.json"
+		fileName == constants.StreamsFile ||
+		fileName == constants.AvailableStreamsFile ||
+		fileName == constants.SelectedStreamsFile
 }
 
 func cleanNFSOldLogs(logDir string, retentionPeriod int) {
@@ -85,7 +87,7 @@ func cleanNFSOldLogs(logDir string, retentionPeriod int) {
 	}
 }
 
-// cleanS3OldLogs matches NFS: if any *.log / *.log.gz / streams.json in a workflow
+// cleanS3OldLogs matches NFS: if any *.log / *.log.gz / catalog file in a workflow
 // prefix has LastModified before LOG_RETENTION_PERIOD, delete the entire prefix.
 func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 	logger.Info("running log cleaner...")
@@ -96,13 +98,13 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 		s3path += "/"
 	}
 
-	s3Objects, err := listS3Objects(ctx, s3path)
+	s3Objects, err := storage.ListS3Objects(ctx, s3path)
 	if err != nil {
 		logger.Errorf("failed to list s3 objects: %s", err)
 		return
 	}
 
-	groups := map[string][]s3Object{}
+	groups := map[string][]storage.S3Object{}
 
 	for _, s3object := range s3Objects {
 		relativePath := strings.TrimPrefix(s3object.Key, s3path)
@@ -119,7 +121,7 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 				continue
 			}
 			for _, s3object := range group {
-				if err := deleteS3Object(ctx, s3object.Key); err != nil {
+				if err := storage.DeleteS3Object(ctx, s3object.Key); err != nil {
 					logger.Errorf("failed to delete s3 object %s: %s", s3object.Key, err)
 				}
 			}

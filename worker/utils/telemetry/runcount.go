@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
-	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 	"go.temporal.io/sdk/client"
 )
 
@@ -30,14 +29,7 @@ func jobCounterPath(jobID int) string {
 // readCounter returns (counter, true) if a counter file exists and parses;
 // (zero value, false) if it's missing, unreadable, or unparsable.
 func readCounter(ctx context.Context, path string) (jobRunCounter, bool) {
-	var data string
-	var err error
-	switch storagemode.Get() {
-	case constants.StorageModeS3:
-		data, err = utils.ReadFileFromS3(ctx, "", path, false)
-	default:
-		data, err = utils.ReadFileFromNFS(utils.GetConfigDir(), path)
-	}
+	data, err := storage.ReadFile(ctx, storage.ConfigDir(), path, false)
 	if err != nil {
 		return jobRunCounter{}, false
 	}
@@ -53,7 +45,7 @@ func writeCounter(ctx context.Context, path string, c jobRunCounter) {
 	if err != nil {
 		return
 	}
-	_ = utils.WriteConfigFiles(ctx, utils.GetConfigDir(), []types.JobConfig{{Name: path, Data: string(data)}})
+	_ = storage.WriteFiles(ctx, storage.ConfigDir(), []types.JobConfig{{Name: path, Data: string(data)}})
 }
 
 // GetOrIncrementSyncRunCount returns which run number this sync is for the
