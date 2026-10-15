@@ -67,7 +67,6 @@ const (
 	CategoryNone    Category = ""
 	CategoryOOM     Category = "oom"
 	CategoryEvicted Category = "evicted"
-	CategoryRemoved Category = "removed"
 )
 
 const exitCodeSIGKILL = 137
@@ -86,17 +85,16 @@ var errorMarkers = []string{" FATAL ", " ERROR ", "fatal error:", "panic:"}
 // maxErrorLineLength bounds the connector line copied into errors.
 const maxErrorLineLength = 1000
 
-// classify maps a failure to a category. Exit 137 is treated as OOM even without
-// the OOMKilled reason: a manual kill looks the same, and OOM is far more likely.
+// classify maps a failure to a category. As the PRD asks, a forced termination
+// (exit 137 without the OOMKilled reason, or a force-deleted pod) is treated as
+// OOM: a manual kill looks the same, and OOM is far more likely.
 func classify(f *ExecutionFailure) Category {
 	switch {
 	case f == nil:
 		return CategoryNone
-	case f.NotFound:
-		return CategoryRemoved
 	case f.Reason == reasonEvicted:
 		return CategoryEvicted
-	case f.Reason == ReasonOOMKilled, f.ExitCode != nil && *f.ExitCode == exitCodeSIGKILL, oomMarker(f.LogTail) != "":
+	case f.Reason == ReasonOOMKilled, f.NotFound, f.ExitCode != nil && *f.ExitCode == exitCodeSIGKILL, oomMarker(f.LogTail) != "":
 		return CategoryOOM
 	default:
 		return CategoryNone
@@ -134,7 +132,6 @@ const (
 	tipIncreaseMemory = "Recommendation: Increase the memory/resources allocated to the OLake sync pod and retry the sync."
 	tipEvictedMemory  = "Recommendation: The sync ran out of available memory. Try increasing the memory/resources allocated to the OLake sync pod and retry the sync."
 	tipEvictedDisk    = "Recommendation: The sync pod ran out of disk space. Increase its ephemeral storage limit or free up node disk, then retry the sync."
-	tipRemoved        = "Recommendation: Check whether the pod was deleted manually or evicted, then retry the sync."
 )
 
 // Describe builds the user-facing message for a failure. Failures without a
@@ -155,10 +152,6 @@ func Describe(f *ExecutionFailure) UserMessage {
 		if isDiskPressure(f.Message) {
 			msg.Tip = tipEvictedDisk
 		}
-	case CategoryRemoved:
-		msg.Headline = fmt.Sprintf("Sync failed because the sync %s %s was removed before it finished.", f.Kind, f.Name)
-		msg.Details = "Details: " + f.Kind + " not found while waiting for completion (it may have been deleted or evicted)."
-		msg.Tip = tipRemoved
 	default:
 		if f.ExitCode != nil {
 			msg.Headline = fmt.Sprintf("Sync failed: connector exited with code %d. See Sync logs for the error.", *f.ExitCode)
@@ -179,6 +172,10 @@ func oomDetails(f *ExecutionFailure) string {
 		limit = f.MemoryLimit
 	}
 
+	if f.NotFound {
+		return fmt.Sprintf("Details: %s %s was force-terminated and removed before it finished (not found while waiting for completion)",
+			f.Kind, f.Name)
+	}
 	if f.Reason == ReasonOOMKilled {
 		return fmt.Sprintf("Details: %s %s was OOMKilled%s%s; memory limit: %s",
 			f.Kind, f.Name, onNode(f), exitCodeSuffix(f), limit)
