@@ -1,5 +1,7 @@
 # Build stage
-FROM golang:1.26.9-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS builder
+
+ARG TARGETOS TARGETARCH
 
 # Set working directory
 WORKDIR /app
@@ -12,8 +14,8 @@ RUN go mod download
 # Copy the entire worker source code
 COPY . ./
 
-# Build the worker binary
-RUN go build -o olake-worker ./main.go
+# Cross-compile on the build host instead of under QEMU emulation
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o olake-worker ./main.go
 
 # Runtime stage
 FROM alpine:latest
