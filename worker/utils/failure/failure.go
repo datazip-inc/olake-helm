@@ -131,7 +131,6 @@ type UserMessage struct {
 const (
 	tipIncreaseMemory = "Recommendation: Increase the memory/resources allocated to the OLake sync pod and retry the sync."
 	tipEvictedMemory  = "Recommendation: The sync ran out of available memory. Try increasing the memory/resources allocated to the OLake sync pod and retry the sync."
-	tipEvictedDisk    = "Recommendation: The sync pod ran out of disk space. Increase its ephemeral storage limit or free up node disk, then retry the sync."
 )
 
 // Describe builds the user-facing message for a failure. Failures without a
@@ -149,9 +148,6 @@ func Describe(f *ExecutionFailure) UserMessage {
 		msg.Headline = "Sync failed because Kubernetes evicted the sync pod (resource limit or node pressure)."
 		msg.Details = fmt.Sprintf("Details: %s %s evicted%s: %q", f.Kind, f.Name, onNode(f), strings.TrimSpace(f.Message))
 		msg.Tip = tipEvictedMemory
-		if isDiskPressure(f.Message) {
-			msg.Tip = tipEvictedDisk
-		}
 	default:
 		if f.ExitCode != nil {
 			msg.Headline = fmt.Sprintf("Sync failed: connector exited with code %d. See Sync logs for the error.", *f.ExitCode)
@@ -228,14 +224,6 @@ func truncate(line string) string {
 		return line[:maxErrorLineLength] + "..."
 	}
 	return line
-}
-
-// isDiskPressure matches kubelet's disk eviction messages: node pressure
-// ("low on resource: ephemeral-storage"), container/pod limits ("local ephemeral
-// storage", "ephemeral local storage") and emptyDir limits.
-func isDiskPressure(message string) bool {
-	message = strings.ToLower(message)
-	return strings.Contains(message, "ephemeral") || strings.Contains(message, "diskpressure") || strings.Contains(message, "emptydir")
 }
 
 func onNode(f *ExecutionFailure) string {
