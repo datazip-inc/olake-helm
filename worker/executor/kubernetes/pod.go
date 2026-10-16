@@ -18,8 +18,10 @@ import (
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/failure"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
+	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
 // failureLogTailLines is how much connector output is kept to spot an
@@ -113,12 +115,13 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			// - Exit 137: SIGKILL (OOMKilled or manual kill)
 			// - Exit 143: SIGTERM (graceful termination)
 			podFailure := &failure.ExecutionFailure{
-				Kind:        "pod",
-				Name:        podName,
-				Node:        pod.Spec.NodeName,
-				Reason:      pod.Status.Reason,
-				Message:     pod.Status.Message,
-				MemoryLimit: memoryLimit(pod),
+				Kind:           "pod",
+				Name:           podName,
+				Node:           pod.Spec.NodeName,
+				Reason:         pod.Status.Reason,
+				Message:        pod.Status.Message,
+				MemoryLimit:    memoryLimit(pod),
+				MemoryLimitKey: memoryLimitKey(pod),
 			}
 			// A pod-level reason (Evicted, DeadlineExceeded) explains the kill better than
 			// the container's own, which is usually just "Error" with exit 137.
@@ -150,6 +153,18 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 	log.Error("pod timed out", "podName", podName, "timeout", timeout)
 	return fmt.Errorf("pod timed out after %v", timeout)
+}
+
+// memoryLimitKey names the values key that sizes this pod's memory limit. Only
+// async operations read the job's own profile; test, discover and spec use profile 0.
+func memoryLimitKey(pod *corev1.Pod) string {
+	profile := "0"
+	if utils.IsAsyncCommand(types.Command(pod.Labels["olake.io/operation-type"])) {
+		if jobID := pod.Labels["olake.io/job-id"]; jobID != "" {
+			profile = jobID
+		}
+	}
+	return fmt.Sprintf("global.jobProfiles.%s.resources.limits.memory", profile)
 }
 
 // unschedulableCondition returns why a pod has not been scheduled, as the
@@ -265,6 +280,44 @@ func (k *KubernetesExecutor) cleanupPod(ctx context.Context, podName string) err
 func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir, imageName string, indexVolume *indexVolume) *corev1.Pod {
 	subDir := filepath.Base(workDir)
 
+	var volumeMounts []corev1.VolumeMount
+	var volumes []corev1.Volume
+	if storagemode.Get() == constants.StorageModeNFS {
+		volumes = []corev1.Volume{{
+			Name: "job-storage",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: k.config.PVCName,
+				},
+			},
+		}}
+		volumeMounts = []corev1.VolumeMount{{
+			Name:      "job-storage",
+			MountPath: "/mnt/config",
+			SubPath:   subDir,
+		}}
+	}
+
+	envFrom := []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: constants.GlobalEnvConfigMap,
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+	if storagemode.Get() == constants.StorageModeS3 && k.config.S3CredentialsSecret != "" {
+		envFrom = append(envFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: k.config.S3CredentialsSecret,
+				},
+			},
+		})
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      k.sanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
@@ -304,56 +357,30 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			SecurityContext: k.config.SecurityContext,
 			Containers: []corev1.Container{
 				{
-					Name:    "connector",
-					Image:   imageName,
-					Command: []string{},
-					Args:    req.Args,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "job-storage",
-							MountPath: "/mnt/config",
-							SubPath:   subDir,
-						},
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
-						},
-						// No limits for flexibility
-					},
+					Name:         "connector",
+					Image:        imageName,
+					Command:      []string{},
+					Args:         req.Args,
+					VolumeMounts: volumeMounts,
+					Resources:    k.GetResourcesForJob(req.JobID, req.Command),
 					Env: []corev1.EnvVar{
 						{
 							Name:  "OLAKE_WORKFLOW_ID",
 							Value: req.WorkflowID,
 						},
 						{
-							Name:  "OLAKE_SECRET_KEY",
+							Name:  constants.EnvS3ConfigFolder,
+							Value: utils.ConnectorConfigDir(req.Command, req.WorkflowID),
+						},
+						{
+							Name:  constants.EnvSecretKey,
 							Value: k.config.SecretKey,
 						},
 					},
-					EnvFrom: []corev1.EnvFromSource{
-						{
-							ConfigMapRef: &corev1.ConfigMapEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "olake-global-env",
-								},
-								Optional: ptr.To(true),
-							},
-						},
-					},
+					EnvFrom: envFrom,
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "job-storage",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: k.config.PVCName,
-						},
-					},
-				},
-			},
+			Volumes: volumes,
 		},
 	}
 
@@ -397,8 +424,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
 
-	// Add liveness probe for long-running sync operations
-	if slices.Contains(constants.AsyncCommands, req.Command) {
+	// Add liveness probe for long-running sync operations (NFS only — validates shared storage mount)
+	if utils.IsAsyncCommand(req.Command) && storagemode.Get() == constants.StorageModeNFS {
 		pod.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

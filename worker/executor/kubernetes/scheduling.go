@@ -20,11 +20,34 @@ type JobMappingStats struct {
 	InvalidMappings []string // TODO:  remove invalidMappings from struct{}
 }
 
-// JobSchedulingConfig defines the scheduling constraints for a job
+// JobSchedulingConfig defines the scheduling constraints and compute resources for a job
 type JobSchedulingConfig struct {
-	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
+	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
+	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// validateResources rejects negative quantities and a request that exceeds its limit;
+// the API server would otherwise refuse every pod built from the profile.
+// Runs on every load, so it also covers a ConfigMap edited directly, where the Helm schema does not run.
+func validateResources(r *corev1.ResourceRequirements) error {
+	if r == nil {
+		return nil
+	}
+	for kind, list := range map[string]corev1.ResourceList{"request": r.Requests, "limit": r.Limits} {
+		for name, quantity := range list {
+			if quantity.Sign() < 0 {
+				return fmt.Errorf("%s %s %s is negative", name, kind, quantity.String())
+			}
+		}
+	}
+	for name, limit := range r.Limits {
+		if request, ok := r.Requests[name]; ok && request.Cmp(limit) > 0 {
+			return fmt.Errorf("%s request %s exceeds limit %s", name, request.String(), limit.String())
+		}
+	}
+	return nil
 }
 
 func validateLabelPair(jobID int, key, value string, stats *JobMappingStats) error {
@@ -143,6 +166,34 @@ func LoadJobMapping(rawMapping string) map[int]map[string]string {
 	return result
 }
 
+// parseJobProfile parses one profile. When only its resources fail to parse
+// (for example "2GB"), the profile is returned without resources, along with
+// the parse error as resourcesErr, so its scheduling fields still apply.
+func parseJobProfile(raw json.RawMessage) (profile JobSchedulingConfig, resourcesErr error, err error) {
+	if err = json.Unmarshal(raw, &profile); err == nil {
+		return profile, nil, nil
+	}
+
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return JobSchedulingConfig{}, nil, err
+	}
+	if _, hasResources := fields["resources"]; !hasResources {
+		return JobSchedulingConfig{}, nil, err
+	}
+	delete(fields, "resources")
+
+	stripped, marshalErr := json.Marshal(fields)
+	if marshalErr != nil {
+		return JobSchedulingConfig{}, nil, err
+	}
+	profile = JobSchedulingConfig{}
+	if json.Unmarshal(stripped, &profile) != nil {
+		return JobSchedulingConfig{}, nil, err
+	}
+	return profile, err, nil
+}
+
 // LoadJobProfiles parses OLAKE_JOB_PROFILES JSON string
 // Does NOT validate NodeSelector labels - trusts user input for new format
 func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
@@ -151,11 +202,30 @@ func LoadJobProfiles(profiles string) map[int]JobSchedulingConfig {
 		return map[int]JobSchedulingConfig{}
 	}
 
-	result := make(map[int]JobSchedulingConfig)
-
-	if err := json.Unmarshal([]byte(profiles), &result); err != nil {
+	// Parse each profile separately so one bad entry cannot drop every other profile
+	rawProfiles := make(map[int]json.RawMessage)
+	if err := json.Unmarshal([]byte(profiles), &rawProfiles); err != nil {
 		logger.Errorf("failed to parse OLAKE_JOB_PROFILES as json: %s", err)
 		return map[int]JobSchedulingConfig{}
+	}
+
+	result := make(map[int]JobSchedulingConfig, len(rawProfiles))
+	for jobID, raw := range rawProfiles {
+		profile, resourcesErr, err := parseJobProfile(raw)
+		if err != nil {
+			logger.Errorf("job profile %d: skipping invalid profile: %s", jobID, err)
+			continue
+		}
+		if resourcesErr != nil {
+			logger.Warnf("job profile %d: ignoring unparsable resources, falling back to default: %s", jobID, resourcesErr)
+		}
+
+		// Drop only the invalid resources so the profile's scheduling fields still apply
+		if err := validateResources(profile.Resources); err != nil {
+			logger.Warnf("job profile %d: ignoring resources, falling back to default: %s", jobID, err)
+			profile.Resources = nil
+		}
+		result[jobID] = profile
 	}
 
 	logger.Infof("job profiles loaded: %d entries", len(result))

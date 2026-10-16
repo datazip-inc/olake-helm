@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/acarl005/stripansi"
 	"github.com/datazip-inc/olake-helm/worker/constants"
-	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
 // ExecutionFailure carries what the executor saw when the connector stopped
@@ -20,8 +20,11 @@ type ExecutionFailure struct {
 	Reason      string // e.g. OOMKilled, Evicted, Unschedulable, Error
 	Message     string // reason detail reported by kubernetes/docker
 	MemoryLimit string // "" means no limit
-	NotFound    bool   // pod/container disappeared before it finished
-	LogTail     string // last lines of connector stdout/stderr
+	// MemoryLimitKey is the Helm value that sizes the pod's memory limit
+	// (kubernetes only), e.g. global.jobProfiles.12.resources.limits.memory.
+	MemoryLimitKey string
+	NotFound       bool   // pod/container disappeared before it finished
+	LogTail        string // last lines of connector stdout/stderr
 }
 
 // Error keeps the connector's last error line: discover/check/spec failures
@@ -41,7 +44,12 @@ func (f *ExecutionFailure) Error() string {
 		info = append(info, "message: "+f.Message)
 	}
 
-	msg := fmt.Sprintf("%s: %s %s failed (%s)", constants.ErrExecutionFailed, f.Kind, f.Name, strings.Join(info, ", "))
+	details := strings.Join(info, ", ")
+	if f.Reason == ReasonOOMKilled && f.MemoryLimitKey != "" {
+		details += "; the pod ran out of memory, raise " + f.MemoryLimitKey
+	}
+
+	msg := fmt.Sprintf("%s: %s %s failed (%s)", constants.ErrExecutionFailed, f.Kind, f.Name, details)
 	if line := lastErrorLine(f.LogTail); line != "" {
 		msg += ": " + line
 	}
@@ -184,7 +192,7 @@ func oomDetails(f *ExecutionFailure) string {
 func oomMarker(logTail string) string {
 	for _, line := range strings.Split(logTail, "\n") {
 		if containsAny(line, oomMarkers) {
-			return strings.TrimSpace(logger.StripANSI(line))
+			return strings.TrimSpace(stripansi.Strip(line))
 		}
 	}
 	return ""
@@ -193,7 +201,7 @@ func oomMarker(logTail string) string {
 // lastErrorLine returns the connector output line that best explains a failure:
 // the last error/fatal/crash line, else the last non-empty line.
 func lastErrorLine(logTail string) string {
-	lines := strings.Split(logger.StripANSI(logTail), "\n")
+	lines := strings.Split(stripansi.Strip(logTail), "\n")
 	fallback := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
