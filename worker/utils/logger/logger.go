@@ -12,7 +12,17 @@ import (
 	"github.com/spf13/viper"
 )
 
-var rootLogger zerolog.Logger
+var (
+	rootLogger zerolog.Logger
+
+	// workerID identifies this worker: the pod name on kubernetes, the container id on docker.
+	workerID, _ = os.Hostname()
+)
+
+// WorkerID returns this worker's identity, shown when it picks up a sync.
+func WorkerID() string {
+	return workerID
+}
 
 func Init() {
 	level := viper.GetString(constants.EnvLogLevel)
