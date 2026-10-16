@@ -324,9 +324,8 @@ spec:
               subPath: executor-pod-template.yaml
             - name: spark-binaries
               mountPath: /opt/spark
-            - name: shared-storage
+            - name: fusion-logs
               mountPath: /data/fusion-logs
-              subPath: fusion-logs
           env:
             - name: AMORO_CONF_DIR
               value: "/usr/local/amoro/conf"
@@ -413,8 +412,15 @@ spec:
             name: {{ include "olake.fullname" . }}-fusion-config
         - name: spark-binaries
           emptyDir: {}
-        - name: shared-storage
+        - name: fusion-logs
+          {{- if or .Values.fusion.logs.existingClaim .Values.fusion.logs.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "olake.sharedStoragePVC" . }}
+            claimName: {{ .Values.fusion.logs.existingClaim | default (printf "%s-fusion-logs" (include "olake.fullname" .)) }}
+          {{- else }}
+          emptyDir:
+            {{- with .Values.fusion.logs.sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- end }}
+          {{- end }}
 {{- end }}
  

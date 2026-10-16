@@ -23,7 +23,7 @@ kubectl delete namespace olake
 
 ⚠️ **Note**: This method leaves behind resources protected by the `helm.sh/resource-policy: keep` annotation:
 - NFS Server components (StatefulSet, Service, ClusterRole, etc.)
-- PersistentVolumeClaims
+- PersistentVolumeClaims (including the Fusion logs PVC, `<release>-olake-fusion-logs`)
 - StorageClass
 
 ## Complete Uninstall Script
@@ -252,6 +252,34 @@ If you want to preserve your data for future reinstallation:
 
 3. **Restore After Reinstall**:
    After reinstalling, restore the data back to the new PVCs.
+
+### Fusion Logs
+
+When Fusion is enabled, compaction logs are stored on a dedicated ReadWriteOnce PVC named `<fullname>-fusion-logs` (for example `olake-olake-fusion-logs`). It is controlled by `fusion.logs.persistence` in `values.yaml` and is protected by `helm.sh/resource-policy: keep`.
+
+| Action | Fusion logs |
+|--------|-------------|
+| `helm uninstall` / `helm upgrade` | Kept |
+| Reinstall with the same release name and namespace | Reused. The old logs show up in the Fusion dashboard |
+| `kubectl delete pvc <name>` or `kubectl delete namespace` | Deleted. Also deleted if the StorageClass has `reclaimPolicy: Delete` |
+| `./uninstall.sh` (default) | Deleted |
+| `./uninstall.sh --keep-pvcs` | Kept only if the namespace also survives. Without `--keep-namespace` the script deletes the namespace, which deletes the PVC |
+
+To keep the logs across a full cleanup, run the script with both flags:
+
+```bash
+./uninstall.sh --keep-pvcs --keep-namespace
+```
+
+Notes:
+- The reinstall must use the **same release name and namespace**. Otherwise a new empty PVC is created and the old logs are not shown.
+- Use a StorageClass with `reclaimPolicy: Retain` (`fusion.logs.persistence.storageClass`) if the logs must survive an accidental PVC deletion. The PV and its data stay in the `Released` state. See "PV in Released State" above.
+- To remove the logs by hand after `helm uninstall`:
+  ```bash
+  kubectl delete pvc <release>-olake-fusion-logs -n olake
+  ```
+- To store logs elsewhere or skip the PVC, set `fusion.logs.persistence.enabled=false` (uses an `emptyDir`, so logs are lost on pod restart) or point `fusion.logs.existingClaim` at your own PVC. A claim you create yourself is not managed or deleted by the chart.
+- Logs written before this change stay on the old shared storage PVC and are not shown in the dashboard.
 
 ## Post-Uninstall Verification
 
