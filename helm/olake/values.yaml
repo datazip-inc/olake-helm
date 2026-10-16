@@ -677,6 +677,23 @@ fusion:
   #     FEATURE_FLAG: "true"
   env: {}
 
+  # -- Optimizing (compaction) log storage on the AMS pod.
+  # AMS is the only log writer: spark driver/executor logs are shipped to AMS over RPC.
+  # Logs are node-local, so keep fusion at a single replica.
+  logs:
+    # -- Existing RWO PVC to use for logs. Overrides `persistence`.
+    existingClaim: ""
+    persistence:
+      # -- Persist logs on a RWO PVC (kept on helm uninstall, reused on reinstall).
+      # When false, logs go to an emptyDir and are lost on pod restart.
+      enabled: true
+      # -- Size of the logs PVC
+      size: 10Gi
+      # -- StorageClass for the logs PVC. Falls back to `global.storageClass`, then the cluster default.
+      storageClass: ""
+    # -- Size limit for the emptyDir used when `persistence.enabled` is false.
+    sizeLimit: ""
+
   # --- Pod scheduling constraints for the Fusion pod
   nodeSelector: {}
   tolerations: []

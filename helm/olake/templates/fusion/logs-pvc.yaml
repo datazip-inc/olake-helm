@@ -1,0 +1,27 @@
+{{- if and .Values.fusion.enabled .Values.fusion.logs.persistence.enabled (not .Values.fusion.logs.existingClaim) }}
+{{- $name := printf "%s-fusion-logs" (include "olake.fullname" .) }}
+{{- /* A PVC kept after uninstall is not owned by any release; skip rendering so a reinstall reuses it instead of failing on ownership. */}}
+{{- if not (lookup "v1" "PersistentVolumeClaim" (include "olake.namespace" .) $name) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fusion
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- $sc := .Values.fusion.logs.persistence.storageClass | default .Values.global.storageClass }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.fusion.logs.persistence.size }}
+{{- end }}
+{{- end }}
