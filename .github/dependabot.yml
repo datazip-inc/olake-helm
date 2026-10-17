@@ -1,0 +1,81 @@
+version: 2
+
+# Note: target-branch applies to VERSION updates only. Dependabot security
+# updates always open against the repository default branch; that is a
+# Dependabot limitation and cannot be configured.
+updates:
+  # Go worker module.
+  - package-ecosystem: "gomod"
+    directory: "/worker"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      # Modules that must move together get their own PR so one failure
+      # does not block unrelated bumps; security updates stay separate.
+      k8s:
+        patterns: ["k8s.io/*"]
+      aws:
+        patterns: ["github.com/aws/*"]
+      temporal:
+        patterns: ["go.temporal.io/*"]
+      go-misc:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Base images in the worker Dockerfile (golang, alpine).
+  - package-ecosystem: "docker"
+    directory: "/worker"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    groups:
+      docker-images:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Chart dependencies in Chart.yaml and pinned image tags in values.yaml
+  # (temporal, postgres, elasticsearch, minio). `latest` tags are skipped.
+  - package-ecosystem: "helm"
+    directory: "/helm/olake"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "helm"
+    groups:
+      helm-images:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Stateful services need a data migration on major bumps.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # minio uses RELEASE.<timestamp> tags that do not follow semver.
+      - dependency-name: "olakego/minio"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      github-actions:
+        update-types: ["minor", "patch"]
