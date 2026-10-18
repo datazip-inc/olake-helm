@@ -102,6 +102,9 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 				if status.State.Terminated != nil {
 					term := status.State.Terminated
 					containerInfo = fmt.Sprintf("exit code: %d, reason: %s", term.ExitCode, term.Reason)
+					if term.Reason == "OOMKilled" {
+						containerInfo += "; the pod ran out of memory, raise " + memoryLimitKey(pod)
+					}
 				} else {
 					// The only other two ContainerState options are Waiting and Running, so if it's not Terminated, it must be one of those
 					// refer: https://pkg.go.dev/k8s.io/api/core/v1#ContainerState
@@ -127,6 +130,18 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 
 	log.Error("pod timed out", "podName", podName, "timeout", timeout)
 	return fmt.Errorf("pod timed out after %v", timeout)
+}
+
+// memoryLimitKey names the values key that sizes this pod's memory limit. Only
+// async operations read the job's own profile; test, discover and spec use profile 0.
+func memoryLimitKey(pod *corev1.Pod) string {
+	profile := "0"
+	if utils.IsAsyncCommand(types.Command(pod.Labels["olake.io/operation-type"])) {
+		if jobID := pod.Labels["olake.io/job-id"]; jobID != "" {
+			profile = jobID
+		}
+	}
+	return fmt.Sprintf("global.jobProfiles.%s.resources.limits.memory", profile)
 }
 
 // unschedulableCondition returns why a pod has not been scheduled, as the
@@ -317,13 +332,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 					Command:      []string{},
 					Args:         req.Args,
 					VolumeMounts: volumeMounts,
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: k.parseQuantity("256Mi"),
-							corev1.ResourceCPU:    k.parseQuantity("100m"),
-						},
-						// No limits for flexibility
-					},
+					Resources:    k.GetResourcesForJob(req.JobID, req.Command),
 					Env: []corev1.EnvVar{
 						{
 							Name:  "OLAKE_WORKFLOW_ID",
