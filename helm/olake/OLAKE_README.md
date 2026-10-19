@@ -1,12 +1,11 @@
 
 
-<p align="center">
+<h1 align="center" style="border-bottom: none">
     <a href="https://datazip.io/olake" target="_blank">
-        <img alt="OLake Logo" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
+        <img alt="olake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
     </a>
-    <br>
-    <strong>OLake</strong>
-</p>
+    <br>OLake
+</h1>
 
 # OLake Helm Chart
 
