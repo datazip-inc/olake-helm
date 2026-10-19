@@ -29,18 +29,25 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || '' }}
           fetch-depth: 0
 
+      - name: Install official helm-docs
+        run: |
+          HELM_DOCS_VERSION="1.14.2"
+          curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" | tar -xz
+          sudo mv helm-docs /usr/local/bin/
+          helm-docs --version
+
       - name: Run helm-docs
-        uses: losisin/helm-docs-github-action@v2
-        with:
-          chart-search-root: "helm/olake"
-          template-files: "OLAKE_README.md.gotmpl"
-          output-file: "OLAKE_README.md"
+        run: |
+          helm-docs --chart-search-root=helm/olake --template-files=OLAKE_README.md.gotmpl --output-file=OLAKE_README.md
 
       - name: Auto-commit and push updated OLAKE_README.md
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "docs(helm): auto-update OLAKE_README.md via helm-docs [skip ci]"
-          file_pattern: "helm/olake/OLAKE_README.md"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [[ -n $(git status --porcelain helm/olake/OLAKE_README.md) ]]; then
+            git add helm/olake/OLAKE_README.md
+            git commit -m "docs(helm): auto-update OLAKE_README.md via helm-docs [skip ci]"
+            git push
+          else
+            echo "No documentation changes detected. Working tree is clean."
+          fi
