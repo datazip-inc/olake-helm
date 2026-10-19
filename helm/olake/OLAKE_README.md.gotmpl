@@ -2,7 +2,13 @@
 | `{{ .Key }}` | `{{ .Type }}` | {{ if .Default }}{{ .Default }}{{ else }}{{ .AutoDefault }}{{ end }} | {{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }} |
 {{- end }}
 
-# {{ template "chart.name" . }}
+<p align="center">
+    <a href="https://datazip.io/olake" target="_blank">
+        <img alt="OLake Logo" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
+    </a>
+</p>
+
+# OLake Helm Chart
 
 {{ template "chart.versionBadge" . }} {{ template "chart.typeBadge" . }} {{ template "chart.appVersionBadge" . }}
 
