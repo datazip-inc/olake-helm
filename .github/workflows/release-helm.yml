@@ -36,6 +36,9 @@ jobs:
           
       - name: Copy index.html to gh-pages
         run: |
+          # remove chart releaser temporary files
+          rm -f index.yaml
+          rm -rf .cr-release-packages .cr-index
           # Make sure gh-pages exists locally
           git fetch origin gh-pages:gh-pages || true
           if ! git rev-parse --verify gh-pages >/dev/null 2>&1; then
@@ -43,6 +46,7 @@ jobs:
             git reset --hard
           else
             git checkout gh-pages
+            git pull origin gh-pages
           fi
 
           # Copy index.html from master branch
