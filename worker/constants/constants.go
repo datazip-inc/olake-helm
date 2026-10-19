@@ -24,6 +24,8 @@ const (
 	ContainerMountDir   = "/mnt/config"
 	K8sPersistentDir    = "/data/olake-jobs"
 	DockerPersistentDir = "/tmp/olake-config"
+	// FusionLogsDir is the shared-storage folder where Fusion (AMS) writes optimizing logs.
+	FusionLogsDir       = "fusion-logs"
 	OutputFileName      = "output.json"
 	TelemetryUserIDPath = "telemetry/user_id"
 
