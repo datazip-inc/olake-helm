@@ -52,9 +52,19 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 	zero := int64(0)
 	_ = k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
 
+	_, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, req), metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		log.Error("spawn indicator pod failed", "podName", name, "namespace", ns, "error", err)
+		return fmt.Errorf("spawn indicator pod: %w", err)
+	}
+	return nil
+}
+
+// IndicatorPodSpec builds the failure-indicator pod.
+func (k *KubernetesExecutor) IndicatorPodSpec(ns string, req *types.IndicatorRequest) *corev1.Pod {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      req.Name,
 			Namespace: ns,
 			Labels: map[string]string{
 				constants.LabelIndicator:         "true",
@@ -62,12 +72,16 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 				constants.LabelIndicatorResource: req.ResourceName,
 				constants.LabelIndicatorPhase:    "Failed",
 			},
-			Annotations: map[string]string{
+			Annotations: k.buildPodAnnotations(map[string]string{
 				constants.AnnotationIndicatorError: utils.Truncate(strings.ReplaceAll(req.Message, "\n", " "), constants.IndicatorAnnotationMax),
-			},
+			}),
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:   corev1.RestartPolicyNever,
+			NodeSelector:    k.GetNodeSelectorForJob(0, types.Check), // job 0 + non-sync command = default profile
+			Tolerations:     k.GetTolerationsForJob(0, types.Check),
+			Affinity:        k.BuildAffinityForJob(0, types.Check),
+			SecurityContext: k.config.SecurityContext,
 			Containers: []corev1.Container{{
 				Name:            "indicator",
 				Image:           utils.GetRegistryImage(constants.IndicatorImage),
@@ -93,10 +107,11 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 		},
 	}
 
-	_, err := k.client.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		log.Error("spawn indicator pod failed", "podName", name, "namespace", ns, "error", err)
-		return fmt.Errorf("spawn indicator pod: %w", err)
+	// Set ServiceAccountName only if configured (non-empty)
+	// If empty, Kubernetes will use the namespace's default service account
+	if k.config.JobServiceAccount != "" && k.config.JobServiceAccount != "default" {
+		pod.Spec.ServiceAccountName = k.config.JobServiceAccount
 	}
-	return nil
+
+	return pod
 }
