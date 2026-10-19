@@ -56,7 +56,7 @@ Configurations that apply globally across all components, or manage standard Kub
 | `global.logFileStorageMode` | `string` | `"nfs"` | Local storage mode for job config and log files   - "s3": S3-compatible storage (configure s3LogFileStorage below)   - "nfs": NFS shared volume (DEPRECATED — currently default, will be removed end of 2026; switch to "s3") |
 | `global.podAnnotations` | `object` | `{}` | Global pod annotations applied to all Deployment pods and to activity pods (connector Job pods spawned by olake-workers) and Fusion Spark pods. Useful for service mesh sidecar injection (Istio, Linkerd) or other admission webhooks. Examples:   podAnnotations:     sidecar.istio.io/inject: "true"     linkerd.io/inject: enabled |
 | `global.storageClass` | `string` | `""` | Global storage class for all persistent volumes Set to "" to use default storage class Examples: gp2, standard, managed |
-| `nameOverride` | `string` | `""` | Provide a name in place of olake for `app:` labels and it is for testing purpose |
+| `nameOverride` | `string` | `""` | Provide a name in place of olake for `app:` labels |
 | `useStandardResources` | `bool` | `true` | Deploy resources (RBAC, ServiceAccount, Secret) as standard resources instead of hooks. Defaults to true for robust resource management and ArgoCD compatibility. WARNING: If upgrading from an older version, either: 1. Set this to 'false' to maintain legacy hook behavior. 2. Or manually remove 'helm.sh/hook' annotations from existing resources before upgrading to allow Helm to adopt them. |
 
 ---
