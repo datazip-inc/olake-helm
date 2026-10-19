@@ -1,4 +1,4 @@
-# -- Provide a name in place of olake for `app:` labels and it is for testing purpose
+# -- Provide a name in place of olake for `app:` labels
 nameOverride: ""
 
 # -- Provide a name to substitute for the full names of resources
