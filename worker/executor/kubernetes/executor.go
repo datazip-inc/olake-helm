@@ -40,6 +40,7 @@ type KubernetesConfig struct {
 	WorkerIdentity      string
 	SecurityContext     *corev1.PodSecurityContext
 	JobPodAnnotations   map[string]string
+	JobPodLabels        map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -91,6 +92,14 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
+	var jobPodLabels map[string]string
+	if raw := viper.GetString(constants.EnvJobPodLabels); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &jobPodLabels); err != nil {
+			logger.Errorf("failed to unmarshal job pod labels: %s. using default.", err)
+			jobPodLabels = nil
+		}
+	}
+
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -115,6 +124,7 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			WorkerIdentity:      workerIdenttity,
 			SecurityContext:     securityContext,
 			JobPodAnnotations:   jobPodAnnotations,
+			JobPodLabels:        jobPodLabels,
 		},
 	}, nil
 }

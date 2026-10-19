@@ -293,8 +293,8 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			Name:      k.sanitizeName(req.WorkflowID), // Sanitized name safe for Kubernetes
 			Namespace: k.namespace,                    // Target namespace for pod creation
 
-			// Labels are used for querying, filtering, and organizing pods
-			Labels: map[string]string{
+			// Labels are used for querying, filtering, and organizing pods; global.jobPodLabels merged in
+			Labels: k.buildPodLabels(map[string]string{
 				// Standard Kubernetes labels for ecosystem compatibility
 				"app.kubernetes.io/name":       "olake",                                                      // Application name
 				"app.kubernetes.io/component":  fmt.Sprintf("%s-%s", req.ConnectorType, string(req.Command)), // Component identifier
@@ -305,7 +305,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 				"olake.io/connector":      req.ConnectorType,              // mysql, postgres, etc.
 				"olake.io/job-id":         strconv.Itoa(req.JobID),        // Database job reference
 				"olake.io/workflow-id":    k.sanitizeName(req.WorkflowID), // Sanitized workflow ID
-			},
+			}),
 
 			// Annotations store metadata that doesn't affect pod selection/scheduling.
 			// Global job pod annotations (global.podAnnotations) are merged via buildPodAnnotations;

@@ -146,6 +146,11 @@ func (k *KubernetesExecutor) buildPodAnnotations(internal map[string]string) map
 	return annotations
 }
 
+// buildPodLabels merges global job pod labels with internal ones; internal keys win.
+func (k *KubernetesExecutor) buildPodLabels(internal map[string]string) map[string]string {
+	return mergeStringMaps(k.config.JobPodLabels, internal)
+}
+
 // BuildAffinityForJob returns NodeAffinity rules to prevent unmapped jobs from scheduling on nodes reserved for mapped jobs.
 // Uses NotIn operator to exclude nodes with label key-value pairs used by any mapped job.
 // Reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity

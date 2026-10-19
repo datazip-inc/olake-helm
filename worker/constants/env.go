@@ -67,6 +67,9 @@ const (
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 
+	// activity pod labels
+	EnvJobPodLabels = "OLAKE_JOB_POD_LABELS"
+
 	// EnvS3ConfigFolder is the workflow config directory the connector should use.
 	// NFS: /mnt/config (the mounted workflow subdir). S3: s3://bucket/[prefix/]{workflow-dir}.
 	EnvS3ConfigFolder = "OLAKE_S3_CONFIG_FOLDER"
