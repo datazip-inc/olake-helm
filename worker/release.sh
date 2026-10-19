@@ -119,7 +119,7 @@ else
     echo "✅ Flexible versioning allowed for development: $VERSION"
 fi
 
-# Setup buildx and QEMU
+# Setup buildx
 setup_buildx
 
 platform="linux/amd64,linux/arm64"
