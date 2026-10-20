@@ -165,13 +165,12 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 // logUserFailure writes the failure explanation to worker.log, where the UI
 // shows it under worker logs: headline, raw details, then the recommendation.
 func logUserFailure(log tlog.Logger, msg failure.UserMessage) {
-	category := string(msg.Category)
-	log.Error(msg.Headline, "category", category)
+	log.Error(msg.Headline)
 	if msg.Details != "" {
-		log.Error(msg.Details, "category", category)
+		log.Error(msg.Details)
 	}
 	if msg.Tip != "" {
-		log.Info(msg.Tip, "category", category, "tip", true)
+		log.Info(msg.Tip, "tip", true)
 	}
 }
 

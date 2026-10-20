@@ -166,7 +166,7 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 		return "", err
 	}
 
-	logs, err := k.getPodLogs(ctx, podSpec.Name)
+	logs, err := k.getPodLogs(ctx, podSpec.Name, nil)
 	if err != nil {
 		log.Error("failed to get pod logs", "podName", podSpec.Name, "error", err)
 		return "", fmt.Errorf("failed to get pod logs: %s", err)

@@ -13,7 +13,7 @@ import (
 // ExecutionFailure carries what the executor saw when the connector stopped
 // with a failure. It unwraps to constants.ErrExecutionFailed.
 type ExecutionFailure struct {
-	Kind        string // "pod" or "container"
+	Kind        string // KindPod or KindContainer
 	Name        string
 	Node        string // node the pod ran on (kubernetes only)
 	ExitCode    *int
@@ -59,6 +59,14 @@ func (f *ExecutionFailure) Error() string {
 func (f *ExecutionFailure) Unwrap() error {
 	return constants.ErrExecutionFailed
 }
+
+// Kinds of connector runtime, named in the user-facing messages.
+const (
+	KindPod       = "pod"
+	KindContainer = "container"
+)
+
+const LogTailLines = 200
 
 // Reasons the classification acts on. Kubernetes reports them on the pod or
 // container status; the docker executor maps State.OOMKilled to ReasonOOMKilled.
@@ -130,7 +138,6 @@ func TelemetryReason(f *ExecutionFailure) string {
 
 // UserMessage is what the worker writes to worker.log for the user.
 type UserMessage struct {
-	Category Category
 	Headline string
 	Details  string
 	Tip      string
@@ -145,7 +152,7 @@ const (
 // known category get a single line.
 func Describe(f *ExecutionFailure) UserMessage {
 	category := classify(f)
-	msg := UserMessage{Category: category}
+	var msg UserMessage
 
 	switch category {
 	case CategoryOOM:

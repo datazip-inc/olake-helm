@@ -133,11 +133,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
-	memoryLimit := "none (uses available host memory)"
-	if hostConfig.Memory > 0 {
-		memoryLimit = formatBytes(hostConfig.Memory)
-	}
-	log.Info(fmt.Sprintf("Container %s started, memory limit: %s", containerName, memoryLimit))
+	log.Info(fmt.Sprintf("Container %s started", containerName))
 
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
 		if req.Command != types.Sync { // SyncActivity explains sync failures itself

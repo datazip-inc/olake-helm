@@ -24,10 +24,6 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/utils/storagemode"
 )
 
-// failureLogTailLines is how much connector output is kept to spot an
-// out-of-memory crash that the exit code alone does not show.
-const failureLogTailLines = 50
-
 func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName string, timeout time.Duration, heartbeatFunc func(context.Context, ...interface{})) error {
 	log := logger.Log(ctx)
 	log.Debug("waiting for pod to complete", "podName", podName, "timeout", timeout)
@@ -50,7 +46,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 		if err != nil {
 			// the pod vanished mid-run (force-deleted or evicted and garbage collected)
 			if apierrors.IsNotFound(err) && ctx.Err() == nil {
-				return &failure.ExecutionFailure{Kind: "pod", Name: podName, NotFound: true}
+				return &failure.ExecutionFailure{Kind: failure.KindPod, Name: podName, NotFound: true}
 			}
 			log.Error("failed to get pod status", "podName", podName, "error", err)
 			return fmt.Errorf("failed to get pod status: %s", err)
@@ -80,7 +76,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 					unschedulableSince = time.Now()
 				} else if time.Since(unschedulableSince) > constants.UnschedulableGracePeriod {
 					return &failure.ExecutionFailure{
-						Kind:    "pod",
+						Kind:    failure.KindPod,
 						Name:    podName,
 						Reason:  corev1.PodReasonUnschedulable,
 						Message: fmt.Sprintf("could not be scheduled for %v: %s", constants.UnschedulableGracePeriod, schedulingIssue),
@@ -115,7 +111,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 			// - Exit 137: SIGKILL (OOMKilled or manual kill)
 			// - Exit 143: SIGTERM (graceful termination)
 			podFailure := &failure.ExecutionFailure{
-				Kind:           "pod",
+				Kind:           failure.KindPod,
 				Name:           podName,
 				Node:           pod.Spec.NodeName,
 				Reason:         pod.Status.Reason,
@@ -135,7 +131,7 @@ func (k *KubernetesExecutor) waitForPodCompletion(ctx context.Context, podName s
 				}
 			}
 			// logs are gone once the pod is evicted before the container started
-			if tail, err := k.getPodLogTail(ctx, podName, failureLogTailLines); err == nil {
+			if tail, err := k.getPodLogs(ctx, podName, ptr.To(int64(failure.LogTailLines))); err == nil {
 				podFailure.LogTail = tail
 			}
 			return podFailure
@@ -221,21 +217,16 @@ func permanentSchedulingFailure(reason, message string) string {
 	return ""
 }
 
-func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string) (string, error) {
-	return k.readPodLogs(ctx, podName, &corev1.PodLogOptions{Container: "connector"})
-}
-
-// getPodLogTail returns the last lines of the connector output.
-func (k *KubernetesExecutor) getPodLogTail(ctx context.Context, podName string, lines int64) (string, error) {
-	return k.readPodLogs(ctx, podName, &corev1.PodLogOptions{Container: "connector", TailLines: ptr.To(lines)})
-}
-
-func (k *KubernetesExecutor) readPodLogs(ctx context.Context, podName string, opts *corev1.PodLogOptions) (string, error) {
+// getPodLogs returns the connector output; tailLines nil means all of it.
+func (k *KubernetesExecutor) getPodLogs(ctx context.Context, podName string, tailLines *int64) (string, error) {
 	log := logger.Log(ctx)
-	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, opts)
+	req := k.client.CoreV1().Pods(k.namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: "connector",
+		TailLines: tailLines,
+	})
 
-	// no error logs here: getPodLogs' caller reports failures, and the failure
-	// tail is best-effort (an evicted pod may have no logs left)
+	// no error logs here: the caller reports failures, and the failure tail is
+	// best-effort (an evicted pod may have no logs left)
 	logs, err := req.Stream(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get pod logs: %s", err)

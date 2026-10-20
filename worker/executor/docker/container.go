@@ -24,12 +24,12 @@ import (
 	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
 	DockerPullTimeout       = 2 * time.Minute
 	DockerHeartbeatInterval = 5 * time.Second
-	failureLogTailLines     = "50"
 )
 
 type ContainerState struct {
@@ -146,7 +146,7 @@ func (d *DockerExecutor) getContainerLogTail(ctx context.Context, containerID st
 	reader, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Tail:       failureLogTailLines,
+		Tail:       strconv.Itoa(failure.LogTailLines),
 	})
 	if err != nil {
 		return ""
@@ -163,7 +163,7 @@ func (d *DockerExecutor) getContainerLogTail(ctx context.Context, containerID st
 // containerFailure describes a container that exited with a non-zero code.
 func (d *DockerExecutor) containerFailure(ctx context.Context, containerID string, exitCode int) *failure.ExecutionFailure {
 	containerFailure := &failure.ExecutionFailure{
-		Kind:     "container",
+		Kind:     failure.KindContainer,
 		Name:     containerID,
 		ExitCode: &exitCode,
 		LogTail:  d.getContainerLogTail(ctx, containerID),
@@ -185,21 +185,9 @@ func (d *DockerExecutor) containerFailure(ctx context.Context, containerID strin
 		containerFailure.Message = state.Error
 	}
 	if hostConfig := inspect.Container.HostConfig; hostConfig != nil && hostConfig.Memory > 0 {
-		containerFailure.MemoryLimit = formatBytes(hostConfig.Memory)
+		containerFailure.MemoryLimit = resource.NewQuantity(hostConfig.Memory, resource.BinarySI).String()
 	}
 	return containerFailure
-}
-
-// formatBytes renders a memory size the way users configure it (e.g. 512Mi, 4Gi).
-func formatBytes(size int64) string {
-	const unit = 1024
-	units := []string{"", "Ki", "Mi", "Gi", "Ti"}
-	value, i := float64(size), 0
-	for value >= unit && i < len(units)-1 {
-		value /= unit
-		i++
-	}
-	return strconv.FormatFloat(value, 'f', -1, 64) + units[i]
 }
 
 // getContainerState inspects a container and returns its state
