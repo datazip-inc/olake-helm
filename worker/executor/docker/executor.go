@@ -143,7 +143,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	}
 	log.Info(fmt.Sprintf("Container %s completed successfully", containerName))
 
-	output, err := d.getContainerLogs(ctx, containerID)
+	output, err := d.getContainerLogs(ctx, containerID, "")
 	if err != nil {
 		log.Error("failed to get container logs", "containerID", containerID, "error", err)
 		return "", err

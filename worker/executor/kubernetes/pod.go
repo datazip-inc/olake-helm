@@ -469,11 +469,17 @@ func describeResources(pod *corev1.Pod) string {
 		return "resources unknown"
 	}
 	res := pod.Spec.Containers[0].Resources
-	limits := "none"
-	if len(res.Limits) > 0 {
-		limits = fmt.Sprintf("cpu=%s mem=%s", res.Limits.Cpu(), res.Limits.Memory())
+	return fmt.Sprintf("requests cpu=%s mem=%s, limits cpu=%s mem=%s",
+		resourceOrNone(res.Requests, corev1.ResourceCPU), resourceOrNone(res.Requests, corev1.ResourceMemory),
+		resourceOrNone(res.Limits, corev1.ResourceCPU), resourceOrNone(res.Limits, corev1.ResourceMemory))
+}
+
+// resourceOrNone returns a resource quantity, or "none" when it is not set.
+func resourceOrNone(list corev1.ResourceList, name corev1.ResourceName) string {
+	if quantity, ok := list[name]; ok {
+		return quantity.String()
 	}
-	return fmt.Sprintf("requests cpu=%s mem=%s, limits: %s", res.Requests.Cpu(), res.Requests.Memory(), limits)
+	return "none"
 }
 
 // memoryLimit returns the connector container's memory limit, or "" when unset.

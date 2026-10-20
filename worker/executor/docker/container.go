@@ -115,11 +115,13 @@ func (d *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 	return resp.ID, nil
 }
 
-// getContainerLogs retrieves and properly parses logs from a container using stdcopy
-func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID string) ([]byte, error) {
+// getContainerLogs retrieves and properly parses logs from a container using stdcopy;
+// tail is the number of last lines to return, "" means all of them.
+func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID, tail string) ([]byte, error) {
 	reader, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
+		Tail:       tail,
 	})
 	if err != nil {
 		return nil, err
@@ -141,32 +143,15 @@ func (d *DockerExecutor) getContainerLogs(ctx context.Context, containerID strin
 	return stdoutBuf.Bytes(), nil
 }
 
-// getContainerLogTail returns the last lines of the container output.
-func (d *DockerExecutor) getContainerLogTail(ctx context.Context, containerID string) string {
-	reader, err := d.client.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Tail:       strconv.Itoa(failure.LogTailLines),
-	})
-	if err != nil {
-		return ""
-	}
-	defer reader.Close()
-
-	var buf bytes.Buffer
-	if _, err := stdcopy.StdCopy(&buf, &buf, reader); err != nil {
-		return ""
-	}
-	return buf.String()
-}
-
 // containerFailure describes a container that exited with a non-zero code.
 func (d *DockerExecutor) containerFailure(ctx context.Context, containerID string, exitCode int) *failure.ExecutionFailure {
 	containerFailure := &failure.ExecutionFailure{
 		Kind:     failure.KindContainer,
 		Name:     containerID,
 		ExitCode: &exitCode,
-		LogTail:  d.getContainerLogTail(ctx, containerID),
+	}
+	if tail, err := d.getContainerLogs(ctx, containerID, strconv.Itoa(failure.LogTailLines)); err == nil {
+		containerFailure.LogTail = string(tail)
 	}
 
 	inspect, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
