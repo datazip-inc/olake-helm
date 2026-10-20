@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - master
-      - fix/helm-release-yml
-    # paths:
-      # - 'helm/**'
+    paths:
+      - 'helm/**'
 
 jobs:
   release:
