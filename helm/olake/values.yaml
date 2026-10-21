@@ -49,7 +49,8 @@ global:
   jobMapping: {}
 
   # -- JobID-based scheduling profiles for pods created by olake-workers
-  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity).
+  # Supports full Kubernetes scheduling capabilities (NodeSelector, Tolerations, Affinity)
+  # and optional compute resources (Resources).
   # Overrides `jobMapping` if both are defined for the same JobID.
   #
   # Special Key "0": Defines the DEFAULT profile for all short-lived jobs (test, discover, spec)
@@ -73,6 +74,30 @@ global:
   #                 - key: "gpu"
   #                   operator: "In"
   #                   values: ["true"]
+  #
+  # Resources (optional): CPU/memory for the connector pod, in the standard Kubernetes shape.
+  # Only applied when set; otherwise pods keep the built-in default
+  # (requests: memory=256Mi, cpu=100m; no limits).
+  #   - Sync / clear-destination use the JobID's profile, then profile "0", then the built-in default.
+  #   - Test / discover / spec always use profile "0", then the built-in default.
+  #   - A profile's resources replace the fallback as a whole; fields are not merged.
+  #   - Setting only a limit makes Kubernetes use the same value as the request.
+  # Example:
+  #   jobProfiles:
+  #     0:
+  #       resources:
+  #         requests:
+  #           cpu: "500m"
+  #           memory: "1Gi"
+  #         limits:
+  #           memory: "2Gi"
+  #     123:
+  #       resources:
+  #         requests:
+  #           cpu: "2"
+  #           memory: "8Gi"
+  #         limits:
+  #           memory: "8Gi"
   jobProfiles: {}
 
   # -- Service account configuration for job pods created by olake-workers
@@ -272,8 +297,7 @@ olakeUI:
 
     # -- Credentials for the initial admin user.
     # These values are used only if `existingSecret` is not provided.
-    # When Fusion is enabled, the same credentials are used for the Fusion UI
-    # and the Fusion optimizer bootstrap job.
+    # When Fusion is enabled, the same credentials are used for the Fusion UI.
     adminUser:
       # -- Admin username
       username: "admin"
@@ -308,6 +332,7 @@ olakeWorker:
   podLabels: {}
 
   # -- OLake Worker resource requirements (optional overrides)
+  # Sizes the worker controller pod only. For sync pods, use `global.jobProfiles.<JobID>.resources`.
   # Defaults: requests: memory=256Mi, cpu=250m (no limits by default)
   # Example customizations:
   #   resources:
@@ -836,6 +861,9 @@ fusion:
     nodeSelector: {}
     tolerations: []
     affinity: {}
+    # Resources of the optimizer pod, which is the Spark driver. Must leave room for
+    # spark.driver.memory plus JVM overhead.
+    resources: {}
 
     spark:
       # Desired Spark optimizer parallelism.
@@ -865,15 +893,5 @@ fusion:
         spark.executor.memory: "4g"
         spark.executor.cores: "1"
 
-      # Additional container properties for the Spark optimizer container (map of key->value).
-      # This can be used to set properties like:
-      #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
-      # Example:
-      #   properties:
-      #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
-      properties:
-        spark-home: "/opt/spark/"
-        master: "k8s://https://kubernetes.default.svc:443"
-        deploy-mode: "cluster"
-        export.HADOOP_USER_NAME: "spark"
-        export.SPARK_CONF_DIR: "/opt/spark/conf/"
+      # fusion.optimizer.spark.properties is no longer used. Set environment variables in
+      # fusion.env, and Spark settings in extraConfig above.

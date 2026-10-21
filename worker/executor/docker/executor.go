@@ -133,12 +133,17 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 		}
 	}
 
+	log.Info(fmt.Sprintf("Container %s started", containerName))
+
 	if err := d.waitForContainerCompletion(ctx, containerID, req.HeartbeatFunc); err != nil {
-		log.Error("container failed to complete", "containerID", containerID, "error", err)
+		if req.Command != types.Sync { // SyncActivity explains sync failures itself
+			log.Error("container failed to complete", "containerID", containerID, "error", err)
+		}
 		return "", err
 	}
+	log.Info(fmt.Sprintf("Container %s completed successfully", containerName))
 
-	output, err := d.getContainerLogs(ctx, containerID)
+	output, err := d.getContainerLogs(ctx, containerID, "")
 	if err != nil {
 		log.Error("failed to get container logs", "containerID", containerID, "error", err)
 		return "", err
