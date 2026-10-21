@@ -747,7 +747,7 @@ elasticsearch:
   # -- Elasticsearch image configuration
   image:
     repository: elasticsearch
-    tag: "7.17.10"
+    tag: "7.17.28"
     pullPolicy: Always
 
   # -- Pod scheduling constraints
