@@ -141,5 +141,4 @@ func TestBuildPodLabels(t *testing.T) {
 	if !apiequality.Semantic.DeepEqual(got, want) {
 		t.Fatalf("buildPodLabels() = %v, want %v", got, want)
 	}
-
 }
