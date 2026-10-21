@@ -6,15 +6,7 @@ on:
       - 'helm/olake/values.yaml'
       - 'helm/olake/Chart.yaml'
       - 'helm/olake/OLAKE_README.md.gotmpl'
-  push:
-    branches:
-      - master
-      - staging
-    paths:
-      - 'helm/olake/values.yaml'
-      - 'helm/olake/Chart.yaml'
-      - 'helm/olake/OLAKE_README.md.gotmpl'
-  workflow_dispatch:
+  
 
 permissions:
   contents: write
