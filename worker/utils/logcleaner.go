@@ -41,31 +41,31 @@ func shouldCheckModTime(fileName string) bool {
 		fileName == "streams.json"
 }
 
+// hasOldLog reports whether the directory is empty or contains a log file older than the cutoff.
+func hasOldLog(dirPath string, cutoff time.Time) bool {
+	entries, _ := os.ReadDir(dirPath)
+	if len(entries) == 0 {
+		return true
+	}
+
+	var foundOldLog bool
+	_ = filepath.Walk(dirPath, func(filePath string, info os.FileInfo, _ error) error {
+		if info == nil || info.IsDir() {
+			return nil
+		}
+
+		if shouldCheckModTime(filepath.Base(filePath)) && info.ModTime().Before(cutoff) {
+			foundOldLog = true
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return foundOldLog
+}
+
 func cleanNFSOldLogs(logDir string, retentionPeriod int) {
 	logger.Info("running log cleaner...")
 	cutoff := time.Now().AddDate(0, 0, -retentionPeriod)
-
-	// check if old logs are present
-	shouldDelete := func(path string, cutoff time.Time) bool {
-		entries, _ := os.ReadDir(path)
-		if len(entries) == 0 {
-			return true
-		}
-
-		var foundOldLog bool
-		_ = filepath.Walk(path, func(filePath string, info os.FileInfo, _ error) error {
-			if info == nil || info.IsDir() {
-				return nil
-			}
-
-			if shouldCheckModTime(filepath.Base(filePath)) && info.ModTime().Before(cutoff) {
-				foundOldLog = true
-				return filepath.SkipDir
-			}
-			return nil
-		})
-		return foundOldLog
-	}
 
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
@@ -78,10 +78,44 @@ func cleanNFSOldLogs(logDir string, retentionPeriod int) {
 			continue
 		}
 		dirPath := filepath.Join(logDir, entry.Name())
-		if toDelete := shouldDelete(dirPath, cutoff); toDelete {
+		// fusion-logs holds many runs and is mounted by Fusion as a subPath, so the
+		// directory itself must never be removed; clean the run folders inside it.
+		if entry.Name() == constants.FusionLogsDir {
+			cleanFusionRunFolders(dirPath, cutoff)
+			continue
+		}
+		if hasOldLog(dirPath, cutoff) {
 			logger.Infof("deleting folder: %s", dirPath)
 			_ = os.RemoveAll(dirPath)
 		}
+	}
+}
+
+// cleanFusionRunFolders removes old run folders (<processId>) inside fusion-logs.
+// An empty run folder is removed only once it is itself older than the cutoff, so a
+// folder Fusion has just created and not yet written to is left alone.
+func cleanFusionRunFolders(fusionLogsDir string, cutoff time.Time) {
+	runs, err := os.ReadDir(fusionLogsDir)
+	if err != nil {
+		logger.Errorf("failed to read fusion log dir: %s", err)
+		return
+	}
+	for _, run := range runs {
+		if !run.IsDir() {
+			continue
+		}
+		runPath := filepath.Join(fusionLogsDir, run.Name())
+		files, _ := os.ReadDir(runPath)
+		if len(files) == 0 {
+			info, err := run.Info()
+			if err != nil || !info.ModTime().Before(cutoff) {
+				continue
+			}
+		} else if !hasOldLog(runPath, cutoff) {
+			continue
+		}
+		logger.Infof("deleting fusion run folder: %s", runPath)
+		_ = os.RemoveAll(runPath)
 	}
 }
 
