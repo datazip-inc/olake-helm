@@ -22,12 +22,13 @@ import (
 
 type Activity struct {
 	executor   *executor.AbstractExecutor
+	indicator  executor.FailureIndicator
 	db         *database.DB
 	tempClient client.Client
 }
 
 func NewActivity(e *executor.AbstractExecutor, db *database.DB, c *Temporal) *Activity {
-	return &Activity{executor: e, db: db, tempClient: c.GetClient()}
+	return &Activity{executor: e, indicator: e.FailureIndicator(), db: db, tempClient: c.GetClient()}
 }
 
 func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
@@ -104,7 +105,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 
 	// update the configs with latest job details first - this refreshes req.Version from
 	// the DB, since req may carry a stale version from when a recurring schedule was created
-	utils.UpdateConfigWithJobDetails(ctx, jobDetails, req)
+	utils.UpdateConfigWithJobDetails(jobDetails, req)
 
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)
@@ -311,4 +312,12 @@ func (a *Activity) SendWebhookNotificationActivity(ctx context.Context, req type
 		return fmt.Errorf("failed to send webhook notification: %w", err)
 	}
 	return nil
+}
+
+// IndicatorActivity is GitOps-only: spawns/deletes a failure indicator.
+func (a *Activity) IndicatorActivity(ctx context.Context, req types.IndicatorRequest) error {
+	log := logger.Log(ctx)
+	log.Info("gitops indicator", "action", req.Action, "name", req.Name, "kind", req.Kind)
+	req.HeartbeatFunc = activity.RecordHeartbeat
+	return a.indicator.Indicator(ctx, &req)
 }

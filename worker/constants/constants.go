@@ -51,12 +51,29 @@ const (
 
 	StateFlag = "--state"
 
+	CatalogFlag          = "--catalog" // legacy alias of --streams
+	StreamsFlag          = "--streams"
+	AvailableStreamsFlag = "--available-streams"
+	SelectedStreamsFlag  = "--selected-streams"
+	StreamsFile          = "streams.json"
+	AvailableStreamsFile = "available_streams.json"
+	SelectedStreamsFile  = "selected_streams.json"
 	// Storage modes (OLAKE_STORAGE_MODE values)
 	StorageModeNFS = "nfs"
 	StorageModeS3  = "s3"
 
 	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
 	MinS3StorageModeVersion = "v0.12.0"
+
+	// GitOps failure indicators (pods in Kubernetes, containers in Docker)
+	IndicatorImage           = "library/busybox:latest"
+	IndicatorMessageMax      = 4096 // kubelet caps the termination message at 4096 bytes
+	IndicatorAnnotationMax   = 1024
+	LabelIndicator           = "olake.io/indicator"
+	LabelIndicatorKind       = "olake.io/kind"
+	LabelIndicatorResource   = "olake.io/resource"
+	LabelIndicatorPhase      = "olake.io/phase"
+	AnnotationIndicatorError = "olake.io/error"
 
 	// Kubernetes ConfigMap names
 	GlobalEnvConfigMap  = "olake-global-env"
