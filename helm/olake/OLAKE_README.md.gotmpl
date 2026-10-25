@@ -37,6 +37,7 @@
 - [Storage Configurations (S3 / MinIO / NFS)](#storage-configurations-s3--minio--nfs)
 - [Core Infrastructure (Temporal & PostgreSQL)](#core-infrastructure-temporal--postgresql)
 - [Optional Add-ons (Fusion & Elasticsearch)](#optional-add-ons-fusion--elasticsearch)
+- [Other Configurations](#other-configurations)
 
 ---
 
@@ -121,3 +122,18 @@ Settings for optional components including Fusion (Apache Amoro for Iceberg comp
 {{- template "tableRow" . }}
 {{- end }}
 {{- end }}
+
+---
+
+## Other Configurations
+
+Miscellaneous and additional configuration parameters that do not belong to the categories above.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if not (or (eq .Key "nameOverride") (eq .Key "fullnameOverride") (eq .Key "useStandardResources") (eq .Key "global") (hasPrefix "global." .Key) (hasPrefix "olakeUI." .Key) (hasPrefix "olakeWorker." .Key) (hasPrefix "jobIndexes" .Key) (hasPrefix "s3LogFileStorage." .Key) (hasPrefix "nfsServer." .Key) (hasPrefix "temporal." .Key) (hasPrefix "postgresql." .Key) (hasPrefix "fusion." .Key) (hasPrefix "elasticsearch." .Key)) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+

@@ -1,4 +1,4 @@
-name: Auto Update Helm Docs
+name: Check Helm Docs
 
 on:
   pull_request:
@@ -6,41 +6,20 @@ on:
       - 'helm/olake/values.yaml'
       - 'helm/olake/Chart.yaml'
       - 'helm/olake/OLAKE_README.md.gotmpl'
-  
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  helm-docs:
+  check-helm-docs:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
-          fetch-depth: 0
-
-      - name: Install official helm-docs
-        run: |
-          HELM_DOCS_VERSION="1.14.2"
-          curl -sSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" | tar -xz
-          sudo mv helm-docs /usr/local/bin/
-          helm-docs --version
 
       - name: Run helm-docs
-        run: |
-          helm-docs --chart-search-root=helm/olake --template-files=OLAKE_README.md.gotmpl --output-file=OLAKE_README.md
+        run: ./scripts/helm-docs.sh
 
-      - name: Auto-commit and push updated OLAKE_README.md
+      - name: Check for documentation changes
         run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          if [[ -n $(git status --porcelain helm/olake/OLAKE_README.md) ]]; then
-            git add helm/olake/OLAKE_README.md
-            git commit -m "docs(helm): auto-update OLAKE_README.md via helm-docs [skip ci]"
-            git push
-          else
-            echo "No documentation changes detected. Working tree is clean."
-          fi
+          git diff --exit-code helm/olake/OLAKE_README.md

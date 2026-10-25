@@ -37,6 +37,7 @@ A Helm chart for OLake UI - Fastest open-source tool for replicating Databases t
 - [Storage Configurations (S3 / MinIO / NFS)](#storage-configurations-s3--minio--nfs)
 - [Core Infrastructure (Temporal & PostgreSQL)](#core-infrastructure-temporal--postgresql)
 - [Optional Add-ons (Fusion & Elasticsearch)](#optional-add-ons-fusion--elasticsearch)
+- [Other Configurations](#other-configurations)
 
 ---
 
@@ -240,3 +241,13 @@ Settings for optional components including Fusion (Apache Amoro for Iceberg comp
 | `fusion.serviceAccount.name` | `string` | `""` | Service account name for Fusion. If not set and `create` is true, a name is generated using the fullname template. |
 | `fusion.shade` | `object` | `{"identifier":"default","sensitiveKeywords":"admin-password;database.password"}` | - Amoro config shade properties |
 | `fusion.tolerations` | `list` | `[]` |  |
+
+---
+
+## Other Configurations
+
+Miscellaneous and additional configuration parameters that do not belong to the categories above.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+
