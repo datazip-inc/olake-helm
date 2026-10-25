@@ -9,7 +9,7 @@
 
 # OLake Helm Chart
 
-![Version: 0.0.30](https://img.shields.io/badge/Version-0.0.30-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
+![Version: 0.0.32](https://img.shields.io/badge/Version-0.0.32-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
 
 A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 
@@ -78,7 +78,7 @@ Settings for the OLake UI frontend dashboard and backend API server, including r
 | `olakeUI.ingress.hosts` | `list` | `[]` | Ingress hosts configuration List of host definitions for ingress. Each host can have multiple paths. Examples:   hosts:     - host: olake.local       paths:         - path: /           pathType: Prefix     - host: olake.example.com       paths:         - path: /           pathType: Prefix |
 | `olakeUI.ingress.tls` | `list` | `[]` | TLS configuration Examples:   tls:     - secretName: olake-tls       hosts:         - olake.example.com |
 | `olakeUI.initUser` | `object` | `{"adminUser":{"email":"admin@example.com","password":"password","username":"admin"},"enabled":true,"existingSecret":"","secretKeys":{"email":"email","password":"password","username":"username"}}` | Initialization user configuration |
-| `olakeUI.initUser.adminUser` | `object` | `{"email":"admin@example.com","password":"password","username":"admin"}` | Credentials for the initial admin user. These values are used only if `existingSecret` is not provided. When Fusion is enabled, the same credentials are used for the Fusion UI and the Fusion optimizer bootstrap job. |
+| `olakeUI.initUser.adminUser` | `object` | `{"email":"admin@example.com","password":"password","username":"admin"}` | Credentials for the initial admin user. These values are used only if `existingSecret` is not provided. When Fusion is enabled, the same credentials are used for the Fusion UI. |
 | `olakeUI.initUser.adminUser.email` | `string` | `"admin@example.com"` | Admin email address |
 | `olakeUI.initUser.adminUser.password` | `string` | `"password"` | Admin password (change this in production!) |
 | `olakeUI.initUser.adminUser.username` | `string` | `"admin"` | Admin username |
@@ -230,7 +230,7 @@ Settings for optional components including Fusion (Apache Amoro for Iceberg comp
 | `fusion.env` | `object` | `{}` | Environment variables for OLake Fusion Add custom environment variables here Example:   env:     CUSTOM_VAR: "value"     FEATURE_FLAG: "true" |
 | `fusion.image` | `object` | `{"pullPolicy":"Always","repository":"olakego/fusion","tag":"latest"}` | - Fusion (Amoro) container image |
 | `fusion.nodeSelector` | `object` | `{}` | - Pod scheduling constraints for the Fusion pod |
-| `fusion.optimizer` | `object` | `{"affinity":{},"nodeSelector":{},"spark":{"desiredParallelism":3,"executor":{"affinity":{},"nodeSelector":{},"tolerations":[]},"extraConfig":{"spark.driver.memory":"1g","spark.dynamicAllocation.enabled":"true","spark.dynamicAllocation.shuffleTracking.enabled":"true","spark.executor.cores":"1","spark.executor.memory":"4g","spark.shuffle.service.enabled":"false"},"image":{"pullPolicy":"Always","repository":"olakego/fusion-spark","tag":"latest"},"jobUri":"local:///opt/spark/usrlib/optimizer-job.jar","properties":{"deploy-mode":"cluster","export.HADOOP_USER_NAME":"spark","export.SPARK_CONF_DIR":"/opt/spark/conf/","master":"k8s://https://kubernetes.default.svc:443","spark-home":"/opt/spark/"}},"tolerations":[]}` | - Optimizer configuration (Spark-on-Kubernetes) |
+| `fusion.optimizer` | `object` | `{"affinity":{},"nodeSelector":{},"resources":{},"spark":{"desiredParallelism":3,"executor":{"affinity":{},"nodeSelector":{},"tolerations":[]},"extraConfig":{"spark.driver.memory":"1g","spark.dynamicAllocation.enabled":"true","spark.dynamicAllocation.shuffleTracking.enabled":"true","spark.executor.cores":"1","spark.executor.memory":"4g","spark.shuffle.service.enabled":"false"},"image":{"pullPolicy":"Always","repository":"olakego/fusion-spark","tag":"latest"},"jobUri":"local:///opt/spark/usrlib/optimizer-job.jar"},"tolerations":[]}` | - Optimizer configuration (Spark-on-Kubernetes) |
 | `fusion.podAnnotations` | `object` | `{}` | Additional pod annotations |
 | `fusion.podLabels` | `object` | `{}` | Additional pod labels |
 | `fusion.resources` | `object` | `{}` | - Fusion pod resource requirements (optional overrides) Example:   resources:     requests:       cpu: "500m"       memory: "1Gi"     limits:       cpu: "1"       memory: "2Gi" |
