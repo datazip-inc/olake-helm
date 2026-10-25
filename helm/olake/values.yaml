@@ -311,8 +311,7 @@ olakeUI:
 
     # -- Credentials for the initial admin user.
     # These values are used only if `existingSecret` is not provided.
-    # When Fusion is enabled, the same credentials are used for the Fusion UI
-    # and the Fusion optimizer bootstrap job.
+    # When Fusion is enabled, the same credentials are used for the Fusion UI.
     adminUser:
       # -- Admin username
       username: "admin"
@@ -876,6 +875,9 @@ fusion:
     nodeSelector: {}
     tolerations: []
     affinity: {}
+    # Resources of the optimizer pod, which is the Spark driver. Must leave room for
+    # spark.driver.memory plus JVM overhead.
+    resources: {}
 
     spark:
       # Desired Spark optimizer parallelism.
@@ -905,15 +907,5 @@ fusion:
         spark.executor.memory: "4g"
         spark.executor.cores: "1"
 
-      # Additional container properties for the Spark optimizer container (map of key->value).
-      # This can be used to set properties like:
-      #   export.JAVA_HOME, export.HADOOP_CONF_DIR, export.SPARK_CONF_DIR, ams-optimizing-uri, etc.
-      # Example:
-      #   properties:
-      #     export.JAVA_HOME: "/usr/lib/jvm/java-17-openjdk"
-      properties:
-        spark-home: "/opt/spark/"
-        master: "k8s://https://kubernetes.default.svc:443"
-        deploy-mode: "cluster"
-        export.HADOOP_USER_NAME: "spark"
-        export.SPARK_CONF_DIR: "/opt/spark/conf/"
+      # fusion.optimizer.spark.properties is no longer used. Set environment variables in
+      # fusion.env, and Spark settings in extraConfig above.
