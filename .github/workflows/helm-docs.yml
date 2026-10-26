@@ -6,6 +6,9 @@ on:
       - 'helm/olake/values.yaml'
       - 'helm/olake/Chart.yaml'
       - 'helm/olake/OLAKE_README.md.gotmpl'
+      - 'helm/olake/OLAKE_README.md'
+      - 'scripts/helm-docs.sh'
+      - '.github/workflows/helm-docs.yml'
 
 permissions:
   contents: read

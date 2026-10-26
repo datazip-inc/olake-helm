@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Navigate to the repository root directory
+cd "$(dirname "$0")/.."
+
 HELM_DOCS_VERSION="v1.14.2"
 
 echo "Running helm-docs via Docker (${HELM_DOCS_VERSION})..."
