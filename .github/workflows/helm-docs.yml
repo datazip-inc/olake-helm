@@ -1,0 +1,25 @@
+name: Check Helm Docs
+
+on:
+  pull_request:
+    paths:
+      - 'helm/olake/values.yaml'
+      - 'helm/olake/Chart.yaml'
+      - 'helm/olake/OLAKE_README.md.gotmpl'
+      - 'helm/olake/OLAKE_README.md'
+      - 'scripts/helm-docs.sh'
+      - 'Makefile'
+      - '.github/workflows/helm-docs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-helm-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check documentation status
+        run: make docs-check

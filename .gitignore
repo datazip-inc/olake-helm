@@ -37,3 +37,6 @@ temp/
 # CocoIndex Code (ccc)
 /.cocoindex_code/
 CLAUDE.local.md
+
+# Local tools binary directory
+.bin/

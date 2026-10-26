@@ -51,6 +51,13 @@ const (
 
 	StateFlag = "--state"
 
+	CatalogFlag          = "--catalog" // legacy alias of --streams
+	StreamsFlag          = "--streams"
+	AvailableStreamsFlag = "--available-streams"
+	SelectedStreamsFlag  = "--selected-streams"
+	StreamsFile          = "streams.json"
+	AvailableStreamsFile = "available_streams.json"
+	SelectedStreamsFile  = "selected_streams.json"
 	// Storage modes (OLAKE_STORAGE_MODE values)
 	StorageModeNFS = "nfs"
 	StorageModeS3  = "s3"
