@@ -78,13 +78,3 @@ data:
   {{- if .Values.global.podAnnotations }}
   OLAKE_JOB_POD_ANNOTATIONS: {{ .Values.global.podAnnotations | toJson | quote }}
   {{- end }}
-
-  # =================================================================
-  # ACTIVITY POD VOLUMES
-  # =================================================================
-  {{- if .Values.global.extraVolumes }}
-  OLAKE_JOB_VOLUMES: {{ .Values.global.extraVolumes | toJson | quote }}
-  {{- end }}
-  {{- if .Values.global.extraVolumeMounts }}
-  OLAKE_JOB_VOLUME_MOUNTS: {{ .Values.global.extraVolumeMounts | toJson | quote }}
-  {{- end }}
