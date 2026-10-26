@@ -288,6 +288,9 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			SubPath:   subDir,
 		}}
 	}
+	// User-supplied volumes and mounts (global.extraVolumes / global.extraVolumeMounts).
+	volumes = append(volumes, k.config.JobVolumes...)
+	volumeMounts = append(volumeMounts, k.config.JobVolumeMounts...)
 
 	envFrom := []corev1.EnvFromSource{
 		{

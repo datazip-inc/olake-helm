@@ -67,6 +67,10 @@ const (
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 
+	// User-supplied volumes and volume mounts (JSON) added to connector pods
+	EnvJobVolumes      = "OLAKE_JOB_VOLUMES"
+	EnvJobVolumeMounts = "OLAKE_JOB_VOLUME_MOUNTS"
+
 	// EnvS3ConfigFolder is the workflow config directory the connector should use.
 	// NFS: /mnt/config (the mounted workflow subdir). S3: s3://bucket/[prefix/]{workflow-dir}.
 	EnvS3ConfigFolder = "OLAKE_S3_CONFIG_FOLDER"
