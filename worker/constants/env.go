@@ -71,6 +71,9 @@ const (
 	EnvJobVolumes      = "OLAKE_JOB_VOLUMES"
 	EnvJobVolumeMounts = "OLAKE_JOB_VOLUME_MOUNTS"
 
+	// User-supplied host bind mounts (JSON) added to connector containers in docker mode
+	EnvJobBindMounts = "OLAKE_JOB_BIND_MOUNTS"
+
 	// EnvS3ConfigFolder is the workflow config directory the connector should use.
 	// NFS: /mnt/config (the mounted workflow subdir). S3: s3://bucket/[prefix/]{workflow-dir}.
 	EnvS3ConfigFolder = "OLAKE_S3_CONFIG_FOLDER"

@@ -96,6 +96,7 @@ func GetWorkerEnvVars() map[string]string {
 		"TEMPORAL_NAMESPACE":      nil,
 		"TEMPORAL_TASK_QUEUE":     nil,
 		"OLAKE_SECRET_KEY":        nil,
+		"OLAKE_JOB_BIND_MOUNTS":   nil,
 		"_":                       nil,
 	}
 
