@@ -496,15 +496,3 @@ func mergeIndexStorage(base, override IndexStorageConfig) IndexStorageConfig {
 	merged.Annotations = mergeStringMaps(base.Annotations, override.Annotations)
 	return merged
 }
-
-// mergeStringMaps returns base with override applied on top, per key. Returns nil
-// when both are empty so the claim carries no empty map.
-func mergeStringMaps(base, override map[string]string) map[string]string {
-	if len(base) == 0 && len(override) == 0 {
-		return nil
-	}
-	merged := make(map[string]string, len(base)+len(override))
-	maps.Copy(merged, base)
-	maps.Copy(merged, override)
-	return merged
-}

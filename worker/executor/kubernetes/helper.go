@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"strings"
 
@@ -140,14 +141,24 @@ func (k *KubernetesExecutor) sanitizeName(name string) string {
 // buildPodAnnotations merges global job pod annotations with olake-internal ones.
 // Global annotations are applied first so internal olake.io/* keys always win on conflict.
 func (k *KubernetesExecutor) buildPodAnnotations(internal map[string]string) map[string]string {
-	annotations := make(map[string]string, len(k.config.JobPodAnnotations)+len(internal))
-	for key, val := range k.config.JobPodAnnotations {
-		annotations[key] = val
+	return mergeStringMaps(k.config.JobPodAnnotations, internal)
+}
+
+// buildPodLabels merges global job pod labels with internal ones; internal keys win.
+func (k *KubernetesExecutor) buildPodLabels(internal map[string]string) map[string]string {
+	return mergeStringMaps(k.config.JobPodLabels, internal)
+}
+
+// mergeStringMaps returns base with override applied on top, per key. Returns nil
+// when both are empty so the object carries no empty map.
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
 	}
-	for key, val := range internal {
-		annotations[key] = val
-	}
-	return annotations
+	merged := make(map[string]string, len(base)+len(override))
+	maps.Copy(merged, base)
+	maps.Copy(merged, override)
+	return merged
 }
 
 // BuildAffinityForJob returns NodeAffinity rules to prevent unmapped jobs from scheduling on nodes reserved for mapped jobs.
