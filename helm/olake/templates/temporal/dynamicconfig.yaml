@@ -1,0 +1,19 @@
+{{- if .Values.temporal.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-dynamicconfig
+  namespace: {{ include "olake.namespace" . }}
+  annotations: {}
+  labels:
+    app.kubernetes.io/name: temporal
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: workflow-engine
+    {{- include "olake.labels" . | nindent 4 }}
+data:
+  # temporalio/server (unlike temporalio/auto-setup) ships without a default
+  # dynamic config file. The server fails to start if DYNAMIC_CONFIG_FILE_PATH
+  # (default: config/dynamicconfig/docker.yaml) doesn't exist, so an empty file
+  # is mounted here purely to satisfy that startup check.
+  docker.yaml: ""
+{{- end }}

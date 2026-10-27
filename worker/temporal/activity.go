@@ -10,11 +10,13 @@ import (
 	"github.com/datazip-inc/olake-helm/worker/executor"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
+	"github.com/datazip-inc/olake-helm/worker/utils/failure"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 	"github.com/datazip-inc/olake-helm/worker/utils/notifications"
 	"github.com/datazip-inc/olake-helm/worker/utils/telemetry"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	tlog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -55,20 +57,24 @@ func (a *Activity) ExecuteActivity(ctx context.Context, req *types.ExecutionRequ
 		}
 		req.IndexRequired = indexRequired
 
-		if err := utils.UpdateConfigForClearDestination(jobDetails, req); err != nil {
+		if err := utils.UpdateConfigForClearDestination(ctx, jobDetails, req); err != nil {
 			return nil, err
 		}
 	}
 
 	// base telemetry payload for non-sync commands; old CLI versions just ignore the file
-	telemetry.WriteConfigs(req, telemetry.BasePayload(req))
+	telemetry.WriteConfigs(req, telemetry.BasePayload(ctx, req))
+
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
+	}
 
 	return a.executor.Execute(ctx, req)
 }
 
 func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest) (*types.ExecutorResponse, error) {
 	log := logger.Log(ctx)
-	log.Info("executing sync activity", "jobID", req.JobID)
+	log.Debug("executing sync activity", "jobID", req.JobID)
 
 	// Record heartbeat before execution
 	activity.RecordHeartbeat(ctx, "executing sync for job %d", req.JobID)
@@ -77,7 +83,7 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// Update the configs with latest
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
-		telemetry.TrackSyncEvent(telemetry.BasePayload(req), telemetry.TelemetryEventFailed, "")
+		telemetry.TrackSyncEvent(telemetry.BasePayload(ctx, req), telemetry.TelemetryEventFailed, "")
 		errMsg := fmt.Sprintf("failed to get job data: %s", err)
 		return nil, temporal.NewNonRetryableApplicationError(errMsg, "DatabaseError", err)
 	}
@@ -103,8 +109,9 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	// calculate run count before sending in telemetry.json
 	attempt := int(activity.GetInfo(ctx).Attempt)
 	runCount := telemetry.GetOrIncrementSyncRunCount(ctx, a.tempClient, req, attempt)
+	log.Info(fmt.Sprintf("Worker %s picked up job %s (id %d), attempt %d", logger.WorkerID(), jobDetails.JobName, req.JobID, attempt))
 	cliTelemetry := telemetry.SupportsCLITelemetry(req.Version)
-	payload := telemetry.BuildPayload(req, jobDetails, runCount)
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, runCount)
 	telemetry.WriteConfigs(req, payload)
 
 	// Remove --state flag if state is empty
@@ -117,6 +124,11 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventStarted, "")
 	}
 
+	if err := utils.ValidateConnectorVersionForStorageMode(req.Version); err != nil {
+		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, "")
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "UnsupportedConnectorVersion", err)
+	}
+
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
 		// CRITICAL: Check if error is because context was cancelled
@@ -125,18 +137,24 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 			return nil, temporal.NewCanceledError("sync activity cancelled")
 		}
 
-		if errors.Is(err, constants.ErrExecutionFailed) {
+		// This is the one place a failed sync is explained to the user; the
+		// executors skip their generic error lines for syncs.
+		var execFailure *failure.ExecutionFailure
+		if errors.As(err, &execFailure) {
 			// if the connector was killed externally (OOM/eviction) it never ran its
 			// own exit telemetry, so the worker sends "failed" regardless of owner
-			reason := telemetry.ExternalKillReason(err)
+			reason := failure.TelemetryReason(execFailure)
 			if !cliTelemetry || reason != "" {
 				telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, reason)
 			}
-			return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
+
+			userMsg := failure.Describe(execFailure)
+			logUserFailure(log, userMsg)
+			return nil, temporal.NewNonRetryableApplicationError(userMsg.Headline, "ExecutionFailed", err)
 		}
 
 		// connector never launched (e.g. image pull / container-create failure)
-		log.Error("sync command failed", "error", err)
+		log.Error(fmt.Sprintf("Sync failed: %s", err))
 		telemetry.TrackSyncEvent(payload, telemetry.TelemetryEventFailed, "")
 		return nil, temporal.NewNonRetryableApplicationError("execution failed", "ExecutionFailed", err)
 	}
@@ -144,9 +162,25 @@ func (a *Activity) SyncActivity(ctx context.Context, req *types.ExecutionRequest
 	return result, nil
 }
 
+// logUserFailure writes the failure explanation to worker.log, where the UI
+// shows it under worker logs: headline, raw details, then the recommendation.
+func logUserFailure(log tlog.Logger, msg failure.UserMessage) {
+	log.Error(msg.Headline)
+	if msg.Details != "" {
+		log.Error(msg.Details)
+	}
+	if msg.Tip != "" {
+		log.Info(msg.Tip, "tip", true)
+	}
+}
+
 func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionRequest, status syncStatus) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	// After telemetry below, not in Cleanup: this activity still logs on the writer.
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
-	log.Info("cleaning up sync for job", "jobID", req.JobID)
+	log.Debug("cleaning up sync for job", "jobID", req.JobID)
 
 	jobDetails, err := a.db.GetJobData(ctx, req.JobID)
 	if err != nil {
@@ -164,7 +198,7 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 		return temporal.NewNonRetryableApplicationError(err.Error(), "cleanup failed", err)
 	}
 
-	payload := telemetry.BuildPayload(req, jobDetails, telemetry.ReadSyncRunCount(req.JobID))
+	payload := telemetry.BuildPayload(ctx, req, jobDetails, telemetry.ReadSyncRunCount(ctx, req.JobID))
 
 	switch status {
 	case syncStatusSuccess:
@@ -193,6 +227,9 @@ func (a *Activity) PostSyncActivity(ctx context.Context, req *types.ExecutionReq
 // Without these steps, the schedule would remain paused and stuck in clear-destination mode,
 // preventing all future sync runs.
 func (a *Activity) PostClearActivity(ctx context.Context, req *types.ExecutionRequest) error {
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	defer utils.ReleaseWorkerLogWriter(workDir)
+
 	log := logger.Log(ctx)
 	log.Info("cleaning up clear-destination for job", "jobID", req.JobID)
 

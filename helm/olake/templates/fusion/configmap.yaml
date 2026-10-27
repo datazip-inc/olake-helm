@@ -24,6 +24,8 @@ data:
       optimizer:
         task-execute-timeout: 1h
         max-planning-parallelism: {{ .Values.fusion.optimizer.spark.desiredParallelism }}
+        bootstrap:
+          group-name: spark-container
 
       {{- if or .Values.fusion.shade.identifier .Values.fusion.shade.sensitiveKeywords }}
       shade:
@@ -163,5 +165,4 @@ data:
         enabled: true
         priority: 100
   {{- end }}
-
 {{- end }}

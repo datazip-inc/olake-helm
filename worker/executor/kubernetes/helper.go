@@ -1,15 +1,15 @@
 package kubernetes
 
 import (
-	"slices"
+	"maps"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
+	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -18,7 +18,7 @@ import (
 // Only applies node mapping for async operations (sync, clear destination)
 func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Command) map[string]string {
 	// Check profiles for async operations
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if profile.NodeSelector != nil {
 				return profile.NodeSelector
@@ -37,7 +37,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 
 	// [TO BE DEPRECATED]
 	// Try specific mapping (Preferred)
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if mapping, exists := k.configWatcher.GetJobMapping(jobID); exists {
 			logger.Infof("found node mapping for JobID %d: %v", jobID, mapping)
 			return mapping
@@ -58,7 +58,7 @@ func (k *KubernetesExecutor) GetNodeSelectorForJob(jobID int, operation types.Co
 // GetTolerationsForJob returns tolerations for the given jobID
 func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Command) []corev1.Toleration {
 	// 1. Check specific profile
-	if slices.Contains(constants.AsyncCommands, operation) {
+	if utils.IsAsyncCommand(operation) {
 		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists {
 			if len(profile.Tolerations) > 0 {
 				return profile.Tolerations
@@ -80,6 +80,41 @@ func (k *KubernetesExecutor) GetTolerationsForJob(jobID int, operation types.Com
 	return []corev1.Toleration{}
 }
 
+// defaultJobResources applies when no job profile sets resources: a small request
+// so the pod schedules, and no limits for flexibility.
+func defaultJobResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+		},
+	}
+}
+
+// hasResources treats `resources: {}` as unset so it cannot strip the pod's requests
+func hasResources(r *corev1.ResourceRequirements) bool {
+	return r != nil && (len(r.Requests) > 0 || len(r.Limits) > 0)
+}
+
+// GetResourcesForJob returns container resources for the given jobID.
+// A job's own profile applies only to async operations (sync, clear destination).
+// A profile without resources falls back to the default profile, then to the built-in default.
+func (k *KubernetesExecutor) GetResourcesForJob(jobID int, operation types.Command) corev1.ResourceRequirements {
+	// 1. Check specific profile
+	if utils.IsAsyncCommand(operation) {
+		if profile, exists := k.configWatcher.GetJobProfile(jobID); exists && hasResources(profile.Resources) {
+			return *profile.Resources.DeepCopy()
+		}
+	}
+
+	// 2. Check default profile
+	if profile, exists := k.configWatcher.GetJobProfile(0); exists && hasResources(profile.Resources) {
+		return *profile.Resources.DeepCopy()
+	}
+
+	return defaultJobResources()
+}
+
 func (k *KubernetesExecutor) sanitizeName(name string) string {
 	name = strings.ToLower(name)
 
@@ -99,22 +134,27 @@ func (k *KubernetesExecutor) sanitizeName(name string) string {
 	return name
 }
 
-func (k *KubernetesExecutor) parseQuantity(s string) resource.Quantity {
-	q, _ := resource.ParseQuantity(s)
-	return q
-}
-
 // buildPodAnnotations merges global job pod annotations with olake-internal ones.
 // Global annotations are applied first so internal olake.io/* keys always win on conflict.
 func (k *KubernetesExecutor) buildPodAnnotations(internal map[string]string) map[string]string {
-	annotations := make(map[string]string, len(k.config.JobPodAnnotations)+len(internal))
-	for key, val := range k.config.JobPodAnnotations {
-		annotations[key] = val
+	return mergeStringMaps(k.config.JobPodAnnotations, internal)
+}
+
+// buildPodLabels merges global job pod labels with internal ones; internal keys win.
+func (k *KubernetesExecutor) buildPodLabels(internal map[string]string) map[string]string {
+	return mergeStringMaps(k.config.JobPodLabels, internal)
+}
+
+// mergeStringMaps returns base with override applied on top, per key. Returns nil
+// when both are empty so the object carries no empty map.
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
 	}
-	for key, val := range internal {
-		annotations[key] = val
-	}
-	return annotations
+	merged := make(map[string]string, len(base)+len(override))
+	maps.Copy(merged, base)
+	maps.Copy(merged, override)
+	return merged
 }
 
 // BuildAffinityForJob returns NodeAffinity rules to prevent unmapped jobs from scheduling on nodes reserved for mapped jobs.
@@ -152,7 +192,7 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 
 	// For non-async operations, don't auto-generate anti-affinity
 	// They should only use explicit configs (profiles or mappings)
-	if !slices.Contains(constants.AsyncCommands, operation) {
+	if !utils.IsAsyncCommand(operation) {
 		return nil
 	}
 

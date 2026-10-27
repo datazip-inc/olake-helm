@@ -12,6 +12,10 @@ metadata:
     {{- include "olake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  {{- if and .Values.temporal.server.strategy .Values.temporal.server.strategy.type }}
+  strategy:
+    {{- toYaml .Values.temporal.server.strategy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: temporal
@@ -79,6 +83,73 @@ spec:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+      - name: migrate-schema
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.temporal.adminTools.image.repository }}:{{ .Values.temporal.adminTools.image.tag }}"
+        imagePullPolicy: {{ .Values.temporal.adminTools.image.pullPolicy }}
+        env:
+        - name: POSTGRES_SEEDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}port{{ else }}{{ .Values.postgresql.external.secretKeys.port }}{{ end }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}username{{ else }}{{ .Values.postgresql.external.secretKeys.username }}{{ end }}
+        - name: SQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}password{{ else }}{{ .Values.postgresql.external.secretKeys.password }}{{ end }}
+        - name: DBNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "olake.postgresql.secretName" . }}
+              key: {{ if .Values.postgresql.enabled }}database{{ else }}{{ .Values.postgresql.external.secretKeys.temporal_database }}{{ end }}
+        {{- $sslConfig := dict "mode" "disable" }}
+        {{- if not .Values.postgresql.enabled }}
+          {{- if .Values.postgresql.external.existingSecret }}
+            {{- with lookup "v1" "Secret" .Release.Namespace .Values.postgresql.external.existingSecret }}
+              {{- $key := $.Values.postgresql.external.secretKeys.ssl_mode }}
+              {{- if and .data (hasKey .data $key) }}
+                {{- $_ := set $sslConfig "mode" (index .data $key | b64dec) }}
+              {{- end }}
+            {{- end }}
+          {{- else }}
+            {{- $_ := set $sslConfig "mode" .Values.postgresql.external.properties.ssl_mode }}
+          {{- end }}
+        {{- end }}
+        {{- if ne $sslConfig.mode "disable" }}
+        - name: SQL_TLS
+          value: "true"
+        - name: SQL_TLS_DISABLE_HOST_VERIFICATION
+          value: "true"
+        {{- end }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          echo "Starting PostgreSQL schema setup..."
+          DB_NAME_MAIN="$DBNAME"
+          DB_NAME_VIS=temporal_visibility
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_MAIN" create \
+            || echo "  (create skipped: database already exists)"
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_MAIN" setup-schema -v 0.0 \
+            || echo "  (setup-schema skipped: already initialized)"
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_MAIN" update-schema -d /etc/temporal/schema/postgresql/v12/temporal/versioned
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_VIS" create \
+            || echo "  (create skipped: database already exists)"
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_VIS" setup-schema -v 0.0 \
+            || echo "  (setup-schema skipped: already initialized)"
+          temporal-sql-tool --plugin postgres12 --ep "$POSTGRES_SEEDS" -u "$POSTGRES_USER" -p "$DB_PORT" --db "$DB_NAME_VIS" update-schema -d /etc/temporal/schema/postgresql/v12/visibility/versioned
+          echo "PostgreSQL schema setup complete"
       containers:
       - name: temporal
         image: "{{ include "olake.registryBase" . }}/{{ .Values.temporal.server.image.repository }}:{{ .Values.temporal.server.image.tag }}"
@@ -90,6 +161,8 @@ spec:
         env:
         - name: DB
           value: "postgres12"
+        - name: BIND_ON_IP
+          value: "0.0.0.0"
         - name: DB_PORT
           valueFrom:
             secretKeyRef:
@@ -111,14 +184,10 @@ spec:
               name: {{ include "olake.postgresql.secretName" . }}
               key: {{ if .Values.postgresql.enabled }}host{{ else }}{{ .Values.postgresql.external.secretKeys.host }}{{ end }}
         - name: DBNAME
-          {{- if .Values.postgresql.enabled }}
-          value: "temporal"
-          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ include "olake.postgresql.secretName" . }}
-              key: {{ .Values.postgresql.external.secretKeys.temporal_database }}
-          {{- end }}
+              key: {{ if .Values.postgresql.enabled }}database{{ else }}{{ .Values.postgresql.external.secretKeys.temporal_database }}{{ end }}
         {{- $sslConfig := dict "mode" "disable" }}
         {{- if not .Values.postgresql.enabled }}
           {{- if .Values.postgresql.external.existingSecret }}
@@ -178,4 +247,11 @@ spec:
         {{- $livenessProbe := mergeOverwrite $defaultLivenessProbe (.Values.temporal.server.livenessProbe | default dict) }}
         livenessProbe:
           {{- toYaml $livenessProbe | nindent 10 }}
+        volumeMounts:
+        - name: dynamicconfig
+          mountPath: /etc/temporal/config/dynamicconfig
+      volumes:
+      - name: dynamicconfig
+        configMap:
+          name: temporal-dynamicconfig
 {{- end }}

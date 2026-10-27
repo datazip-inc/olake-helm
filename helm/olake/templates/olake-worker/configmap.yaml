@@ -15,7 +15,9 @@ data:
   
   # Kubernetes Configuration
   WORKER_NAMESPACE: {{ include "olake.namespace" . | quote }}
+  {{- if eq (include "olake.storageMode" .) "nfs" }}
   OLAKE_STORAGE_PVC_NAME: {{ include "olake.sharedStoragePVC" . | quote }}
+  {{- end }}
 
   # Logging Configuration
   LOG_LEVEL: {{ .Values.olakeWorker.config.logging.level | quote }}
@@ -75,4 +77,11 @@ data:
   # =================================================================
   {{- if .Values.global.podAnnotations }}
   OLAKE_JOB_POD_ANNOTATIONS: {{ .Values.global.podAnnotations | toJson | quote }}
+  {{- end }}
+  {{- if .Values.global.jobPodLabels }}
+  {{- $jobPodLabels := dict }}
+  {{- range $key, $value := .Values.global.jobPodLabels }}
+  {{- $_ := set $jobPodLabels $key (toString $value) }}{{/* unquoted true must stay a string */}}
+  {{- end }}
+  OLAKE_JOB_POD_LABELS: {{ $jobPodLabels | toJson | quote }}
   {{- end }}

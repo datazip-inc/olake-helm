@@ -1,0 +1,139 @@
+{{- define "tableRow" }}
+| `{{ .Key }}` | `{{ .Type }}` | {{ if .Default }}{{ .Default }}{{ else }}{{ .AutoDefault }}{{ end }} | {{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }} |
+{{- end }}
+
+<h1 align="center" style="border-bottom: none">
+    <a href="https://datazip.io/olake" target="_blank">
+        <img alt="olake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
+    </a>
+    <br>OLake
+</h1>
+
+# OLake Helm Chart
+
+{{ template "chart.versionBadge" . }} {{ template "chart.typeBadge" . }} {{ template "chart.appVersionBadge" . }}
+
+{{ template "chart.description" . }}
+
+**Homepage:** <{{ template "chart.homepage" . }}>
+
+## Maintainers
+
+{{ template "chart.maintainersTable" . }}
+
+## Source Code
+
+{{ template "chart.sourcesList" . }}
+
+> **Note:** This document provides a categorized reference of all configuration values for the OLake Helm Chart. For general architecture, prerequisites, installation, and deployment guides, please refer to the main [README.md](./README.md).
+
+---
+
+## Table of Contents
+
+- [Global & Common Configurations](#global--common-configurations)
+- [OLake UI Configurations](#olake-ui-configurations)
+- [OLake Worker & Job Execution](#olake-worker--job-execution)
+- [Storage Configurations (S3 / MinIO / NFS)](#storage-configurations-s3--minio--nfs)
+- [Core Infrastructure (Temporal & PostgreSQL)](#core-infrastructure-temporal--postgresql)
+- [Optional Add-ons (Fusion & Elasticsearch)](#optional-add-ons-fusion--elasticsearch)
+- [Other Configurations](#other-configurations)
+
+---
+
+## Global & Common Configurations
+
+Configurations that apply globally across all components, or manage standard Kubernetes resource behaviors.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (eq .Key "nameOverride") (eq .Key "fullnameOverride") (eq .Key "useStandardResources") (eq .Key "global") (hasPrefix "global." .Key) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## OLake UI Configurations
+
+Settings for the OLake UI frontend dashboard and backend API server, including replicas, ingress, authentication, and service settings.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "olakeUI." .Key }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## OLake Worker & Job Execution
+
+Configurations for the Temporal worker service that executes ingestion jobs, pod scheduling profiles, and per-job Pebble index storage volumes.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "olakeWorker." .Key) (hasPrefix "jobIndexes" .Key) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## Storage Configurations (S3 / MinIO / NFS)
+
+Settings for shared file and log storage between the worker and connector pods. Supports both S3-compatible object storage (MinIO or AWS S3) and shared NFS.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "s3LogFileStorage." .Key) (hasPrefix "nfsServer." .Key) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## Core Infrastructure (Temporal & PostgreSQL)
+
+Configurations for the underlying workflow orchestration engine (Temporal) and metadata persistence database (PostgreSQL).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "temporal." .Key) (hasPrefix "postgresql." .Key) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## Optional Add-ons (Fusion & Elasticsearch)
+
+Settings for optional components including Fusion (Apache Amoro for Iceberg compaction) and Elasticsearch (for Temporal advanced visibility).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "fusion." .Key) (hasPrefix "elasticsearch." .Key) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+
+---
+
+## Other Configurations
+
+Miscellaneous and additional configuration parameters that do not belong to the categories above.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if not (or (eq .Key "nameOverride") (eq .Key "fullnameOverride") (eq .Key "useStandardResources") (eq .Key "global") (hasPrefix "global." .Key) (hasPrefix "olakeUI." .Key) (hasPrefix "olakeWorker." .Key) (hasPrefix "jobIndexes" .Key) (hasPrefix "s3LogFileStorage." .Key) (hasPrefix "nfsServer." .Key) (hasPrefix "temporal." .Key) (hasPrefix "postgresql." .Key) (hasPrefix "fusion." .Key) (hasPrefix "elasticsearch." .Key)) }}
+{{- template "tableRow" . }}
+{{- end }}
+{{- end }}
+

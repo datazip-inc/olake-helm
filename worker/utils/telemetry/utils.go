@@ -1,8 +1,8 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -39,12 +39,12 @@ type TelemetryPayload struct {
 }
 
 // BuildPayload assembles the full sync telemetry payload.
-func BuildPayload(req *types.ExecutionRequest, job types.JobData, runCount int) TelemetryPayload {
+func BuildPayload(ctx context.Context, req *types.ExecutionRequest, job types.JobData, runCount int) TelemetryPayload {
 	return TelemetryPayload{
 		WorkflowID:         req.WorkflowID,
 		SchemaVersion:      schemaVersion,
 		Service:            serviceUI,
-		DistinctID:         utils.GetTelemetryUserID(),
+		DistinctID:         utils.GetTelemetryUserID(ctx),
 		JobID:              req.JobID,
 		JobName:            job.JobName,
 		Environment:        utils.GetExecutorEnvironment(),
@@ -60,12 +60,12 @@ func BuildPayload(req *types.ExecutionRequest, job types.JobData, runCount int) 
 
 // BasePayload assembles telemetry payload for commands with no job data
 // (discover/check/spec), or as a fallback when job data can't be fetched.
-func BasePayload(req *types.ExecutionRequest) TelemetryPayload {
+func BasePayload(ctx context.Context, req *types.ExecutionRequest) TelemetryPayload {
 	return TelemetryPayload{
 		WorkflowID:    req.WorkflowID,
 		SchemaVersion: schemaVersion,
 		Service:       serviceUI,
-		DistinctID:    utils.GetTelemetryUserID(),
+		DistinctID:    utils.GetTelemetryUserID(ctx),
 		JobID:         req.JobID,
 		Environment:   utils.GetExecutorEnvironment(),
 	}
@@ -116,25 +116,4 @@ func WriteConfigs(req *types.ExecutionRequest, payload TelemetryPayload) {
 // if version is unparsable then worker sends the events
 func SupportsCLITelemetry(version string) bool {
 	return semver.IsValid(version) && semver.Compare(version, cliTelemetryMinVersion) >= 0
-}
-
-// ExternalKillReason reports whether an ErrExecutionFailed error indicates
-// the connector was killed externally rather than exiting on its own, by
-// reading the reason kubernetes already puts in the error text. Returns ""
-// when it wasn't an external kill, or the reason can't be determined.
-//
-// NOTE: Docker's wait path only reports a bare exit code, so OOM kills go
-// undetected there. Needs an extra ContainerInspect for State.OOMKilled.
-func ExternalKillReason(err error) string {
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "OOMKilled"):
-		return "oom_killed"
-	case strings.Contains(msg, "Evicted"):
-		return "evicted"
-	case strings.Contains(msg, "DeadlineExceeded"):
-		return "deadline_exceeded"
-	default:
-		return ""
-	}
 }

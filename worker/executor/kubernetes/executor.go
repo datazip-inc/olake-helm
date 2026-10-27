@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
+	"github.com/datazip-inc/olake-helm/worker/storage"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -30,15 +30,17 @@ type KubernetesExecutor struct {
 }
 
 type KubernetesConfig struct {
-	Namespace          string
-	PVCName            string
-	ServiceAccount     string
-	JobServiceAccount  string
-	SecretKey          string
-	BasePath           string
-	WorkerIdentity     string
-	SecurityContext    *corev1.PodSecurityContext
-	JobPodAnnotations  map[string]string
+	Namespace           string
+	PVCName             string
+	S3CredentialsSecret string
+	ServiceAccount      string
+	JobServiceAccount   string
+	SecretKey           string
+	BasePath            string
+	WorkerIdentity      string
+	SecurityContext     *corev1.PodSecurityContext
+	JobPodAnnotations   map[string]string
+	JobPodLabels        map[string]string
 }
 
 func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
@@ -63,10 +65,11 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 	// Get config from environment
 	namespace := viper.GetString(constants.EnvNamespace)
 	pvcName := viper.GetString(constants.EnvStoragePVCName)
+	s3CredentialsSecret := viper.GetString(constants.EnvS3CredentialsSecret)
 	serviceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	jobServiceAccount := viper.GetString(constants.EnvJobServiceAccountName)
 	secretKey := viper.GetString(constants.EnvSecretKey)
-	basePath := utils.GetConfigDir()
+	basePath := storage.ConfigDir()
 
 	// Parse security context JSON if available
 	var securityContext *corev1.PodSecurityContext
@@ -89,6 +92,14 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
+	var jobPodLabels map[string]string
+	if raw := viper.GetString(constants.EnvJobPodLabels); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &jobPodLabels); err != nil {
+			logger.Errorf("failed to unmarshal job pod labels: %s. using default.", err)
+			jobPodLabels = nil
+		}
+	}
+
 	// Set worker identity
 	podName := viper.GetString(constants.EnvPodName)
 	workerIdenttity := fmt.Sprintf("olake.io/olake-workers/%s", podName)
@@ -103,15 +114,17 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		namespace:     namespace,
 		configWatcher: watcher,
 		config: &KubernetesConfig{
-			Namespace:         namespace,
-			PVCName:           pvcName,
-			ServiceAccount:    serviceAccount,
-			JobServiceAccount: jobServiceAccount,
-			SecretKey:         secretKey,
-			BasePath:          basePath,
-			WorkerIdentity:    workerIdenttity,
-			SecurityContext:   securityContext,
-			JobPodAnnotations: jobPodAnnotations,
+			Namespace:           namespace,
+			PVCName:             pvcName,
+			S3CredentialsSecret: s3CredentialsSecret,
+			ServiceAccount:      serviceAccount,
+			JobServiceAccount:   jobServiceAccount,
+			SecretKey:           secretKey,
+			BasePath:            basePath,
+			WorkerIdentity:      workerIdenttity,
+			SecurityContext:     securityContext,
+			JobPodAnnotations:   jobPodAnnotations,
+			JobPodLabels:        jobPodLabels,
 		},
 	}, nil
 }
@@ -128,15 +141,16 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 	}
 
 	podSpec := k.CreatePodSpec(req, workdir, imageName, indexVolume)
-	log.Info("creating pod", "podName", podSpec.Name, "image", imageName)
+	log.Info(fmt.Sprintf("Starting pod %s with image %s", podSpec.Name, imageName))
 
 	if _, err := k.createPod(ctx, podSpec); err != nil {
 		log.Error("failed to create pod", "podName", podSpec.Name, "error", err)
 		return "", err
 	}
 
-	if !slices.Contains(constants.AsyncCommands, req.Command) {
+	if !utils.IsAsyncCommand(req.Command) {
 		defer func() {
+			utils.ReleaseConnectorLogCollector(workdir)
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*constants.ContainerCleanupTimeout)
 			defer cancel()
 
@@ -146,12 +160,23 @@ func (k *KubernetesExecutor) Execute(ctx context.Context, req *types.ExecutionRe
 		}()
 	}
 
+	if storage.Mode() == constants.StorageModeS3 {
+		// Stream connector logs to S3 while the pod runs; Release later stops it with a final catch-up and flush.
+		if err := utils.AcquireConnectorLogCollector(ctx, workdir, func() (*utils.ConnectorLogCollector, error) {
+			return NewPodLogCollector(ctx, k, req.WorkflowID, workdir)
+		}); err != nil {
+			return "", fmt.Errorf("failed to start connector log collector: %s", err)
+		}
+	}
+
 	if err := k.waitForPodCompletion(ctx, podSpec.Name, req.Timeout, req.HeartbeatFunc); err != nil {
-		log.Error("pod failed to complete", "podName", podSpec.Name, "error", err)
+		if req.Command != types.Sync { // SyncActivity explains sync failures itself
+			log.Error("pod failed to complete", "podName", podSpec.Name, "error", err)
+		}
 		return "", err
 	}
 
-	logs, err := k.getPodLogs(ctx, podSpec.Name)
+	logs, err := k.getPodLogs(ctx, podSpec.Name, nil)
 	if err != nil {
 		log.Error("failed to get pod logs", "podName", podSpec.Name, "error", err)
 		return "", fmt.Errorf("failed to get pod logs: %s", err)
@@ -164,6 +189,9 @@ func (k *KubernetesExecutor) Cleanup(ctx context.Context, req *types.ExecutionRe
 	log := logger.Log(ctx)
 	podName := k.sanitizeName(req.WorkflowID)
 	log.Info("cleaning up pod", "podName", podName, "workflowID", req.WorkflowID)
+
+	_, workDir := utils.GetWorkflowDirAndSubDir(req.WorkflowID, req.Command)
+	utils.ReleaseConnectorLogCollector(workDir)
 
 	if err := k.cleanupPod(ctx, podName); err != nil {
 		log.Error("failed to cleanup pod", "podName", podName, "error", err)
