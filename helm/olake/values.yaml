@@ -114,6 +114,10 @@ global:
     # Permissions for AWS Glue catalog: https://olake.io/docs/writers/iceberg/catalog/glue#required-iam-permissions
     annotations: {}
 
+  # -- Extra labels for activity pods; internal labels win.
+  # Azure Workload Identity needs: azure.workload.identity/use: "true"
+  jobPodLabels: {}
+
   # -- Global environment variables that apply to all OLake components
   # These variables are inherited by all services (olakeUI, olakeWorker)
   # Individual component env sections can override these values if needed

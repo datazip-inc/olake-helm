@@ -327,6 +327,10 @@ global:
       
       # Azure Workload Identity
       azure.workload.identity/client-id: "12345678-1234-1234-1234-123456789012"
+
+  # Azure Workload Identity also needs this label on activity pods
+  jobPodLabels:
+    azure.workload.identity/use: "true"
 ```
 
 ### Encryption Configuration

@@ -121,3 +121,24 @@ func TestGetResourcesForJobReturnsCopy(t *testing.T) {
 		t.Errorf("mutating returned resources changed the shared profile: got %s", mem.String())
 	}
 }
+
+func TestBuildPodLabels(t *testing.T) {
+	k := &KubernetesExecutor{config: &KubernetesConfig{JobPodLabels: map[string]string{
+		"azure.workload.identity/use":  "true",
+		"app.kubernetes.io/managed-by": "someone-else",
+	}}}
+
+	got := k.buildPodLabels(map[string]string{
+		"app.kubernetes.io/managed-by": "olake-workers",
+		"olake.io/job-id":              "7",
+	})
+
+	want := map[string]string{
+		"azure.workload.identity/use":  "true",
+		"app.kubernetes.io/managed-by": "olake-workers",
+		"olake.io/job-id":              "7",
+	}
+	if !apiequality.Semantic.DeepEqual(got, want) {
+		t.Fatalf("buildPodLabels() = %v, want %v", got, want)
+	}
+}
