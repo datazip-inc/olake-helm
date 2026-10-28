@@ -96,9 +96,8 @@ global:
 ### When you add or change a value
 
 1. Add or update the `# --` comment in `values.yaml`.
-2. Update `helm/olake/values.schema.json` to match.
-3. For a new top-level key, add it to a category in `helm/olake/OLAKE_README.md.gotmpl`. Otherwise it is listed under "Other Configurations".
-4. Run the checks and commit the regenerated `OLAKE_README.md`:
+2. For a new top-level key, add it to a category in `helm/olake/OLAKE_README.md.gotmpl`. Otherwise it is listed under "Other Configurations".
+3. Run the checks and commit the regenerated `OLAKE_README.md`:
 
 ```bash
 make lint
@@ -107,7 +106,7 @@ make docs
 
 `make docs` uses `helm-docs` from your `PATH` if it is the pinned version. Otherwise it downloads that version into `.bin/` and verifies its checksum first.
 
-CI runs `make docs-check` on every pull request that touches the chart values, template or docs tooling. It fails if `OLAKE_README.md` is out of date.
+CI runs `make lint` and `make docs-check` on every pull request that touches the chart or the docs tooling. `docs-check` fails if `OLAKE_README.md` is out of date.
 
 ## Testing your changes
 
