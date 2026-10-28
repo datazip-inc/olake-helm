@@ -248,6 +248,15 @@ var reservedVolumeNames = map[string]struct{}{
 	"index-storage": {},
 }
 
+// unmarshalStrict unmarshals raw into v and rejects unknown fields, so a typo in a
+// volume or mount key fails at startup instead of leaving the pod spec without
+// the setting and being rejected by the API server on every sync.
+func unmarshalStrict(raw string, v any) error {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
+}
+
 // parseJobVolumes decodes and validates the user-supplied connector pod volumes and
 // mounts (global.extraVolumes / global.extraVolumeMounts). Empty inputs yield nothing.
 func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.VolumeMount, error) {
@@ -256,12 +265,12 @@ func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.
 		mounts  []corev1.VolumeMount
 	)
 	if volumesJSON != "" {
-		if err := json.Unmarshal([]byte(volumesJSON), &volumes); err != nil {
+		if err := unmarshalStrict(volumesJSON, &volumes); err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal job volumes: %w", err)
 		}
 	}
 	if mountsJSON != "" {
-		if err := json.Unmarshal([]byte(mountsJSON), &mounts); err != nil {
+		if err := unmarshalStrict(mountsJSON, &mounts); err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal job volume mounts: %w", err)
 		}
 	}

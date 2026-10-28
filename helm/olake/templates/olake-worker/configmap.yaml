@@ -78,6 +78,13 @@ data:
   {{- if .Values.global.podAnnotations }}
   OLAKE_JOB_POD_ANNOTATIONS: {{ .Values.global.podAnnotations | toJson | quote }}
   {{- end }}
+  {{- if .Values.global.jobPodLabels }}
+  {{- $jobPodLabels := dict }}
+  {{- range $key, $value := .Values.global.jobPodLabels }}
+  {{- $_ := set $jobPodLabels $key (toString $value) }}{{/* unquoted true must stay a string */}}
+  {{- end }}
+  OLAKE_JOB_POD_LABELS: {{ $jobPodLabels | toJson | quote }}
+  {{- end }}
 
   # =================================================================
   # ACTIVITY POD VOLUMES
@@ -87,11 +94,4 @@ data:
   {{- end }}
   {{- if .Values.global.extraVolumeMounts }}
   OLAKE_JOB_VOLUME_MOUNTS: {{ .Values.global.extraVolumeMounts | toJson | quote }}
-  {{- end }}
-  {{- if .Values.global.jobPodLabels }}
-  {{- $jobPodLabels := dict }}
-  {{- range $key, $value := .Values.global.jobPodLabels }}
-  {{- $_ := set $jobPodLabels $key (toString $value) }}{{/* unquoted true must stay a string */}}
-  {{- end }}
-  OLAKE_JOB_POD_LABELS: {{ $jobPodLabels | toJson | quote }}
   {{- end }}

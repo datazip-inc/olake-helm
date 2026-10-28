@@ -43,8 +43,8 @@ global:
   #     linkerd.io/inject: enabled
   podAnnotations: {}
 
-  # -- Extra volumes added to connector job pods (the pods olake-workers spawns for
-  # test/discover/sync). Standard Kubernetes volume specs. Mount them with extraVolumeMounts.
+  # -- Extra volumes added to connector job pods (the pods olake-workers spawns).
+  # Standard Kubernetes volume specs. Mount them with extraVolumeMounts.
   # Referenced ConfigMaps/Secrets must exist in the release namespace.
   # Example (custom CA from a ConfigMap, client key from a Secret):
   #   extraVolumes:
@@ -59,12 +59,15 @@ global:
   # -- Mounts for the volumes above, applied to the connector container.
   # Every `name` must match an entry in extraVolumes; mountPath values must be unique and
   # cannot be `/` or inside the shared config directory (/mnt/config).
+  # `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
   # Example:
   #   extraVolumeMounts:
   #     - name: custom-ca
   #       mountPath: /etc/ssl/custom-certs
+  #       readOnly: true
   #     - name: client-key
   #       mountPath: /etc/ssl/client-key
+  #       readOnly: true
   extraVolumeMounts: []
 
   # -- [DEPRECATED] JobID-based node mapping configuration
