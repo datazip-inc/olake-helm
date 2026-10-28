@@ -21,6 +21,13 @@ Please delete options that are not relevant. -->
 - [ ] Scenario A
 - [ ] Scenario B
 
+## Checklist
+
+<!-- See CONTRIBUTING.md for details. -->
+
+- [ ] PR title follows Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...)
+- [ ] If `values.yaml` changed: updated `values.schema.json`, ran `make lint` and `make docs`, and committed `OLAKE_README.md`
+
 # Screenshots or Recordings
 <!-- Attach related screenshots or recordings here -->
 
