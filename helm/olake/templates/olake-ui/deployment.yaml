@@ -148,8 +148,8 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         {{- if .Values.gitops.enabled }}
-        - name: GITOPS_ENABLED
-          value: "true"
+        - name: GITOPS_MODE
+          value: kubernetes
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

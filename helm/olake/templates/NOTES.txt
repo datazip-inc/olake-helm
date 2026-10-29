@@ -73,7 +73,7 @@
 {{- if .Values.gitops.enabled }}
 
 🔄 GITOPS:
-   Embedded reconciler enabled (GITOPS_ENABLED=true).
+   Embedded reconciler enabled (GITOPS_MODE=kubernetes).
    - Managed objects: labelled ConfigMaps (see examples/gitops/)
    - Docs: helm/olake/docs/gitops.md
    - Failure indicators: worker-owned Pods (Temporal IndicatorWorkflow)
