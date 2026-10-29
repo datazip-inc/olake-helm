@@ -5,6 +5,7 @@ type: application
 version: 0.0.32
 appVersion: "0.3.11"
 home: https://github.com/datazip-inc/olake-helm
+icon: https://olake.io/img/logo/olake-blue.svg
 sources:
   - https://github.com/datazip-inc/olake-helm
 keywords:
