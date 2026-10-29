@@ -1,0 +1,22 @@
+name: Lint Helm Chart
+
+on:
+  pull_request:
+    paths:
+      - 'helm/**'
+      - 'Makefile'
+      - '.github/workflows/helm-lint.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Helm is preinstalled on GitHub-hosted Ubuntu runners
+      - name: Lint chart
+        run: make lint
