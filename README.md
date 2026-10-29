@@ -28,7 +28,7 @@ Chart documentation is available in [olake directory](./helm/olake/README.md).
 
 We ❤️ contributions! Check our [Bounty Program](https://olake.io/docs/community/issues-and-prs#goodies).
 
-- Chart contributions: Please submit issues and pull requests to this repository
+- Chart contributions: Please submit issues and pull requests to this repository. See [CONTRIBUTING.md](./CONTRIBUTING.md) for branching, commit and review conventions.
 - Core contributions: [OLake Main Repository](https://github.com/datazip-inc/olake)
 - Documentation: [OLake Docs Repository](https://github.com/datazip-inc/olake-docs)
 
