@@ -1,0 +1,9 @@
+# Artifact Hub repository metadata file
+# https://artifacthub.io/docs/topics/repositories/
+# Served from https://datazip-inc.github.io/olake-helm/artifacthub-repo.yml next to index.yaml.
+# repositoryID is filled in after the repository is added on artifacthub.io (verified publisher).
+owners:
+  - name: Team OLake
+    email: hello@olake.io
+  - name: Shubham Baldava
+    email: shubham@datazip.io
