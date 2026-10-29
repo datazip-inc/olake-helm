@@ -9,7 +9,7 @@
 
 # OLake Helm Chart
 
-![Version: 0.0.32](https://img.shields.io/badge/Version-0.0.32-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
+![Version: 0.0.33](https://img.shields.io/badge/Version-0.0.33-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
 
 A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 
@@ -31,13 +31,17 @@ A Helm chart for OLake UI - Fastest open-source tool for replicating Databases t
 
 ## Table of Contents
 
-- [Global & Common Configurations](#global--common-configurations)
-- [OLake UI Configurations](#olake-ui-configurations)
-- [OLake Worker & Job Execution](#olake-worker--job-execution)
-- [Storage Configurations (S3 / MinIO / NFS)](#storage-configurations-s3--minio--nfs)
-- [Core Infrastructure (Temporal & PostgreSQL)](#core-infrastructure-temporal--postgresql)
-- [Optional Add-ons (Fusion & Elasticsearch)](#optional-add-ons-fusion--elasticsearch)
-- [Other Configurations](#other-configurations)
+- [OLake Helm Chart](#olake-helm-chart)
+  - [Maintainers](#maintainers)
+  - [Source Code](#source-code)
+  - [Table of Contents](#table-of-contents)
+  - [Global \& Common Configurations](#global--common-configurations)
+  - [OLake UI Configurations](#olake-ui-configurations)
+  - [OLake Worker \& Job Execution](#olake-worker--job-execution)
+  - [Storage Configurations (S3 / MinIO / NFS)](#storage-configurations-s3--minio--nfs)
+  - [Core Infrastructure (Temporal \& PostgreSQL)](#core-infrastructure-temporal--postgresql)
+  - [Optional Add-ons (Fusion \& Elasticsearch)](#optional-add-ons-fusion--elasticsearch)
+  - [Other Configurations](#other-configurations)
 
 ---
 
