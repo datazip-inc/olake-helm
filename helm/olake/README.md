@@ -521,6 +521,35 @@ global:
 
 **Activity pods:** annotations are read by olake-workers from the `OLAKE_JOB_POD_ANNOTATIONS` configmap key and merged into the connector Job pod spec at runtime. Internal `olake.io/*` annotations always take precedence over user-supplied ones.
 
+### Extra Volumes for Connector Pods
+
+Use `global.extraVolumes` and `global.extraVolumeMounts` to mount extra files (for example a custom CA bundle or a client key) into the connector job pods that olake-workers spawns. Both fields use standard Kubernetes volume and volumeMount specs.
+
+```yaml
+global:
+  extraVolumes:
+    - name: custom-ca
+      configMap:
+        name: my-ca-certs
+    - name: client-key
+      secret:
+        secretName: my-client-key
+  extraVolumeMounts:
+    - name: custom-ca
+      mountPath: /etc/ssl/custom-certs
+      readOnly: true
+    - name: client-key
+      mountPath: /etc/ssl/client-key
+      readOnly: true
+```
+
+Rules:
+
+-   Every `name` in `extraVolumeMounts` must match an entry in `extraVolumes`.
+-   `mountPath` values must be unique, and cannot be `/` or inside the shared config directory (`/mnt/config`).
+-   `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
+-   Referenced ConfigMaps and Secrets must exist in the release namespace.
+
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.

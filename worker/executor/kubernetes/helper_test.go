@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -119,6 +120,158 @@ func TestGetResourcesForJobReturnsCopy(t *testing.T) {
 
 	if mem := base.Requests[corev1.ResourceMemory]; mem.String() != "1Gi" {
 		t.Errorf("mutating returned resources changed the shared profile: got %s", mem.String())
+	}
+}
+
+func TestParseJobVolumes(t *testing.T) {
+	const (
+		configMapVol = `[{"name":"ca","configMap":{"name":"my-ca"}}]`
+		csiVol       = `[{"name":"kc","csi":{"driver":"secrets-store.csi.k8s.io","readOnly":true,"volumeAttributes":{"secretProviderClass":"kafka"}}}]`
+		caMount      = `[{"name":"ca","mountPath":"/etc/ssl/custom-certs"}]`
+	)
+
+	tests := []struct {
+		name        string
+		volumes     string
+		mounts      string
+		wantVolumes int
+		wantMounts  int
+		wantErr     string
+	}{
+		{
+			name: "nothing set",
+		},
+		{
+			name:        "configMap volume and mount",
+			volumes:     configMapVol,
+			mounts:      caMount,
+			wantVolumes: 1,
+			wantMounts:  1,
+		},
+		{
+			name:        "csi volume and mount",
+			volumes:     csiVol,
+			mounts:      `[{"name":"kc","mountPath":"/etc/ssl/kafka"}]`,
+			wantVolumes: 1,
+			wantMounts:  1,
+		},
+		{
+			name:        "volume without mount",
+			volumes:     configMapVol,
+			wantVolumes: 1,
+		},
+		{
+			name:        "path next to the config dir",
+			volumes:     configMapVol,
+			mounts:      `[{"name":"ca","mountPath":"/mnt/configs"}]`,
+			wantVolumes: 1,
+			wantMounts:  1,
+		},
+		{
+			name:        "multiple volumes and mounts",
+			volumes:     `[{"name":"a"},{"name":"b"}]`,
+			mounts:      `[{"name":"a","mountPath":"/x"},{"name":"b","mountPath":"/y"}]`,
+			wantVolumes: 2,
+			wantMounts:  2,
+		},
+		{
+			name:        "one volume at multiple paths",
+			volumes:     configMapVol,
+			mounts:      `[{"name":"ca","mountPath":"/x"},{"name":"ca","mountPath":"/y","subPath":"certs"}]`,
+			wantVolumes: 1,
+			wantMounts:  2,
+		},
+		{
+			name:    "reserved index volume name",
+			volumes: `[{"name":"index-storage","configMap":{"name":"x"}}]`,
+			wantErr: "reserved",
+		},
+		{
+			name:    "invalid volumes json",
+			volumes: `{`,
+			wantErr: "unmarshal job volumes",
+		},
+		{
+			name:    "invalid mounts json",
+			volumes: configMapVol,
+			mounts:  `{`,
+			wantErr: "unmarshal job volume mounts",
+		},
+		{
+			name:    "volume without name",
+			volumes: `[{"configMap":{"name":"x"}}]`,
+			wantErr: "missing a name",
+		},
+		{
+			name:    "reserved volume name",
+			volumes: `[{"name":"job-storage","configMap":{"name":"x"}}]`,
+			wantErr: "reserved",
+		},
+		{
+			name:    "duplicate volume name",
+			volumes: `[{"name":"a"},{"name":"a"}]`,
+			wantErr: "more than once",
+		},
+		{
+			name:    "mount without any volume",
+			mounts:  caMount,
+			wantErr: "does not match",
+		},
+		{
+			name:    "mount for unknown volume",
+			volumes: configMapVol,
+			mounts:  `[{"name":"nope","mountPath":"/x"}]`,
+			wantErr: "does not match",
+		},
+		{
+			name:    "mount at container root",
+			volumes: configMapVol,
+			mounts:  `[{"name":"ca","mountPath":"/"}]`,
+			wantErr: "container root",
+		},
+		{
+			name:    "mount without path",
+			volumes: configMapVol,
+			mounts:  `[{"name":"ca"}]`,
+			wantErr: "container root",
+		},
+		{
+			name:    "mount at config dir",
+			volumes: configMapVol,
+			mounts:  `[{"name":"ca","mountPath":"/mnt/config"}]`,
+			wantErr: "shadow",
+		},
+		{
+			name:    "mount inside config dir",
+			volumes: configMapVol,
+			mounts:  `[{"name":"ca","mountPath":"/mnt/config/certs"}]`,
+			wantErr: "shadow",
+		},
+		{
+			name:    "duplicate mount path",
+			volumes: `[{"name":"a"},{"name":"b"}]`,
+			mounts:  `[{"name":"a","mountPath":"/x"},{"name":"b","mountPath":"/x/"}]`,
+			wantErr: "more than once",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			volumes, mounts, err := parseJobVolumes(tt.volumes, tt.mounts)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("parseJobVolumes() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseJobVolumes() unexpected error: %v", err)
+			}
+			if len(volumes) != tt.wantVolumes || len(mounts) != tt.wantMounts {
+				t.Errorf("parseJobVolumes() returned %d volumes, %d mounts, want %d, %d",
+					len(volumes), len(mounts), tt.wantVolumes, tt.wantMounts)
+			}
+		})
 	}
 }
 

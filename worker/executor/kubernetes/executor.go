@@ -40,6 +40,8 @@ type KubernetesConfig struct {
 	WorkerIdentity      string
 	SecurityContext     *corev1.PodSecurityContext
 	JobPodAnnotations   map[string]string
+	JobVolumes          []corev1.Volume
+	JobVolumeMounts     []corev1.VolumeMount
 	JobPodLabels        map[string]string
 }
 
@@ -92,6 +94,13 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 		}
 	}
 
+	// Parse user-supplied job volumes and mounts. A bad value fails startup: silently
+	// dropping them would leave connector pods without the certificates they expect.
+	jobVolumes, jobVolumeMounts, err := parseJobVolumes(viper.GetString(constants.EnvJobVolumes), viper.GetString(constants.EnvJobVolumeMounts))
+	if err != nil {
+		return nil, err
+	}
+
 	var jobPodLabels map[string]string
 	if raw := viper.GetString(constants.EnvJobPodLabels); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &jobPodLabels); err != nil {
@@ -124,6 +133,8 @@ func NewKubernetesExecutor(ctx context.Context) (*KubernetesExecutor, error) {
 			WorkerIdentity:      workerIdenttity,
 			SecurityContext:     securityContext,
 			JobPodAnnotations:   jobPodAnnotations,
+			JobVolumes:          jobVolumes,
+			JobVolumeMounts:     jobVolumeMounts,
 			JobPodLabels:        jobPodLabels,
 		},
 	}, nil

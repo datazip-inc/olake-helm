@@ -1,13 +1,17 @@
 package kubernetes
 
 import (
+	"encoding/json"
+	"fmt"
 	"maps"
+	"path"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -235,4 +239,76 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 			},
 		},
 	}
+}
+
+// reservedVolumeNames are the volumes the executor adds itself; a user-supplied
+// volume with the same name would make the API server reject the pod.
+var reservedVolumeNames = map[string]struct{}{
+	"job-storage":   {},
+	"index-storage": {},
+}
+
+// unmarshalStrict unmarshals raw into v and rejects unknown fields, so a typo in a
+// volume or mount key fails at startup instead of leaving the pod spec without
+// the setting and being rejected by the API server on every sync.
+func unmarshalStrict(raw string, v any) error {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
+}
+
+// parseJobVolumes decodes and validates the user-supplied connector pod volumes and
+// mounts (global.extraVolumes / global.extraVolumeMounts). Empty inputs yield nothing.
+func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	var (
+		volumes []corev1.Volume
+		mounts  []corev1.VolumeMount
+	)
+	if volumesJSON != "" {
+		if err := unmarshalStrict(volumesJSON, &volumes); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal job volumes: %w", err)
+		}
+	}
+	if mountsJSON != "" {
+		if err := unmarshalStrict(mountsJSON, &mounts); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal job volume mounts: %w", err)
+		}
+	}
+
+	names := make(map[string]struct{}, len(volumes))
+	for _, v := range volumes {
+		if v.Name == "" {
+			return nil, nil, fmt.Errorf("extraVolumes entry is missing a name")
+		}
+		if _, reserved := reservedVolumeNames[v.Name]; reserved {
+			return nil, nil, fmt.Errorf("extraVolumes name %q is reserved for the executor's own volume", v.Name)
+		}
+		if _, dup := names[v.Name]; dup {
+			return nil, nil, fmt.Errorf("extraVolumes name %q is used more than once", v.Name)
+		}
+		names[v.Name] = struct{}{}
+	}
+
+	configDir := path.Clean(constants.ContainerMountDir)
+	paths := make(map[string]struct{}, len(mounts))
+	for _, m := range mounts {
+		if _, ok := names[m.Name]; !ok {
+			return nil, nil, fmt.Errorf("extraVolumeMounts name %q does not match any extraVolumes entry", m.Name)
+		}
+		// Container paths are POSIX regardless of where the worker runs.
+		clean := path.Clean(m.MountPath)
+		if m.MountPath == "" || clean == "/" {
+			return nil, nil, fmt.Errorf("extraVolumeMounts %q needs a mountPath other than the container root", m.Name)
+		}
+		if clean == configDir || strings.HasPrefix(clean, configDir+"/") {
+			return nil, nil, fmt.Errorf("extraVolumeMounts %q mountPath %q would shadow the shared config directory %s",
+				m.Name, m.MountPath, configDir)
+		}
+		if _, dup := paths[clean]; dup {
+			return nil, nil, fmt.Errorf("extraVolumeMounts mountPath %q is used more than once", m.MountPath)
+		}
+		paths[clean] = struct{}{}
+	}
+
+	return volumes, mounts, nil
 }
