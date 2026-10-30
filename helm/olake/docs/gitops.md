@@ -26,11 +26,17 @@ This sets `GITOPS_MODE=kubernetes` and `POD_NAMESPACE` on the olake-ui Deploymen
 
 - `global.jobServiceAccount.create: true` **or** `gitops.serviceAccount.create: true` so olake-ui has a ServiceAccount with GitOps RBAC.
 - olake-ui image built with GitOps support (controller-runtime embedded).
-- GitOps RBAC is **namespace-scoped** (`Role` on `configmaps`, `secrets`, and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete — failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
+- GitOps RBAC is **namespace-scoped** (`Role` on `configmaps`, `secrets`, and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete - failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
+- `${secrets:<name>#<key>}` references in a config read only Secrets in the release namespace labelled `olake.io/managed=true`, through the same `secrets` grant.
 
 ### Failure indicators
 
-On reconcile failure, olake-ui starts `IndicatorWorkflow` on the worker task queue. The worker creates a short-lived busybox Pod (Kubernetes) or container (Docker Compose) that exits with the error in the termination log. Configure Pod-failure alerts on `olake.io/indicator=true`.
+On reconcile failure, olake-ui starts `IndicatorWorkflow` on the worker task queue.
+The worker creates a busybox Pod (Kubernetes) or container (Docker Compose) named `olake-failed-<kind>-<name>`, for example `olake-failed-source-pg`.
+The Pod prints the error to its termination log and exits, so it shows as `Error`; the container prints the error to its logs and keeps running.
+On Kubernetes the worker also records a `Warning` event with reason `SyncFailed` on the Pod, so `kubectl describe pod` and event-based alerting show the error.
+The indicator is deleted when the resource syncs again.
+Alert on the `olake.io/indicator=true` label, or on `SyncFailed` events.
 
 ## Argo CD / Flux
 
@@ -64,6 +70,7 @@ global:
 | Forbidden on ConfigMap watch | GitOps RoleBinding → olake-ui ServiceAccount |
 | Job stuck Pending | Source/Destination/Streams not Ready yet, or name mismatch in job config |
 | Failed but no indicator Pod | Worker logs, Temporal `IndicatorWorkflow` runs; worker RBAC includes `pods` create |
+| Indicator Pod but no `SyncFailed` event | Worker logs (`record indicator pod event failed`); worker RBAC includes `events` create |
 | Phase Failed | `kubectl describe configmap <name>` → `olake.io/message` annotation |
 
 See [olake-ui docs/gitops](https://github.com/datazip-inc/olake-ui/blob/master/docs/gitops/README.md) for manifest shapes and lifecycle details.
