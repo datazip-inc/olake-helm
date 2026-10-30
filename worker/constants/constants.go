@@ -74,6 +74,8 @@ const (
 	LabelIndicatorResource   = "olake.io/resource"
 	LabelIndicatorPhase      = "olake.io/phase"
 	AnnotationIndicatorError = "olake.io/error"
+	IndicatorEventReason     = "SyncFailed" // the reason olake-ui gives the failed ConfigMap/Secret's event too
+	IndicatorEventComponent  = "olake-worker"
 
 	// Kubernetes ConfigMap names
 	GlobalEnvConfigMap  = "olake-global-env"

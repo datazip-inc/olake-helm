@@ -52,12 +52,47 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 	zero := int64(0)
 	_ = k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
 
-	_, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, req), metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+	pod, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, req), metav1.CreateOptions{})
+	if err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil
+		}
 		log.Error("spawn indicator pod failed", "podName", name, "namespace", ns, "error", err)
 		return fmt.Errorf("spawn indicator pod: %w", err)
 	}
+	k.emitIndicatorEvent(ctx, pod, req)
 	return nil
+}
+
+// emitIndicatorEvent records a Warning event on the indicator pod with the error, so event-based
+// alerting and `kubectl describe pod` show why the pod exists. It is best effort: the pod already
+// carries the error, so a failed event (for example a Role without events create) is only logged.
+func (k *KubernetesExecutor) emitIndicatorEvent(ctx context.Context, pod *corev1.Pod, req *types.IndicatorRequest) {
+	now := metav1.Now()
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			// the name client-go's event recorder uses: the object name and a unique suffix
+			Name:      fmt.Sprintf("%s.%x", pod.Name, now.UnixNano()),
+			Namespace: pod.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Pod",
+			Namespace:  pod.Namespace,
+			Name:       pod.Name,
+			UID:        pod.UID,
+		},
+		Type:           corev1.EventTypeWarning,
+		Reason:         constants.IndicatorEventReason,
+		Message:        utils.Truncate(fmt.Sprintf("GitOps %s %q failed to sync: %s", req.Kind, req.ResourceName, req.Message), constants.IndicatorAnnotationMax),
+		Source:         corev1.EventSource{Component: constants.IndicatorEventComponent},
+		FirstTimestamp: now,
+		LastTimestamp:  now,
+		Count:          1,
+	}
+	if _, err := k.client.CoreV1().Events(pod.Namespace).Create(ctx, event, metav1.CreateOptions{}); err != nil {
+		logger.Log(ctx).Warn("record indicator pod event failed", "podName", pod.Name, "namespace", pod.Namespace, "error", err)
+	}
 }
 
 // IndicatorPodSpec builds the failure-indicator pod.
