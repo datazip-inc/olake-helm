@@ -61,9 +61,8 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 
 	pod, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, image, req), metav1.CreateOptions{})
 	if err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			return nil
-		}
+		// AlreadyExists included: the old pod may still be terminating, so report it and let
+		// the activity retry instead of losing the indicator once the old pod is gone
 		log.Error("spawn indicator pod failed", "podName", name, "namespace", ns, "error", err)
 		return fmt.Errorf("spawn indicator pod: %w", err)
 	}
@@ -120,6 +119,7 @@ func (k *KubernetesExecutor) indicatorImage(ctx context.Context) (string, error)
 
 // IndicatorPodSpec builds the failure-indicator pod.
 func (k *KubernetesExecutor) IndicatorPodSpec(ns, image string, req *types.IndicatorRequest) *corev1.Pod {
+	automountToken := false
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
@@ -135,11 +135,13 @@ func (k *KubernetesExecutor) IndicatorPodSpec(ns, image string, req *types.Indic
 			}),
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy:   corev1.RestartPolicyNever,
-			NodeSelector:    k.GetNodeSelectorForJob(0, types.Check), // job 0 + non-sync command = default profile
-			Tolerations:     k.GetTolerationsForJob(0, types.Check),
-			Affinity:        k.BuildAffinityForJob(0, types.Check),
-			SecurityContext: k.config.SecurityContext,
+			RestartPolicy: corev1.RestartPolicyNever,
+			// the indicator only prints an error, so it carries no ServiceAccount token
+			AutomountServiceAccountToken: &automountToken,
+			NodeSelector:                 k.GetNodeSelectorForJob(0, types.Check), // job 0 + non-sync command = default profile
+			Tolerations:                  k.GetTolerationsForJob(0, types.Check),
+			Affinity:                     k.BuildAffinityForJob(0, types.Check),
+			SecurityContext:              k.config.SecurityContext,
 			Containers: []corev1.Container{{
 				Name:            "indicator",
 				Image:           image,

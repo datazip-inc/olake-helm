@@ -13,7 +13,7 @@ var indicatorRetryPolicy = &temporal.RetryPolicy{
 	InitialInterval:    time.Second * 2,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Second * 10,
-	MaximumAttempts:    2,
+	MaximumAttempts:    5, // a respawn retries until the previous indicator pod is gone
 }
 
 // IndicatorWorkflow creates or deletes a GitOps failure indicator pod/container.

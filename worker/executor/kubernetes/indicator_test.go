@@ -92,6 +92,11 @@ func TestIndicator(t *testing.T) {
 			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "events"}, "", nil)
 		})
 	}
+	oldPodTerminating := func(client *fake.Clientset) {
+		client.PrependReactor("create", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewAlreadyExists(schema.GroupResource{Resource: "pods"}, "olake-failed-source-pg-cm")
+		})
+	}
 
 	tests := []struct {
 		name       string
@@ -106,6 +111,8 @@ func TestIndicator(t *testing.T) {
 		{name: "spawn without event permission", containers: worker, setup: forbidEvents, wantPod: true},
 		// the activity retries; no pod is created without the worker image
 		{name: "spawn with unreadable worker pod", wantErr: true},
+		// the activity retries once the old pod is gone, instead of reporting an indicator that vanishes
+		{name: "spawn while the old pod is terminating", containers: worker, setup: oldPodTerminating, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -138,6 +145,9 @@ func TestIndicator(t *testing.T) {
 			}
 			if got := pod.Spec.Containers[0].Image; got != workerImage {
 				t.Errorf("indicator image %q, want %q", got, workerImage)
+			}
+			if token := pod.Spec.AutomountServiceAccountToken; token == nil || *token {
+				t.Errorf("indicator pod mounts a ServiceAccount token")
 			}
 
 			events, err := client.CoreV1().Events("olake").List(ctx, metav1.ListOptions{})

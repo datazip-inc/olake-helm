@@ -11,6 +11,11 @@ metadata:
     {{- include "olake.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.olakeUI.replicaCount }}
+  {{- if .Values.gitops.enabled }}
+  {{- if gt (int .Values.olakeUI.replicaCount) 1 }}
+  {{- fail "gitops.enabled requires olakeUI.replicaCount: 1 (the GitOps reconciler has no leader election)" }}
+  {{- end }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: olake-ui

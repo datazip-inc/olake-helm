@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/acarl005/stripansi"
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -79,10 +80,13 @@ func GetRegistryImage(image string) string {
 	return fmt.Sprintf("%s/%s", registryBase, image)
 }
 
-// Truncate returns at most n bytes of s.
+// Truncate returns at most n bytes of s, without cutting a multi-byte UTF-8 character.
 func Truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n]
 }

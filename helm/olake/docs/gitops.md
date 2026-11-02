@@ -25,9 +25,12 @@ This sets `OLAKE_GITOPS_MODE=kubernetes` and `POD_NAMESPACE` on the olake-ui Dep
 ### Requirements
 
 - `global.jobServiceAccount.create: true` **or** `gitops.serviceAccount.create: true` so olake-ui has a ServiceAccount with GitOps RBAC.
+- `olakeUI.replicaCount: 1`. The reconciler has no leader election, so the chart refuses more replicas.
 - olake-ui image built with GitOps support (controller-runtime embedded).
 - GitOps RBAC is **namespace-scoped** (`Role` on `configmaps`, `secrets`, and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete - failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
 - `${secrets:<name>#<key>}` references in a config read only Secrets in the release namespace labelled `olake.io/managed=true`, through the same `secrets` grant.
+  That label limit is enforced by olake-ui's code, not by RBAC: the Role grants get, list, watch, update and patch on every Secret in the namespace.
+  Deploy OLake in a dedicated namespace if other Secrets live there.
 
 ### Failure indicators
 
@@ -37,6 +40,7 @@ It runs the worker's own image, so no extra image is needed, including in offlin
 The Pod prints the error to its termination log and exits, so it shows as `Error`; the container prints the error to its logs and keeps running.
 On Kubernetes the worker also records a `Warning` event with reason `SyncFailed` on the Pod, so `kubectl describe pod` and event-based alerting show the error.
 The indicator is deleted when the resource syncs again.
+Delete is not supported yet (see below), so if a failed resource is removed from git, its `olake-failed-*` indicator stays until you delete it by hand.
 Alert on the `olake.io/indicator=true` label, or on `SyncFailed` events.
 
 ## Argo CD / Flux
