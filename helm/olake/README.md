@@ -523,18 +523,18 @@ global:
 
 ### Extra Volumes for Connector Pods
 
-Use `global.extraVolumes` and `global.extraVolumeMounts` to mount extra files (for example a custom CA bundle or a client key) into the connector job pods that olake-workers spawns. Both fields use standard Kubernetes volume and volumeMount specs.
+Use `global.extraJobVolumes` and `global.extraJobVolumeMounts` to mount extra files (for example a custom CA bundle or a client key) into the connector job pods that olake-workers spawns. Both fields use standard Kubernetes volume and volumeMount specs.
 
 ```yaml
 global:
-  extraVolumes:
+  extraJobVolumes:
     - name: custom-ca
       configMap:
         name: my-ca-certs
     - name: client-key
       secret:
         secretName: my-client-key
-  extraVolumeMounts:
+  extraJobVolumeMounts:
     - name: custom-ca
       mountPath: /etc/ssl/custom-certs
       readOnly: true
@@ -561,7 +561,7 @@ Use this full path as the value of the connector's `server_ca_path` field:
 
 Rules:
 
--   Every `name` in `extraVolumeMounts` must match an entry in `extraVolumes`.
+-   Every `name` in `extraJobVolumeMounts` must match an entry in `extraJobVolumes`.
 -   `mountPath` values must be unique, and cannot be `/` or inside the shared config directory (`/mnt/config`).
 -   `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
 -   Referenced ConfigMaps and Secrets must exist in the release namespace.

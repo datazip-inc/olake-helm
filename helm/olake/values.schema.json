@@ -6,6 +6,29 @@
     "global": {
       "type": "object",
       "properties": {
+        "extraJobVolumes": {
+          "type": "array",
+          "description": "Extra volumes added to connector job pods. Standard Kubernetes volume specs; each needs a unique name that is not job-storage or index-storage.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "not": { "enum": ["job-storage", "index-storage"] } }
+            }
+          }
+        },
+        "extraJobVolumeMounts": {
+          "type": "array",
+          "description": "Mounts for global.extraJobVolumes. Each name must match an extraJobVolumes entry; mountPath must be unique, not '/', and not inside /mnt/config.",
+          "items": {
+            "type": "object",
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "mountPath": { "type": "string", "minLength": 1, "not": { "pattern": "^/+$" } }
+            }
+          }
+        },
         "jobMapping": {
           "type": "object",
           "description": "[Deprecated] Mapping of JobIDs to node selectors for pod scheduling",

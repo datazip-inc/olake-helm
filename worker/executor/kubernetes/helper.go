@@ -248,9 +248,8 @@ var reservedVolumeNames = map[string]struct{}{
 	"index-storage": {},
 }
 
-// unmarshalStrict unmarshals raw into v and rejects unknown fields, so a typo in a
-// volume or mount key fails at startup instead of leaving the pod spec without
-// the setting and being rejected by the API server on every sync.
+// unmarshalStrict unmarshals raw JSON into v and returns an error if raw contains
+// a field that v does not define.
 func unmarshalStrict(raw string, v any) error {
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -258,7 +257,7 @@ func unmarshalStrict(raw string, v any) error {
 }
 
 // parseJobVolumes decodes and validates the user-supplied connector pod volumes and
-// mounts (global.extraVolumes / global.extraVolumeMounts). Empty inputs yield nothing.
+// mounts (global.extraJobVolumes / global.extraJobVolumeMounts). Empty inputs yield nothing.
 func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.VolumeMount, error) {
 	var (
 		volumes []corev1.Volume
@@ -278,13 +277,13 @@ func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.
 	names := make(map[string]struct{}, len(volumes))
 	for _, v := range volumes {
 		if v.Name == "" {
-			return nil, nil, fmt.Errorf("extraVolumes entry is missing a name")
+			return nil, nil, fmt.Errorf("extraJobVolumes entry is missing a name")
 		}
 		if _, reserved := reservedVolumeNames[v.Name]; reserved {
-			return nil, nil, fmt.Errorf("extraVolumes name %q is reserved for the executor's own volume", v.Name)
+			return nil, nil, fmt.Errorf("extraJobVolumes name %q is reserved for the executor's own volume", v.Name)
 		}
 		if _, dup := names[v.Name]; dup {
-			return nil, nil, fmt.Errorf("extraVolumes name %q is used more than once", v.Name)
+			return nil, nil, fmt.Errorf("extraJobVolumes name %q is used more than once", v.Name)
 		}
 		names[v.Name] = struct{}{}
 	}
@@ -293,19 +292,19 @@ func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.
 	paths := make(map[string]struct{}, len(mounts))
 	for _, m := range mounts {
 		if _, ok := names[m.Name]; !ok {
-			return nil, nil, fmt.Errorf("extraVolumeMounts name %q does not match any extraVolumes entry", m.Name)
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts name %q does not match any extraJobVolumes entry", m.Name)
 		}
 		// Container paths are POSIX regardless of where the worker runs.
 		clean := path.Clean(m.MountPath)
 		if m.MountPath == "" || clean == "/" {
-			return nil, nil, fmt.Errorf("extraVolumeMounts %q needs a mountPath other than the container root", m.Name)
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q needs a mountPath other than the container root", m.Name)
 		}
 		if clean == configDir || strings.HasPrefix(clean, configDir+"/") {
-			return nil, nil, fmt.Errorf("extraVolumeMounts %q mountPath %q would shadow the shared config directory %s",
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q would shadow the shared config directory %s",
 				m.Name, m.MountPath, configDir)
 		}
 		if _, dup := paths[clean]; dup {
-			return nil, nil, fmt.Errorf("extraVolumeMounts mountPath %q is used more than once", m.MountPath)
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts mountPath %q is used more than once", m.MountPath)
 		}
 		paths[clean] = struct{}{}
 	}

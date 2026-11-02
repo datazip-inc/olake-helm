@@ -60,9 +60,10 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 	if err := validateIndexMountPath(cfg.MountPath, jobID); err != nil {
 		return nil, err
 	}
-	for _, m := range k.config.JobVolumeMounts {
+	_, extraJobVolumeMounts := k.configWatcher.GetJobVolumes()
+	for _, m := range extraJobVolumeMounts {
 		if path.Clean(m.MountPath) == path.Clean(cfg.MountPath) {
-			return nil, fmt.Errorf("extraVolumeMounts %q mountPath %q is the same as the index mountPath %q for job %d; choose a different path",
+			return nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q is the same as the index mountPath %q for job %d; choose a different path",
 				m.Name, m.MountPath, cfg.MountPath, jobID)
 		}
 	}
