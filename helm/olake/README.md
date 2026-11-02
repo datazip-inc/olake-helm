@@ -543,12 +543,30 @@ global:
       readOnly: true
 ```
 
+In the connector (source/destination) configuration, provide the path to the file inside the connector pod.
+
+When mounting a ConfigMap or Secret without `subPath`, Kubernetes makes each key available as a separate file inside the mounted directory.
+
+For example, if the ConfigMap `my-ca-certs` contains a key named `ca.crt` and is mounted at `/etc/ssl/custom-certs`, the certificate will be available at:
+
+`/etc/ssl/custom-certs/ca.crt`
+
+Use this full path as the value of the connector's `server_ca_path` field:
+
+```json
+{
+  "server_ca_path": "/etc/ssl/custom-certs/ca.crt"
+}
+```
+
 Rules:
 
 -   Every `name` in `extraVolumeMounts` must match an entry in `extraVolumes`.
 -   `mountPath` values must be unique, and cannot be `/` or inside the shared config directory (`/mnt/config`).
 -   `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
 -   Referenced ConfigMaps and Secrets must exist in the release namespace.
+-   A mount that uses `subPath` does not pick up later ConfigMap/Secret updates. Restart the pod, or run a new job, to get the new content.
+-   Do not mount over /etc/ssl/certs, as it hides the default trusted CA certificates used for TLS connections. Use a separate path, such as /etc/ssl/custom-certs, for your custom certificates.
 
 ### Private Container Registry
 
