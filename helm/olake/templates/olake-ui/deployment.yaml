@@ -148,7 +148,7 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         {{- if .Values.gitops.enabled }}
-        - name: GITOPS_MODE
+        - name: OLAKE_GITOPS_MODE
           value: kubernetes
         - name: POD_NAMESPACE
           valueFrom:

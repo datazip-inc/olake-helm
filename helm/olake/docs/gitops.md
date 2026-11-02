@@ -20,7 +20,7 @@ olakeUI:
 helm upgrade --install olake ./helm/olake -f my-values.yaml
 ```
 
-This sets `GITOPS_MODE=kubernetes` and `POD_NAMESPACE` on the olake-ui Deployment.
+This sets `OLAKE_GITOPS_MODE=kubernetes` and `POD_NAMESPACE` on the olake-ui Deployment.
 
 ### Requirements
 
@@ -66,7 +66,7 @@ global:
 
 | Issue | Check |
 |-------|--------|
-| Reconciler not starting | `kubectl logs deploy/olake-ui`, confirm `GITOPS_MODE=kubernetes` |
+| Reconciler not starting | `kubectl logs deploy/olake-ui`, confirm `OLAKE_GITOPS_MODE=kubernetes` |
 | Forbidden on ConfigMap watch | GitOps RoleBinding → olake-ui ServiceAccount |
 | Job stuck Pending | Source/Destination/Streams not Ready yet, or name mismatch in job config |
 | Failed but no indicator Pod | Worker logs, Temporal `IndicatorWorkflow` runs; worker RBAC includes `pods` create |
