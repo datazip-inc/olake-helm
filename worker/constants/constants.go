@@ -63,10 +63,7 @@ const (
 	StorageModeS3  = "s3"
 
 	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
-	MinS3StorageModeVersion = "v0.12.0"
-
-	// GitOps failure indicators (pods in Kubernetes, containers in Docker)
-	IndicatorImage           = "library/busybox:latest"
+	MinS3StorageModeVersion  = "v0.12.0"
 	IndicatorMessageMax      = 4096 // kubelet caps the termination message at 4096 bytes
 	IndicatorAnnotationMax   = 1024
 	LabelIndicator           = "olake.io/indicator"

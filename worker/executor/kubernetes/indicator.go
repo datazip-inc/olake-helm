@@ -49,10 +49,17 @@ func (k *KubernetesExecutor) deleteIndicatorPod(ctx context.Context, ns, name st
 func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, req *types.IndicatorRequest) error {
 	log := logger.Log(ctx)
 	name := req.Name
+	// read the image first, so a failed read keeps the previous indicator in place
+	image, err := k.indicatorImage(ctx)
+	if err != nil {
+		log.Error("read worker image failed", "podName", workerPodName(), "namespace", k.namespace, "error", err)
+		return fmt.Errorf("read worker image: %w", err)
+	}
+
 	zero := int64(0)
 	_ = k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
 
-	pod, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, req), metav1.CreateOptions{})
+	pod, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, image, req), metav1.CreateOptions{})
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			return nil
@@ -95,8 +102,24 @@ func (k *KubernetesExecutor) emitIndicatorEvent(ctx context.Context, pod *corev1
 	}
 }
 
+// indicatorImage returns the image of the worker's own container. It is always pullable in this
+// cluster, so the indicator needs no image beyond the ones OLake already runs.
+func (k *KubernetesExecutor) indicatorImage(ctx context.Context) (string, error) {
+	pod, err := k.client.CoreV1().Pods(k.namespace).Get(ctx, workerPodName(), metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	for _, c := range pod.Spec.Containers {
+		if c.Name == constants.WorkerContainerName {
+			return c.Image, nil
+		}
+	}
+	// a worker deployed without the chart: injected sidecars come after the app container
+	return pod.Spec.Containers[0].Image, nil
+}
+
 // IndicatorPodSpec builds the failure-indicator pod.
-func (k *KubernetesExecutor) IndicatorPodSpec(ns string, req *types.IndicatorRequest) *corev1.Pod {
+func (k *KubernetesExecutor) IndicatorPodSpec(ns, image string, req *types.IndicatorRequest) *corev1.Pod {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
@@ -119,7 +142,7 @@ func (k *KubernetesExecutor) IndicatorPodSpec(ns string, req *types.IndicatorReq
 			SecurityContext: k.config.SecurityContext,
 			Containers: []corev1.Container{{
 				Name:            "indicator",
-				Image:           utils.GetRegistryImage(constants.IndicatorImage),
+				Image:           image,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Env: []corev1.EnvVar{{
 					Name:  "OLAKE_ERROR",

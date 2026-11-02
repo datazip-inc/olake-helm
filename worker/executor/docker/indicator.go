@@ -40,19 +40,22 @@ func (d *DockerExecutor) deleteIndicatorContainer(ctx context.Context, name stri
 func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types.IndicatorRequest) error {
 	log := logger.Log(ctx)
 	name := req.Name
+	// read the image first, so a failed read keeps the previous indicator in place
+	image, err := d.indicatorImage(ctx)
+	if err != nil {
+		log.Error("read worker image failed", "error", err)
+		return fmt.Errorf("read worker image: %w", err)
+	}
+
 	// remove any existing container with the same name to update the error message
 	_, _ = d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 
-	image := utils.GetRegistryImage(constants.IndicatorImage)
-	if err := d.PullImage(ctx, image, "", req.HeartbeatFunc); err != nil {
-		log.Error("pull indicator image failed", "image", image, "error", err)
-		return fmt.Errorf("pull indicator image %s: %w", image, err)
-	}
-
 	containerConfig := &container.Config{
 		Image: image,
-		Cmd:   []string{"sh", "-c", indicatorCmd},
-		Env:   []string{fmt.Sprintf("OLAKE_ERROR=%s", utils.Truncate(req.Message, constants.IndicatorMessageMax))},
+		// set the entrypoint too: Cmd alone would only be arguments to an image ENTRYPOINT
+		Entrypoint: []string{"sh", "-c"},
+		Cmd:        []string{indicatorCmd},
+		Env:        []string{fmt.Sprintf("OLAKE_ERROR=%s", utils.Truncate(req.Message, constants.IndicatorMessageMax))},
 		Labels: map[string]string{
 			constants.LabelIndicator:         "true",
 			constants.LabelIndicatorKind:     req.Kind,
@@ -75,4 +78,21 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 		return fmt.Errorf("start indicator container: %w", err)
 	}
 	return nil
+}
+
+// indicatorImage returns the image of the worker's own container. It is already on this Docker host,
+// so the indicator needs no pull, which keeps it working offline.
+func (d *DockerExecutor) indicatorImage(ctx context.Context) (string, error) {
+	containerID, err := workerContainerID()
+	if err != nil {
+		return "", err
+	}
+	inspect, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return "", err
+	}
+	if inspect.Container.Config == nil || inspect.Container.Config.Image == "" {
+		return "", fmt.Errorf("worker container %s has no image", containerID)
+	}
+	return inspect.Container.Config.Image, nil
 }
