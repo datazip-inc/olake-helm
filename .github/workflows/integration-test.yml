@@ -13,13 +13,44 @@ on:
       - 'worker/**'
       - '.github/workflows/integration-test.yml'
 
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its older run, including one still waiting for approval.
+# Pushes to master each get their own group (by sha), so they are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Holds pull request runs until a required reviewer of the `integration_tests` environment
+  # approves them, on a small runner so no 32gb-runner sits idle while waiting. An empty
+  # environment name means no environment, so these runs start straight away:
+  # - pushes to master;
+  # - staging -> master pull requests from this repository (a fork's `staging` branch is still gated).
+  approve:
+    name: Approve Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ github.event_name == 'pull_request' && !(github.head_ref == 'staging' && github.base_ref == 'master' && github.event.pull_request.head.repo.full_name == github.repository) && 'integration_tests' || '' }}
+    outputs:
+      attempt: ${{ github.run_attempt }}
+    steps:
+      - run: echo "Approved -- running the integration tests"
+
   integration-tests:
+    needs: approve
     runs-on: 32gb-runner
+    # "Re-run failed jobs" does not re-run `approve`, so its attempt no longer matches and the
+    # gate applies again here. "Re-run all jobs" is gated by `approve` itself.
+    environment: ${{ github.event_name == 'pull_request' && needs.approve.outputs.attempt != github.run_attempt && !(github.head_ref == 'staging' && github.base_ref == 'master' && github.event.pull_request.head.repo.full_name == github.repository) && 'integration_tests' || '' }}
     timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          # The tests mount the whole checkout into a privileged container; keep the token out of .git/config.
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v4
