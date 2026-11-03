@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -18,35 +17,17 @@ import (
 )
 
 func (k *KubernetesExecutor) Indicator(ctx context.Context, req *types.IndicatorRequest) error {
-	ns := k.indicatorNamespace(req)
 	switch req.Action {
 	case types.IndicatorActionDelete:
-		return k.deleteIndicatorPod(ctx, ns, req.Name)
+		return k.cleanupPod(ctx, req.Name)
 	case types.IndicatorActionSpawn:
-		return k.spawnIndicatorPod(ctx, ns, req)
+		return k.spawnIndicatorPod(ctx, req)
 	default:
 		return fmt.Errorf("unknown indicator action %q", req.Action)
 	}
 }
 
-func (k *KubernetesExecutor) indicatorNamespace(req *types.IndicatorRequest) string {
-	if req.Namespace != "" {
-		return req.Namespace
-	}
-	return k.namespace
-}
-
-func (k *KubernetesExecutor) deleteIndicatorPod(ctx context.Context, ns, name string) error {
-	log := logger.Log(ctx)
-	err := k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		log.Error("delete indicator pod failed", "podName", name, "namespace", ns, "error", err)
-		return err
-	}
-	return nil
-}
-
-func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, req *types.IndicatorRequest) error {
+func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, req *types.IndicatorRequest) error {
 	log := logger.Log(ctx)
 	name := req.Name
 	// read the image first, so a failed read keeps the previous indicator in place
@@ -56,24 +37,27 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, ns string, r
 		return fmt.Errorf("read worker image: %w", err)
 	}
 
+	// delete without a grace period, unlike cleanupPod, so the create below rarely finds the old pod
 	zero := int64(0)
-	_ = k.client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
+	_ = k.client.CoreV1().Pods(k.namespace).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
 
-	pod, err := k.client.CoreV1().Pods(ns).Create(ctx, k.IndicatorPodSpec(ns, image, req), metav1.CreateOptions{})
+	pod, err := k.client.CoreV1().Pods(k.namespace).Create(ctx, k.IndicatorPodSpec(image, req), metav1.CreateOptions{})
 	if err != nil {
 		// AlreadyExists included: the old pod may still be terminating, so report it and let
 		// the activity retry instead of losing the indicator once the old pod is gone
-		log.Error("spawn indicator pod failed", "podName", name, "namespace", ns, "error", err)
+		log.Error("spawn indicator pod failed", "podName", name, "namespace", k.namespace, "error", err)
 		return fmt.Errorf("spawn indicator pod: %w", err)
 	}
-	k.emitIndicatorEvent(ctx, pod, req)
+	if err := k.emitIndicatorEvent(ctx, pod, req); err != nil {
+		log.Error("record indicator pod event failed", "podName", name, "namespace", k.namespace, "error", err)
+		return fmt.Errorf("record indicator pod event: %w", err)
+	}
 	return nil
 }
 
 // emitIndicatorEvent records a Warning event on the indicator pod with the error, so event-based
-// alerting and `kubectl describe pod` show why the pod exists. It is best effort: the pod already
-// carries the error, so a failed event (for example a Role without events create) is only logged.
-func (k *KubernetesExecutor) emitIndicatorEvent(ctx context.Context, pod *corev1.Pod, req *types.IndicatorRequest) {
+// alerting and `kubectl describe pod` show why the pod exists.
+func (k *KubernetesExecutor) emitIndicatorEvent(ctx context.Context, pod *corev1.Pod, req *types.IndicatorRequest) error {
 	now := metav1.Now()
 	event := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,9 +80,8 @@ func (k *KubernetesExecutor) emitIndicatorEvent(ctx context.Context, pod *corev1
 		LastTimestamp:  now,
 		Count:          1,
 	}
-	if _, err := k.client.CoreV1().Events(pod.Namespace).Create(ctx, event, metav1.CreateOptions{}); err != nil {
-		logger.Log(ctx).Warn("record indicator pod event failed", "podName", pod.Name, "namespace", pod.Namespace, "error", err)
-	}
+	_, err := k.client.CoreV1().Events(pod.Namespace).Create(ctx, event, metav1.CreateOptions{})
+	return err
 }
 
 // indicatorImage returns the image of the worker's own container. It is always pullable in this
@@ -113,17 +96,16 @@ func (k *KubernetesExecutor) indicatorImage(ctx context.Context) (string, error)
 			return c.Image, nil
 		}
 	}
-	// a worker deployed without the chart: injected sidecars come after the app container
-	return pod.Spec.Containers[0].Image, nil
+	return "", fmt.Errorf("worker pod %s has no %s container", pod.Name, constants.WorkerContainerName)
 }
 
 // IndicatorPodSpec builds the failure-indicator pod.
-func (k *KubernetesExecutor) IndicatorPodSpec(ns, image string, req *types.IndicatorRequest) *corev1.Pod {
+func (k *KubernetesExecutor) IndicatorPodSpec(image string, req *types.IndicatorRequest) *corev1.Pod {
 	automountToken := false
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: ns,
+			Namespace: k.namespace,
 			Labels: map[string]string{
 				constants.LabelIndicator:         "true",
 				constants.LabelIndicatorKind:     req.Kind,

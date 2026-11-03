@@ -51,8 +51,7 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 	_, _ = d.client.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 
 	containerConfig := &container.Config{
-		Image: image,
-		// set the entrypoint too: Cmd alone would only be arguments to an image ENTRYPOINT
+		Image:      image,
 		Entrypoint: []string{"sh", "-c"},
 		Cmd:        []string{indicatorCmd},
 		Env:        []string{fmt.Sprintf("OLAKE_ERROR=%s", utils.Truncate(req.Message, constants.IndicatorMessageMax))},
@@ -73,11 +72,7 @@ func (d *DockerExecutor) spawnIndicatorContainer(ctx context.Context, req *types
 		return fmt.Errorf("create indicator container: %w", err)
 	}
 
-	if _, err := d.client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		log.Error("start indicator container failed", "name", name, "error", err)
-		return fmt.Errorf("start indicator container: %w", err)
-	}
-	return nil
+	return d.startContainer(ctx, resp.ID)
 }
 
 // indicatorImage returns the image of the worker's own container. It is already on this Docker host,
@@ -90,9 +85,6 @@ func (d *DockerExecutor) indicatorImage(ctx context.Context) (string, error) {
 	inspect, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 	if err != nil {
 		return "", err
-	}
-	if inspect.Container.Config == nil || inspect.Container.Config.Image == "" {
-		return "", fmt.Errorf("worker container %s has no image", containerID)
 	}
 	return inspect.Container.Config.Image, nil
 }

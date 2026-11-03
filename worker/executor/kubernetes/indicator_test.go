@@ -49,7 +49,6 @@ func spawnRequest() *types.IndicatorRequest {
 	return &types.IndicatorRequest{
 		Action:       types.IndicatorActionSpawn,
 		Name:         "olake-failed-source-pg-cm",
-		Namespace:    "olake",
 		Kind:         "source",
 		ResourceName: "pg-cm",
 		Message:      "password authentication failed",
@@ -68,7 +67,7 @@ func TestIndicatorImage(t *testing.T) {
 	}{
 		{"worker container", []corev1.Container{worker}, workerImage, false},
 		{"worker container after a sidecar", []corev1.Container{sidecar, worker}, workerImage, false},
-		{"renamed worker container uses the first container", []corev1.Container{{Name: "app", Image: workerImage}, sidecar}, workerImage, false},
+		{"no worker container", []corev1.Container{{Name: "app", Image: workerImage}, sidecar}, "", true},
 		{"unreadable worker pod", nil, "", true},
 	}
 
@@ -107,8 +106,8 @@ func TestIndicator(t *testing.T) {
 		wantEvents int
 	}{
 		{name: "spawn records a pod event", containers: worker, wantPod: true, wantEvents: 1},
-		// a Role from before events were granted: the pod still reports the error
-		{name: "spawn without event permission", containers: worker, setup: forbidEvents, wantPod: true},
+		// the activity retries; the pod is already up and shows the error meanwhile
+		{name: "spawn with a failed event", containers: worker, setup: forbidEvents, wantErr: true, wantPod: true},
 		// the activity retries; no pod is created without the worker image
 		{name: "spawn with unreadable worker pod", wantErr: true},
 		// the activity retries once the old pod is gone, instead of reporting an indicator that vanishes
