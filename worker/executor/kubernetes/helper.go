@@ -257,7 +257,8 @@ func unmarshalStrict(raw string, v any) error {
 }
 
 // parseJobVolumes decodes and validates the user-supplied connector pod volumes and
-// mounts (global.extraJobVolumes / global.extraJobVolumeMounts). Empty inputs yield nothing.
+// mounts (global.extraJobVolumes / global.extraJobVolumeMounts). Every mount is
+// read-only. Empty inputs yield nothing.
 func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.VolumeMount, error) {
 	var (
 		volumes []corev1.Volume
@@ -290,7 +291,8 @@ func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.
 
 	configDir := path.Clean(constants.ContainerMountDir)
 	paths := make(map[string]struct{}, len(mounts))
-	for _, m := range mounts {
+	for i, m := range mounts {
+		mounts[i].ReadOnly = true
 		if _, ok := names[m.Name]; !ok {
 			return nil, nil, fmt.Errorf("extraJobVolumeMounts name %q does not match any extraJobVolumes entry", m.Name)
 		}

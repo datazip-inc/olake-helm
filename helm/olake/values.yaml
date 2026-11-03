@@ -59,15 +59,13 @@ global:
   # -- Mounts for the volumes above, applied to the connector container.
   # Every `name` must match an entry in extraJobVolumes; mountPath values must be unique and
   # cannot be `/` or inside the shared config directory (/mnt/config).
-  # `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
+  # All mounts are read-only.
   # Example:
   #   extraJobVolumeMounts:
   #     - name: custom-ca
   #       mountPath: /etc/ssl/custom-certs
-  #       readOnly: true
   #     - name: client-key
   #       mountPath: /etc/ssl/client-key
-  #       readOnly: true
   extraJobVolumeMounts: []
 
   # -- [DEPRECATED] JobID-based node mapping configuration

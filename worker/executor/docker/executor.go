@@ -31,9 +31,8 @@ type DockerExecutor struct {
 
 // jobBindMount is one user-supplied bind mount for connector containers.
 type jobBindMount struct {
-	Source   string `json:"source"`
-	Target   string `json:"target"`
-	ReadOnly bool   `json:"readOnly"`
+	Source string `json:"source"`
+	Target string `json:"target"`
 }
 
 func NewDockerExecutor() (*DockerExecutor, error) {
@@ -242,8 +241,8 @@ func (d *DockerExecutor) Close() error {
 
 // parseJobBindMounts decodes and validates the user-supplied connector container bind
 // mounts (OLAKE_JOB_BIND_MOUNTS). Source is a path on the Docker host, since the worker
-// creates connector containers through the host's Docker daemon. Each mount is
-// writable unless it sets readOnly. An empty input yields nothing.
+// creates connector containers through the host's Docker daemon. Every mount is
+// read-only. An empty input yields nothing.
 func parseJobBindMounts(mountsJSON string) ([]mount.Mount, error) {
 	if strings.TrimSpace(mountsJSON) == "" {
 		return nil, nil
@@ -280,7 +279,7 @@ func parseJobBindMounts(mountsJSON string) ([]mount.Mount, error) {
 			Type:     mount.TypeBind,
 			Source:   e.Source,
 			Target:   target,
-			ReadOnly: e.ReadOnly,
+			ReadOnly: true,
 		})
 	}
 

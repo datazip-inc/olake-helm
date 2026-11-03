@@ -22,37 +22,27 @@ func TestParseJobBindMounts(t *testing.T) {
 			input: "  \n ",
 		},
 		{
-			name:  "writable by default",
-			input: `[{"source":"/opt/certs","target":"/etc/ssl/custom-certs"}]`,
-			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/opt/certs", Target: "/etc/ssl/custom-certs"}},
-		},
-		{
 			name:  "read only",
-			input: `[{"source":"/opt/certs","target":"/etc/ssl/custom-certs","readOnly":true}]`,
+			input: `[{"source":"/opt/certs","target":"/etc/ssl/custom-certs"}]`,
 			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/opt/certs", Target: "/etc/ssl/custom-certs", ReadOnly: true}},
-		},
-		{
-			name:  "explicitly writable",
-			input: `[{"source":"/opt/certs","target":"/x","readOnly":false}]`,
-			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/opt/certs", Target: "/x"}},
 		},
 		{
 			name:  "target is cleaned",
 			input: `[{"source":"/opt/certs","target":"/etc//ssl/./certs/"}]`,
-			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/opt/certs", Target: "/etc/ssl/certs"}},
+			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/opt/certs", Target: "/etc/ssl/certs", ReadOnly: true}},
 		},
 		{
 			name:  "multiple mounts",
-			input: `[{"source":"/a","target":"/x"},{"source":"/b","target":"/y","readOnly":true}]`,
+			input: `[{"source":"/a","target":"/x"},{"source":"/b","target":"/y"}]`,
 			want: []mount.Mount{
-				{Type: mount.TypeBind, Source: "/a", Target: "/x"},
+				{Type: mount.TypeBind, Source: "/a", Target: "/x", ReadOnly: true},
 				{Type: mount.TypeBind, Source: "/b", Target: "/y", ReadOnly: true},
 			},
 		},
 		{
 			name:  "path next to the config dir",
 			input: `[{"source":"/a","target":"/mnt/configs"}]`,
-			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/a", Target: "/mnt/configs"}},
+			want:  []mount.Mount{{Type: mount.TypeBind, Source: "/a", Target: "/mnt/configs", ReadOnly: true}},
 		},
 		{
 			name:    "invalid json",

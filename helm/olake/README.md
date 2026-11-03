@@ -537,10 +537,8 @@ global:
   extraJobVolumeMounts:
     - name: custom-ca
       mountPath: /etc/ssl/custom-certs
-      readOnly: true
     - name: client-key
       mountPath: /etc/ssl/client-key
-      readOnly: true
 ```
 
 In the connector (source/destination) configuration, provide the path to the file inside the connector pod.
@@ -563,7 +561,7 @@ Rules:
 
 -   Every `name` in `extraJobVolumeMounts` must match an entry in `extraJobVolumes`.
 -   `mountPath` values must be unique, and cannot be `/` or inside the shared config directory (`/mnt/config`).
--   `readOnly: true` is recommended for certificates and key files. If you want a writable mount, omit the `readOnly` line.
+-   All mounts are read-only.
 -   Referenced ConfigMaps and Secrets must exist in the release namespace.
 -   A mount that uses `subPath` does not pick up later ConfigMap/Secret updates. Restart the pod, or run a new job, to get the new content.
 -   Do not mount over /etc/ssl/certs, as it hides the default trusted CA certificates used for TLS connections. Use a separate path, such as /etc/ssl/custom-certs, for your custom certificates.

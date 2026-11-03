@@ -271,6 +271,11 @@ func TestParseJobVolumes(t *testing.T) {
 				t.Errorf("parseJobVolumes() returned %d volumes, %d mounts, want %d, %d",
 					len(volumes), len(mounts), tt.wantVolumes, tt.wantMounts)
 			}
+			for _, m := range mounts {
+				if !m.ReadOnly {
+					t.Errorf("parseJobVolumes() mount %q is not read-only", m.Name)
+				}
+			}
 		})
 	}
 }
