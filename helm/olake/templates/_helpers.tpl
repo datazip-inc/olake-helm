@@ -70,13 +70,21 @@ Create the name of the service account to use for job pods
 {{- end }}
 
 {{/*
-Service account used by the olake-ui pod (job SA when present, else dedicated UI SA for GitOps).
+Service account used by the olake-ui pod (job SA when present, else the GitOps UI SA: created by the
+chart, or an existing one named in gitops.serviceAccount.name). GitOps never falls back to the
+namespace default SA, since its Role grants write on Secrets.
 */}}
 {{- define "olake.uiServiceAccountName" -}}
 {{- if (include "olake.jobServiceAccountName" .) }}
 {{- include "olake.jobServiceAccountName" . }}
-{{- else if and .Values.gitops.enabled .Values.gitops.serviceAccount.create }}
+{{- else if .Values.gitops.enabled }}
+{{- if .Values.gitops.serviceAccount.create }}
 {{- default (printf "%s-ui" (include "olake.fullname" .)) .Values.gitops.serviceAccount.name }}
+{{- else if .Values.gitops.serviceAccount.name }}
+{{- .Values.gitops.serviceAccount.name }}
+{{- else }}
+{{- fail "gitops.enabled requires a ServiceAccount for olake-ui: set gitops.serviceAccount.create: true, gitops.serviceAccount.name to an existing ServiceAccount, or global.jobServiceAccount" }}
+{{- end }}
 {{- else }}
 {{- "" }}
 {{- end }}

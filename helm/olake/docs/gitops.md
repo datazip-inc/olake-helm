@@ -25,6 +25,8 @@ This sets `OLAKE_GITOPS_MODE=kubernetes` and `POD_NAMESPACE` on the olake-ui Dep
 ### Requirements
 
 - `global.jobServiceAccount.create: true` **or** `gitops.serviceAccount.create: true` so olake-ui has a ServiceAccount with GitOps RBAC.
+  To use an existing ServiceAccount instead, set `gitops.serviceAccount.create: false` and `gitops.serviceAccount.name: <existing-sa>`.
+  The GitOps Role is bound to it, and the chart does not create it.
 - `olakeUI.replicaCount: 1`. The reconciler has no leader election, so the chart refuses more replicas.
 - olake-ui image built with GitOps support (controller-runtime embedded).
 - GitOps RBAC is **namespace-scoped** (`Role` on `configmaps`, `secrets`, and `events` in the release namespace). olake-ui does **not** receive `pods` create/delete - failure indicators are created by **olake-worker** via Temporal `IndicatorWorkflow`.
