@@ -600,7 +600,7 @@ temporal:
     # -- Temporal server image configuration
     image:
       repository: temporalio/server
-      tag: "1.32.0"
+      tag: "1.32.1"
       pullPolicy: Always
 
     # -- Pod scheduling constraints
@@ -647,7 +647,7 @@ temporal:
   adminTools:
     image:
       repository: temporalio/admin-tools
-      tag: "1.32.0"
+      tag: "1.32.1"
       pullPolicy: Always
 
   # -- Temporal Web UI configuration (disabled by default)
@@ -766,7 +766,7 @@ elasticsearch:
   # -- Elasticsearch image configuration
   image:
     repository: elasticsearch
-    tag: "7.17.10"
+    tag: "7.17.28"
     pullPolicy: Always
 
   # -- Pod scheduling constraints
