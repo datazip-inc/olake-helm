@@ -106,8 +106,8 @@ func TestIndicator(t *testing.T) {
 		wantEvents int
 	}{
 		{name: "spawn records a pod event", containers: worker, wantPod: true, wantEvents: 1},
-		// the activity retries; the pod is already up and shows the error meanwhile
-		{name: "spawn with a failed event", containers: worker, setup: forbidEvents, wantErr: true, wantPod: true},
+		// the event is best effort: the pod stays and the activity does not retry
+		{name: "spawn with a failed event", containers: worker, setup: forbidEvents, wantPod: true},
 		// the activity retries; no pod is created without the worker image
 		{name: "spawn with unreadable worker pod", wantErr: true},
 		// the activity retries once the old pod is gone, instead of reporting an indicator that vanishes

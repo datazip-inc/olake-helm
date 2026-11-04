@@ -48,9 +48,10 @@ func (k *KubernetesExecutor) spawnIndicatorPod(ctx context.Context, req *types.I
 		log.Error("spawn indicator pod failed", "podName", name, "namespace", k.namespace, "error", err)
 		return fmt.Errorf("spawn indicator pod: %w", err)
 	}
+	// best effort: the pod already shows the error, and a retry would recreate it for an event that
+	// fails the same way, e.g. on a worker Role without events create (useStandardResources: false)
 	if err := k.emitIndicatorEvent(ctx, pod, req); err != nil {
-		log.Error("record indicator pod event failed", "podName", name, "namespace", k.namespace, "error", err)
-		return fmt.Errorf("record indicator pod event: %w", err)
+		log.Warn("record indicator pod event failed", "podName", name, "namespace", k.namespace, "error", err)
 	}
 	return nil
 }
