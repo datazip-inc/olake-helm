@@ -45,6 +45,9 @@ The indicator is deleted when the resource syncs again.
 Delete is not supported yet (see below), so if a failed resource is removed from git, its `olake-failed-*` indicator stays until you delete it by hand.
 Alert on the `olake.io/indicator=true` label, or on `SyncFailed` events.
 
+Keep managed ConfigMap and Secret names at 63 characters or fewer, and distinct within their first 38 characters.
+The Pod's `olake.io/resource` label holds the full name, and Kubernetes rejects a label value over 63 characters, so a longer name gets no indicator (its status is still `Failed`).
+The `<name>` part is cut to fit 63 characters.
 ## Argo CD / Flux
 
 1. Sync OLake Helm release with `gitops.enabled: true`.
@@ -76,7 +79,7 @@ global:
 | Reconciler not starting | `kubectl logs deploy/olake-ui`, confirm `OLAKE_GITOPS_MODE=kubernetes` |
 | Forbidden on ConfigMap watch | GitOps RoleBinding → olake-ui ServiceAccount |
 | Job stuck Pending | Source/Destination/Streams not Ready yet, or name mismatch in job config |
-| Failed but no indicator Pod | Worker logs (`read worker image failed`), Temporal `IndicatorWorkflow` runs; worker RBAC includes `pods` get and create |
+| Failed but no indicator Pod | Worker logs (`read worker image failed`, `spawn indicator pod failed`), Temporal `IndicatorWorkflow` runs; worker RBAC includes `pods` get and create; the object name is at most 63 characters |
 | Indicator Pod but no `SyncFailed` event | Worker logs (`record indicator pod event failed`); worker RBAC includes `events` create |
 | Phase Failed | `kubectl describe configmap <name>` → `olake.io/message` annotation |
 
