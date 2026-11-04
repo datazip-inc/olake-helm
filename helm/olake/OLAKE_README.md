@@ -251,4 +251,9 @@ Miscellaneous and additional configuration parameters that do not belong to the 
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `gitops.enabled` | `bool` | `false` | Enable the embedded GitOps reconciler in olake-ui (sets OLAKE_GITOPS_MODE=kubernetes) |
+| `gitops.rbac.create` | `bool` | `true` | Create namespace Role/RoleBinding for labelled ConfigMaps, Secrets, and Events |
+| `gitops.serviceAccount.annotations` | `object` | `{}` |  |
+| `gitops.serviceAccount.create` | `bool` | `true` | Create a dedicated olake-ui ServiceAccount when global.jobServiceAccount.create is false |
+| `gitops.serviceAccount.name` | `string` | `""` | ServiceAccount name. With create true it names the created one (default <fullname>-ui); with create false it is an existing ServiceAccount the GitOps Role binds to |
 
