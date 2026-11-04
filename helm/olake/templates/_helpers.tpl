@@ -223,21 +223,6 @@ Uses CONTAINER_REGISTRY_BASE from global.env if set, otherwise defaults to docke
 {{- end -}}
 
 {{/*
-Return a container image reference. If repository is already a full registry path
-(e.g. asia-south1-docker.pkg.dev/.../ui), use it as-is; otherwise prefix registryBase.
-Usage: include "olake.containerImage" (dict "context" . "repository" .Values.olakeUI.image.repository "tag" .Values.olakeUI.image.tag)
-*/}}
-{{- define "olake.containerImage" -}}
-{{- $repo := .repository -}}
-{{- $tag := .tag -}}
-{{- if or (contains ".pkg.dev/" $repo) (contains "gcr.io/" $repo) (contains "amazonaws.com/" $repo) (hasPrefix "ghcr.io/" $repo) -}}
-{{- printf "%s:%s" $repo $tag -}}
-{{- else -}}
-{{- printf "%s/%s:%s" (include "olake.registryBase" .context) $repo $tag -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Return the PostgreSQL secret name
 */}}
 {{- define "olake.postgresql.secretName" -}}

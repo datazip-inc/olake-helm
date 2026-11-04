@@ -131,7 +131,7 @@ spec:
       {{- end }}
       containers:
       - name: olake-ui
-        image: "{{ include "olake.containerImage" (dict "context" . "repository" .Values.olakeUI.image.repository "tag" .Values.olakeUI.image.tag) }}"
+        image: "{{ include "olake.registryBase" . }}/{{ .Values.olakeUI.image.repository }}:{{ .Values.olakeUI.image.tag }}"
         imagePullPolicy: {{ .Values.olakeUI.image.pullPolicy }}
         ports:
         - name: olake-ui
