@@ -345,11 +345,15 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			}),
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy:   corev1.RestartPolicyNever,
-			NodeSelector:    k.GetNodeSelectorForJob(req.JobID, req.Command),
-			Tolerations:     k.GetTolerationsForJob(req.JobID, req.Command),
-			Affinity:        k.BuildAffinityForJob(req.JobID, req.Command),
-			SecurityContext: k.config.SecurityContext,
+			RestartPolicy: corev1.RestartPolicyNever,
+			// connectors never call the Kubernetes API, so the job SA's token stays out of them.
+			// Cloud identity still works: IRSA, EKS Pod Identity and Azure WI inject their own
+			// projected token, and GKE WI uses the metadata server.
+			AutomountServiceAccountToken: ptr.To(false),
+			NodeSelector:                 k.GetNodeSelectorForJob(req.JobID, req.Command),
+			Tolerations:                  k.GetTolerationsForJob(req.JobID, req.Command),
+			Affinity:                     k.BuildAffinityForJob(req.JobID, req.Command),
+			SecurityContext:              k.config.SecurityContext,
 			Containers: []corev1.Container{
 				{
 					Name:         "connector",
