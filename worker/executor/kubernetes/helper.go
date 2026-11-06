@@ -244,8 +244,8 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 // reservedVolumeNames are the volumes the executor adds itself; a user-supplied
 // volume with the same name would make the API server reject the pod.
 var reservedVolumeNames = map[string]struct{}{
-	"job-storage":   {},
-	"index-storage": {},
+	constants.JobVolumeName:   {},
+	constants.IndexVolumeName: {},
 }
 
 // unmarshalStrict unmarshals raw JSON into v and returns an error if raw contains

@@ -275,7 +275,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	var volumes []corev1.Volume
 	if storage.Mode() == constants.StorageModeNFS {
 		volumes = []corev1.Volume{{
-			Name: "job-storage",
+			Name: constants.JobVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: k.config.PVCName,
@@ -283,7 +283,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		}}
 		volumeMounts = []corev1.VolumeMount{{
-			Name:      "job-storage",
+			Name:      constants.JobVolumeName,
 			MountPath: "/mnt/config",
 			SubPath:   subDir,
 		}}
@@ -387,7 +387,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	// job's sync and clear-destination runs open the same Pebble index.
 	if indexVolume != nil {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-			Name: "index-storage",
+			Name: constants.IndexVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: indexVolume.claimName,
@@ -395,7 +395,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		})
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "index-storage",
+			Name:      constants.IndexVolumeName,
 			MountPath: indexVolume.mountPath,
 		})
 		// Mounting the volume is not enough: the driver opens its Pebble index at
