@@ -1,6 +1,8 @@
 package kubernetes
 
 import (
+	"encoding/json"
+	"fmt"
 	"maps"
 	"strings"
 
@@ -8,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/types"
 	"github.com/datazip-inc/olake-helm/worker/utils"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
@@ -235,4 +238,71 @@ func (k *KubernetesExecutor) BuildAffinityForJob(jobID int, operation types.Comm
 			},
 		},
 	}
+}
+
+// reservedVolumeNames are the volumes the executor adds itself; a user-supplied
+// volume with the same name would make the API server reject the pod.
+var reservedVolumeNames = map[string]struct{}{
+	constants.JobVolumeName:   {},
+	constants.IndexVolumeName: {},
+}
+
+// unmarshalStrict unmarshals raw JSON into v and returns an error if raw contains
+// a field that v does not define.
+func unmarshalStrict(raw string, v any) error {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
+}
+
+// parseJobVolumes decodes and validates the user-supplied connector pod volumes and
+// mounts (global.extraJobVolumes / global.extraJobVolumeMounts). Every mount is
+// read-only. Empty inputs yield nothing.
+func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	var (
+		volumes []corev1.Volume
+		mounts  []corev1.VolumeMount
+	)
+	if volumesJSON != "" {
+		if err := unmarshalStrict(volumesJSON, &volumes); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal job volumes: %w", err)
+		}
+	}
+	if mountsJSON != "" {
+		if err := unmarshalStrict(mountsJSON, &mounts); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal job volume mounts: %w", err)
+		}
+	}
+
+	names := make(map[string]struct{}, len(volumes))
+	for _, v := range volumes {
+		if v.Name == "" {
+			return nil, nil, fmt.Errorf("extraJobVolumes entry is missing a name")
+		}
+		if _, reserved := reservedVolumeNames[v.Name]; reserved {
+			return nil, nil, fmt.Errorf("extraJobVolumes name %q is reserved for the executor's own volume", v.Name)
+		}
+		if _, dup := names[v.Name]; dup {
+			return nil, nil, fmt.Errorf("extraJobVolumes name %q is used more than once", v.Name)
+		}
+		names[v.Name] = struct{}{}
+	}
+
+	paths := make(map[string]struct{}, len(mounts))
+	for i, m := range mounts {
+		mounts[i].ReadOnly = true
+		if _, ok := names[m.Name]; !ok {
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts name %q does not match any extraJobVolumes entry", m.Name)
+		}
+		clean, err := utils.CleanContainerMountPath(m.MountPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q: %w", m.Name, m.MountPath, err)
+		}
+		if _, dup := paths[clean]; dup {
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts mountPath %q is used more than once", m.MountPath)
+		}
+		paths[clean] = struct{}{}
+	}
+
+	return volumes, mounts, nil
 }

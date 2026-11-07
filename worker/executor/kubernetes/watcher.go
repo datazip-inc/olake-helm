@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -29,6 +30,10 @@ type ConfigMapWatcher struct {
 	jobMapping  map[int]map[string]string // TODO: use sync.Map
 	jobProfiles map[int]JobSchedulingConfig
 	jobIndexes  JobIndexes
+
+	// User-supplied connector pod volumes and mounts
+	jobVolumes      []corev1.Volume
+	jobVolumeMounts []corev1.VolumeMount
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -175,6 +180,22 @@ func cloneIndexStorage(entry IndexStorageConfig) IndexStorageConfig {
 	return entry
 }
 
+// GetJobVolumes returns deep copies of the user-supplied volumes and mounts (thread-safe).
+func (w *ConfigMapWatcher) GetJobVolumes() ([]corev1.Volume, []corev1.VolumeMount) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	var volumes []corev1.Volume
+	for i := range w.jobVolumes {
+		volumes = append(volumes, *w.jobVolumes[i].DeepCopy())
+	}
+	var mounts []corev1.VolumeMount
+	for i := range w.jobVolumeMounts {
+		mounts = append(mounts, *w.jobVolumeMounts[i].DeepCopy())
+	}
+	return volumes, mounts
+}
+
 // GetAllJobMapping returns all job mappings (thread-safe)
 // Returns a deep copy to prevent external modification of internal state
 func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
@@ -223,4 +244,13 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 		logger.Debugf("no OLAKE_JOB_INDEXES in ConfigMap %s", w.configMapName)
 		w.jobIndexes = JobIndexes{Jobs: map[int]IndexStorageConfig{}}
 	}
+
+	// 4. Load user-supplied job volumes and mounts. On invalid values the parser returns
+	// nothing, so the cache is cleared and no extra volumes are mounted until it is fixed.
+	volumes, mounts, err := parseJobVolumes(cm.Data[constants.EnvJobVolumes], cm.Data[constants.EnvJobVolumeMounts])
+	if err != nil {
+		logger.Warnf("invalid job volumes in ConfigMap %s, no extra volumes will be mounted: %s", w.configMapName, err)
+	}
+	w.jobVolumes, w.jobVolumeMounts = volumes, mounts
+	logger.Infof("updated job volumes (%d) and mounts (%d)", len(volumes), len(mounts))
 }
