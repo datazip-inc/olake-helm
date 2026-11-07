@@ -25,7 +25,7 @@
             "required": ["name", "mountPath"],
             "properties": {
               "name": { "type": "string", "minLength": 1 },
-              "mountPath": { "type": "string", "minLength": 1, "not": { "pattern": "^/+$" } }
+              "mountPath": { "type": "string", "pattern": "^/", "not": { "pattern": "^/+$|^/+mnt/+config(/|$)" } }
             }
           }
         },

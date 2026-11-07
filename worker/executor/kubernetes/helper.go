@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"path"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -289,21 +288,15 @@ func parseJobVolumes(volumesJSON, mountsJSON string) ([]corev1.Volume, []corev1.
 		names[v.Name] = struct{}{}
 	}
 
-	configDir := path.Clean(constants.ContainerMountDir)
 	paths := make(map[string]struct{}, len(mounts))
 	for i, m := range mounts {
 		mounts[i].ReadOnly = true
 		if _, ok := names[m.Name]; !ok {
 			return nil, nil, fmt.Errorf("extraJobVolumeMounts name %q does not match any extraJobVolumes entry", m.Name)
 		}
-		// Container paths are POSIX regardless of where the worker runs.
-		clean := path.Clean(m.MountPath)
-		if m.MountPath == "" || clean == "/" {
-			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q needs a mountPath other than the container root", m.Name)
-		}
-		if clean == configDir || strings.HasPrefix(clean, configDir+"/") {
-			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q would shadow the shared config directory %s",
-				m.Name, m.MountPath, configDir)
+		clean, err := utils.CleanContainerMountPath(m.MountPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q: %w", m.Name, m.MountPath, err)
 		}
 		if _, dup := paths[clean]; dup {
 			return nil, nil, fmt.Errorf("extraJobVolumeMounts mountPath %q is used more than once", m.MountPath)

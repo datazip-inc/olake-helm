@@ -82,7 +82,7 @@ func TestParseJobBindMounts(t *testing.T) {
 		{
 			name:    "target is the container root",
 			input:   `[{"source":"/a","target":"/"}]`,
-			wantErr: "absolute container path",
+			wantErr: "container root",
 		},
 		{
 			name:    "target is the config dir",

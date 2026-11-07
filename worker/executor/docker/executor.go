@@ -255,20 +255,18 @@ func parseJobBindMounts(mountsJSON string) ([]mount.Mount, error) {
 		return nil, fmt.Errorf("failed to unmarshal job bind mounts: %w", err)
 	}
 
-	configDir := path.Clean(constants.ContainerMountDir)
 	targets := make(map[string]struct{}, len(entries))
 	mounts := make([]mount.Mount, 0, len(entries))
 	for _, e := range entries {
 		if !path.IsAbs(e.Source) {
 			return nil, fmt.Errorf("job bind mount source %q must be an absolute host path", e.Source)
 		}
-		// Container paths are POSIX regardless of where the worker runs.
-		target := path.Clean(e.Target)
-		if !path.IsAbs(e.Target) || target == "/" {
-			return nil, fmt.Errorf("job bind mount target %q must be an absolute container path other than the root", e.Target)
+		if !path.IsAbs(e.Target) {
+			return nil, fmt.Errorf("job bind mount target %q must be an absolute container path", e.Target)
 		}
-		if target == configDir || strings.HasPrefix(target, configDir+"/") {
-			return nil, fmt.Errorf("job bind mount target %q would shadow the shared config directory %s", e.Target, configDir)
+		target, err := utils.CleanContainerMountPath(e.Target)
+		if err != nil {
+			return nil, fmt.Errorf("job bind mount target %q: %w", e.Target, err)
 		}
 		if _, dup := targets[target]; dup {
 			return nil, fmt.Errorf("job bind mount target %q is used more than once", e.Target)
