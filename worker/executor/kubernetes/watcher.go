@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -251,6 +252,31 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	if err != nil {
 		logger.Warnf("invalid job volumes in ConfigMap %s, no extra volumes will be mounted: %s", w.configMapName, err)
 	}
+	w.warnMissingVolumeSources(volumes)
+
 	w.jobVolumes, w.jobVolumeMounts = volumes, mounts
 	logger.Infof("updated job volumes (%d) and mounts (%d)", len(volumes), len(mounts))
+}
+
+// warnMissingVolumeSources logs a warning for each non-optional ConfigMap or Secret
+// volume source that cannot be read in the watcher's namespace. Warn only: the object
+// may be created after the upgrade.
+func (w *ConfigMapWatcher) warnMissingVolumeSources(volumes []corev1.Volume) {
+	// One deadline for the whole check: the caller holds w.mu, so a slow API server
+	// must not block readers for long.
+	ctx, cancel := context.WithTimeout(w.ctx, 5*time.Second)
+	defer cancel()
+
+	for _, v := range volumes {
+		if cm := v.ConfigMap; cm != nil && (cm.Optional == nil || !*cm.Optional) {
+			if _, err := w.clientset.CoreV1().ConfigMaps(w.namespace).Get(ctx, cm.Name, metav1.GetOptions{}); err != nil {
+				logger.Warnf("extraJobVolumes %q: ConfigMap %q not readable in namespace %s: %s", v.Name, cm.Name, w.namespace, err)
+			}
+		}
+		if sec := v.Secret; sec != nil && (sec.Optional == nil || !*sec.Optional) {
+			if _, err := w.clientset.CoreV1().Secrets(w.namespace).Get(ctx, sec.SecretName, metav1.GetOptions{}); err != nil {
+				logger.Warnf("extraJobVolumes %q: Secret %q not readable in namespace %s: %s", v.Name, sec.SecretName, w.namespace, err)
+			}
+		}
+	}
 }
