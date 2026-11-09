@@ -71,7 +71,7 @@ const (
 	EnvJobVolumes      = "OLAKE_JOB_VOLUMES"
 	EnvJobVolumeMounts = "OLAKE_JOB_VOLUME_MOUNTS"
 
-	// User-supplied host bind mounts (JSON) added to connector containers in docker mode.
+	// User-supplied host bind mounts (comma-separated host:container pairs) added to connector containers in docker mode.
 	// Set it in the worker service's environment in the docker-compose file.
 	EnvJobBindMounts = "OLAKE_JOB_BIND_MOUNTS"
 

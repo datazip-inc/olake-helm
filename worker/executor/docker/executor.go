@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -27,12 +26,6 @@ type DockerExecutor struct {
 	workingDir string
 	// bindMounts are the user-supplied host mounts added to every connector container.
 	bindMounts []mount.Mount
-}
-
-// jobBindMount is one user-supplied bind mount for connector containers.
-type jobBindMount struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
 }
 
 func NewDockerExecutor() (*DockerExecutor, error) {
@@ -240,46 +233,46 @@ func (d *DockerExecutor) Close() error {
 }
 
 // parseJobBindMounts decodes and validates the user-supplied connector container bind
-// mounts (OLAKE_JOB_BIND_MOUNTS). Source is a path on the Docker host, since the worker
-// creates connector containers through the host's Docker daemon. Every mount is
-// read-only. An empty input yields nothing.
-func parseJobBindMounts(mountsJSON string) ([]mount.Mount, error) {
-	if strings.TrimSpace(mountsJSON) == "" {
+// mounts (OLAKE_JOB_BIND_MOUNTS). Format: comma-separated "host:container" pairs, for
+// example "/opt/certs:/etc/ssl/custom-certs,/a:/b". The host path is on the Docker host,
+// since the worker creates connector containers through the host's Docker daemon. Every
+// mount is read-only. An empty input yields nothing.
+func parseJobBindMounts(mounts string) ([]mount.Mount, error) {
+	if strings.TrimSpace(mounts) == "" {
 		return nil, nil
 	}
 
-	var entries []jobBindMount
-	dec := json.NewDecoder(strings.NewReader(mountsJSON))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&entries); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal job bind mounts: %w", err)
-	}
-
+	entries := strings.Split(mounts, ",")
 	targets := make(map[string]struct{}, len(entries))
-	mounts := make([]mount.Mount, 0, len(entries))
-	for _, e := range entries {
-		if !path.IsAbs(e.Source) {
-			return nil, fmt.Errorf("job bind mount source %q must be an absolute host path", e.Source)
+	result := make([]mount.Mount, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		hostPath, containerPath, ok := strings.Cut(entry, ":")
+		if !ok || strings.Contains(containerPath, ":") {
+			return nil, fmt.Errorf("job bind mount %q must be in host:container format", entry)
 		}
-		if !path.IsAbs(e.Target) {
-			return nil, fmt.Errorf("job bind mount target %q must be an absolute container path", e.Target)
+		if !path.IsAbs(hostPath) {
+			return nil, fmt.Errorf("job bind mount source %q must be an absolute host path", hostPath)
 		}
-		target, err := utils.CleanContainerMountPath(e.Target)
+		if !path.IsAbs(containerPath) {
+			return nil, fmt.Errorf("job bind mount target %q must be an absolute container path", containerPath)
+		}
+		target, err := utils.CleanContainerMountPath(containerPath)
 		if err != nil {
-			return nil, fmt.Errorf("job bind mount target %q: %w", e.Target, err)
+			return nil, fmt.Errorf("job bind mount target %q: %w", containerPath, err)
 		}
 		if _, dup := targets[target]; dup {
-			return nil, fmt.Errorf("job bind mount target %q is used more than once", e.Target)
+			return nil, fmt.Errorf("job bind mount target %q is used more than once", containerPath)
 		}
 		targets[target] = struct{}{}
 
-		mounts = append(mounts, mount.Mount{
+		result = append(result, mount.Mount{
 			Type:     mount.TypeBind,
-			Source:   e.Source,
+			Source:   hostPath,
 			Target:   target,
 			ReadOnly: true,
 		})
 	}
 
-	return mounts, nil
+	return result, nil
 }
