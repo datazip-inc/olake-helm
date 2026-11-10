@@ -27,6 +27,11 @@ const (
 	OutputFileName      = "output.json"
 	TelemetryUserIDPath = "telemetry/user_id"
 
+	// Names of the volumes the kubernetes executor adds to every connector pod.
+	// User-supplied volumes may not reuse them.
+	JobVolumeName   = "job-storage"
+	IndexVolumeName = "index-storage"
+
 	// IndexDirName is the persistence-root subdirectory that holds one Pebble
 	// index directory per job. Docker counterpart of the per-job index PVC.
 	IndexDirName = "index"

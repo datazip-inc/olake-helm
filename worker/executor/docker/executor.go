@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-helm/worker/constants"
@@ -16,11 +18,14 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"github.com/spf13/viper"
 )
 
 type DockerExecutor struct {
 	client     *client.Client
 	workingDir string
+	// bindMounts are the user-supplied host mounts added to every connector container.
+	bindMounts []mount.Mount
 }
 
 func NewDockerExecutor() (*DockerExecutor, error) {
@@ -29,7 +34,14 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		return nil, fmt.Errorf("failed to create docker client: %s", err)
 	}
 
-	return &DockerExecutor{client: client, workingDir: storage.ConfigDir()}, nil
+	// A bad value fails startup: silently dropping the mounts would leave connector
+	// containers without the certificates they expect.
+	bindMounts, err := parseJobBindMounts(viper.GetString(constants.EnvJobBindMounts))
+	if err != nil {
+		return nil, err
+	}
+
+	return &DockerExecutor{client: client, workingDir: storage.ConfigDir(), bindMounts: bindMounts}, nil
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionRequest, workdir string) (string, error) {
@@ -97,6 +109,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, req *types.ExecutionReques
 	if indexMount != nil {
 		hostConfig.Mounts = append(hostConfig.Mounts, *indexMount)
 	}
+	hostConfig.Mounts = append(hostConfig.Mounts, d.bindMounts...)
 
 	log.Info("creating docker container", "image", imageName, "containerName", containerName, "command", req.Args)
 
@@ -185,6 +198,13 @@ func (d *DockerExecutor) ensureIndexMount(jobID int, operation types.Command, in
 		return nil, fmt.Errorf("failed to create index directory %s: %s", indexDir, err)
 	}
 
+	for _, m := range d.bindMounts {
+		if m.Target == path.Clean(constants.DefaultIndexMountPath) {
+			return nil, fmt.Errorf("job bind mount target %q is the same as the index mount path %s for job %d; choose a different path",
+				m.Target, constants.DefaultIndexMountPath, jobID)
+		}
+	}
+
 	return &mount.Mount{
 		Type:   mount.TypeBind,
 		Source: utils.GetHostOutputDir(indexDir),
@@ -210,4 +230,49 @@ func (d *DockerExecutor) Cleanup(ctx context.Context, req *types.ExecutionReques
 
 func (d *DockerExecutor) Close() error {
 	return d.client.Close()
+}
+
+// parseJobBindMounts decodes and validates the user-supplied connector container bind
+// mounts (OLAKE_JOB_BIND_MOUNTS). Format: comma-separated "host:container" pairs, for
+// example "/opt/certs:/etc/ssl/custom-certs,/a:/b". The host path is on the Docker host,
+// since the worker creates connector containers through the host's Docker daemon. Every
+// mount is read-only. An empty input yields nothing.
+func parseJobBindMounts(mounts string) ([]mount.Mount, error) {
+	if strings.TrimSpace(mounts) == "" {
+		return nil, nil
+	}
+
+	entries := strings.Split(mounts, ",")
+	targets := make(map[string]struct{}, len(entries))
+	result := make([]mount.Mount, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		hostPath, containerPath, ok := strings.Cut(entry, ":")
+		if !ok || strings.Contains(containerPath, ":") {
+			return nil, fmt.Errorf("job bind mount %q must be in host:container format", entry)
+		}
+		if !path.IsAbs(hostPath) {
+			return nil, fmt.Errorf("job bind mount source %q must be an absolute host path", hostPath)
+		}
+		if !path.IsAbs(containerPath) {
+			return nil, fmt.Errorf("job bind mount target %q must be an absolute container path", containerPath)
+		}
+		target, err := utils.CleanContainerMountPath(containerPath)
+		if err != nil {
+			return nil, fmt.Errorf("job bind mount target %q: %w", containerPath, err)
+		}
+		if _, dup := targets[target]; dup {
+			return nil, fmt.Errorf("job bind mount target %q is used more than once", containerPath)
+		}
+		targets[target] = struct{}{}
+
+		result = append(result, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   hostPath,
+			Target:   target,
+			ReadOnly: true,
+		})
+	}
+
+	return result, nil
 }
