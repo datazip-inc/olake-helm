@@ -554,19 +554,24 @@ global:
 
 In the connector (source/destination) configuration, provide the path to the file inside the connector pod.
 
-When mounting a ConfigMap or Secret without `subPath`, Kubernetes makes each key available as a separate file inside the mounted directory.
+When a ConfigMap or Secret is mounted without `subPath`, Kubernetes makes each key available as a separate file inside the mounted directory.
 
-For example, if the ConfigMap `my-ca-certs` contains a key named `ca.crt` and is mounted at `/etc/ssl/custom-certs`, the certificate will be available at:
+For example, if the ConfigMap `my-ca-certs` contains a key named `ca.crt` and is mounted at `/etc/ssl/custom-certs`, the certificate is available at:
 
 `/etc/ssl/custom-certs/ca.crt`
 
-Use this full path as the value of the connector's `server_ca_path` field:
+Set that full path in the connector's `ssl` block. The connector reads `*_path` fields (such as `server_ca_path`) only when `cert_source` is `"path"`, so set both. For example:
 
 ```json
 {
-  "server_ca_path": "/etc/ssl/custom-certs/ca.crt"
+  "ssl": {
+    "cert_source": "path",
+    "server_ca_path": "/etc/ssl/custom-certs/ca.crt"
+  }
 }
 ```
+
+The location and fields of the `ssl` block can differ by connector. Check your connector's documentation for the exact fields.
 
 Rules:
 
