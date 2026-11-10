@@ -85,3 +85,13 @@ data:
   {{- end }}
   OLAKE_JOB_POD_LABELS: {{ $jobPodLabels | toJson | quote }}
   {{- end }}
+
+  # =================================================================
+  # ACTIVITY POD VOLUMES
+  # =================================================================
+  {{- if .Values.global.extraJobVolumes }}
+  OLAKE_JOB_VOLUMES: {{ .Values.global.extraJobVolumes | toJson | quote }}
+  {{- end }}
+  {{- if .Values.global.extraJobVolumeMounts }}
+  OLAKE_JOB_VOLUME_MOUNTS: {{ .Values.global.extraJobVolumeMounts | toJson | quote }}
+  {{- end }}

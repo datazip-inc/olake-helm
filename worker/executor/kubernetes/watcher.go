@@ -9,10 +9,12 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/datazip-inc/olake-helm/worker/constants"
 	"github.com/datazip-inc/olake-helm/worker/utils/logger"
 )
 
@@ -29,6 +31,10 @@ type ConfigMapWatcher struct {
 	jobMapping  map[int]map[string]string // TODO: use sync.Map
 	jobProfiles map[int]JobSchedulingConfig
 	jobIndexes  JobIndexes
+
+	// User-supplied connector pod volumes and mounts
+	jobVolumes      []corev1.Volume
+	jobVolumeMounts []corev1.VolumeMount
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -175,6 +181,22 @@ func cloneIndexStorage(entry IndexStorageConfig) IndexStorageConfig {
 	return entry
 }
 
+// GetJobVolumes returns deep copies of the user-supplied volumes and mounts (thread-safe).
+func (w *ConfigMapWatcher) GetJobVolumes() ([]corev1.Volume, []corev1.VolumeMount) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	var volumes []corev1.Volume
+	for i := range w.jobVolumes {
+		volumes = append(volumes, *w.jobVolumes[i].DeepCopy())
+	}
+	var mounts []corev1.VolumeMount
+	for i := range w.jobVolumeMounts {
+		mounts = append(mounts, *w.jobVolumeMounts[i].DeepCopy())
+	}
+	return volumes, mounts
+}
+
 // GetAllJobMapping returns all job mappings (thread-safe)
 // Returns a deep copy to prevent external modification of internal state
 func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
@@ -193,6 +215,15 @@ func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
 }
 
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
+	volumes := w.storeJobMapping(cm)
+
+	// Check sources after w.mu is released, so API calls never block readers.
+	w.warnMissingVolumeSources(volumes)
+}
+
+// storeJobMapping parses the ConfigMap into the watcher's caches under w.mu and
+// returns the parsed volumes for the caller to check once the lock is released.
+func (w *ConfigMapWatcher) storeJobMapping(cm *corev1.ConfigMap) []corev1.Volume {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -222,5 +253,39 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	} else {
 		logger.Debugf("no OLAKE_JOB_INDEXES in ConfigMap %s", w.configMapName)
 		w.jobIndexes = JobIndexes{Jobs: map[int]IndexStorageConfig{}}
+	}
+
+	// 4. Load user-supplied job volumes and mounts. On invalid values the parser returns
+	// nothing, so the cache is cleared and no extra volumes are mounted until it is fixed.
+	volumes, mounts, err := parseJobVolumes(cm.Data[constants.EnvJobVolumes], cm.Data[constants.EnvJobVolumeMounts])
+	if err != nil {
+		logger.Warnf("invalid job volumes in ConfigMap %s, no extra volumes will be mounted: %s", w.configMapName, err)
+	}
+
+	w.jobVolumes, w.jobVolumeMounts = volumes, mounts
+	logger.Infof("updated job volumes (%d) and mounts (%d)", len(volumes), len(mounts))
+	return volumes
+}
+
+// warnMissingVolumeSources logs a warning for each non-optional ConfigMap or Secret
+// volume source that cannot be read in the watcher's namespace. Warn only: the object
+// may be created after the upgrade.
+func (w *ConfigMapWatcher) warnMissingVolumeSources(volumes []corev1.Volume) {
+	// One deadline for the whole check, so a slow API server cannot stall the
+	// informer event handler for long.
+	ctx, cancel := context.WithTimeout(w.ctx, 5*time.Second)
+	defer cancel()
+
+	for _, v := range volumes {
+		if cm := v.ConfigMap; cm != nil && (cm.Optional == nil || !*cm.Optional) {
+			if _, err := w.clientset.CoreV1().ConfigMaps(w.namespace).Get(ctx, cm.Name, metav1.GetOptions{}); err != nil {
+				logger.Warnf("extraJobVolumes %q: ConfigMap %q not readable in namespace %s: %s", v.Name, cm.Name, w.namespace, err)
+			}
+		}
+		if sec := v.Secret; sec != nil && (sec.Optional == nil || !*sec.Optional) {
+			if _, err := w.clientset.CoreV1().Secrets(w.namespace).Get(ctx, sec.SecretName, metav1.GetOptions{}); err != nil {
+				logger.Warnf("extraJobVolumes %q: Secret %q not readable in namespace %s: %s", v.Name, sec.SecretName, w.namespace, err)
+			}
+		}
 	}
 }

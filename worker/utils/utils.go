@@ -93,22 +93,25 @@ func Truncate(s string, n int) string {
 func GetWorkerEnvVars() map[string]string {
 	// ignoredWorkerEnv is a map of environment variables that are ignored from the worker container.
 	var ignoredWorkerEnv = map[string]any{
-		"HOSTNAME":                nil,
-		"PATH":                    nil,
-		"PWD":                     nil,
-		"HOME":                    nil,
-		"SHLVL":                   nil,
-		"TERM":                    nil,
-		"PERSISTENT_DIR":          nil,
-		"CONTAINER_REGISTRY_BASE": nil,
-		"TEMPORAL_ADDRESS":        nil,
-		"TEMPORAL_API_KEY":        nil,
-		"TEMPORAL_EXTERNAL":       nil,
-		"TEMPORAL_ENABLE_TLS":     nil,
-		"TEMPORAL_NAMESPACE":      nil,
-		"TEMPORAL_TASK_QUEUE":     nil,
-		"OLAKE_SECRET_KEY":        nil,
-		"_":                       nil,
+		"HOSTNAME":                   nil,
+		"PATH":                       nil,
+		"PWD":                        nil,
+		"HOME":                       nil,
+		"SHLVL":                      nil,
+		"TERM":                       nil,
+		"PERSISTENT_DIR":             nil,
+		"CONTAINER_REGISTRY_BASE":    nil,
+		"TEMPORAL_ADDRESS":           nil,
+		"TEMPORAL_API_KEY":           nil,
+		"TEMPORAL_EXTERNAL":          nil,
+		"TEMPORAL_ENABLE_TLS":        nil,
+		"TEMPORAL_NAMESPACE":         nil,
+		"TEMPORAL_TASK_QUEUE":        nil,
+		"OLAKE_SECRET_KEY":           nil,
+		constants.EnvJobBindMounts:   nil,
+		constants.EnvJobVolumes:      nil,
+		constants.EnvJobVolumeMounts: nil,
+		"_":                          nil,
 	}
 
 	vars := make(map[string]string)
@@ -538,4 +541,20 @@ func workflowConnectorLogsExistInS3(ctx context.Context, workDir string) (bool, 
 		}
 	}
 	return false, nil
+}
+
+// CleanContainerMountPath cleans a user-supplied container mount path and rejects the
+// two paths that break the job: the container root, and anything inside the shared
+// config directory, which would hide the job configuration the connector reads at startup.
+// Container paths are POSIX regardless of where the worker runs.
+func CleanContainerMountPath(mountPath string) (string, error) {
+	clean := path.Clean(mountPath)
+	if mountPath == "" || clean == "/" {
+		return "", errors.New("must be a path other than the container root")
+	}
+	configDir := path.Clean(constants.ContainerMountDir)
+	if clean == configDir || strings.HasPrefix(clean, configDir+"/") {
+		return "", fmt.Errorf("would shadow the shared config directory %s", configDir)
+	}
+	return clean, nil
 }

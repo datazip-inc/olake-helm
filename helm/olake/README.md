@@ -532,6 +532,56 @@ global:
 
 **Activity pods:** annotations are read by olake-workers from the `OLAKE_JOB_POD_ANNOTATIONS` configmap key and merged into the connector Job pod spec at runtime. Internal `olake.io/*` annotations always take precedence over user-supplied ones.
 
+### Extra Volumes for Connector Pods
+
+Use `global.extraJobVolumes` and `global.extraJobVolumeMounts` to mount extra files (for example a custom CA bundle or a client key) into the connector job pods that olake-workers spawns. Both fields use standard Kubernetes volume and volumeMount specs.
+
+```yaml
+global:
+  extraJobVolumes:
+    - name: custom-ca
+      configMap:
+        name: my-ca-certs
+    - name: client-key
+      secret:
+        secretName: my-client-key
+  extraJobVolumeMounts:
+    - name: custom-ca
+      mountPath: /etc/ssl/custom-certs
+    - name: client-key
+      mountPath: /etc/ssl/client-key
+```
+
+In the connector (source/destination) configuration, provide the path to the file inside the connector pod.
+
+When a ConfigMap or Secret is mounted without `subPath`, Kubernetes makes each key available as a separate file inside the mounted directory.
+
+For example, if the ConfigMap `my-ca-certs` contains a key named `ca.crt` and is mounted at `/etc/ssl/custom-certs`, the certificate is available at:
+
+`/etc/ssl/custom-certs/ca.crt`
+
+Set that full path in the connector's `ssl` block. The connector reads `*_path` fields (such as `server_ca_path`) only when `cert_source` is `"path"`, so set both. For example:
+
+```json
+{
+  "ssl": {
+    "cert_source": "path",
+    "server_ca_path": "/etc/ssl/custom-certs/ca.crt"
+  }
+}
+```
+
+The location and fields of the `ssl` block can differ by connector. Check your connector's documentation for the exact fields.
+
+Rules:
+
+-   Every `name` in `extraJobVolumeMounts` must match an entry in `extraJobVolumes`.
+-   `mountPath` values must be unique, and cannot be `/` or inside the shared config directory (`/mnt/config`).
+-   All mounts are read-only.
+-   Referenced ConfigMaps and Secrets must exist in the release namespace.
+-   A mount that uses `subPath` does not pick up later ConfigMap/Secret updates. Restart the pod, or run a new job, to get the new content.
+-   Do not mount over /etc/ssl/certs, as it hides the default trusted CA certificates used for TLS connections. Use a separate path, such as /etc/ssl/custom-certs, for your custom certificates.
+
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.
