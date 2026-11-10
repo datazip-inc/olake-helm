@@ -215,6 +215,15 @@ func (w *ConfigMapWatcher) GetAllJobMapping() map[int]map[string]string {
 }
 
 func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
+	volumes := w.storeJobMapping(cm)
+
+	// Check sources after w.mu is released, so API calls never block readers.
+	w.warnMissingVolumeSources(volumes)
+}
+
+// storeJobMapping parses the ConfigMap into the watcher's caches under w.mu and
+// returns the parsed volumes for the caller to check once the lock is released.
+func (w *ConfigMapWatcher) storeJobMapping(cm *corev1.ConfigMap) []corev1.Volume {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -252,18 +261,18 @@ func (w *ConfigMapWatcher) updateJobMapping(cm *corev1.ConfigMap) {
 	if err != nil {
 		logger.Warnf("invalid job volumes in ConfigMap %s, no extra volumes will be mounted: %s", w.configMapName, err)
 	}
-	w.warnMissingVolumeSources(volumes)
 
 	w.jobVolumes, w.jobVolumeMounts = volumes, mounts
 	logger.Infof("updated job volumes (%d) and mounts (%d)", len(volumes), len(mounts))
+	return volumes
 }
 
 // warnMissingVolumeSources logs a warning for each non-optional ConfigMap or Secret
 // volume source that cannot be read in the watcher's namespace. Warn only: the object
 // may be created after the upgrade.
 func (w *ConfigMapWatcher) warnMissingVolumeSources(volumes []corev1.Volume) {
-	// One deadline for the whole check: the caller holds w.mu, so a slow API server
-	// must not block readers for long.
+	// One deadline for the whole check, so a slow API server cannot stall the
+	// informer event handler for long.
 	ctx, cancel := context.WithTimeout(w.ctx, 5*time.Second)
 	defer cancel()
 
