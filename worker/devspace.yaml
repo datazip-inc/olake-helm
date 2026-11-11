@@ -25,6 +25,12 @@ images:
     image: olakego/k8s-worker
     dockerfile: ./Dockerfile
     context: ./
+    # The Dockerfile needs BuildKit (--platform=$BUILDPLATFORM, COPY --chmod).
+    # DevSpace's default docker engine uses the legacy builder, so build with docker buildx instead.
+    buildKit:
+      # Build with the local Docker daemon. minikube's docker-env does not work with the
+      # containerd runtime, which minikube can pick by default.
+      preferMinikube: false
 
 # This is a list of `deployments` that DevSpace can create for this project
 deployments:

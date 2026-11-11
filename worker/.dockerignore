@@ -28,6 +28,14 @@ olake-workers
 # Test files
 *_test.go
 coverage.out
+tests/
+
+# Build and dev tooling, not needed in the image
+Dockerfile
+.dockerignore
+release.sh
+devspace.yaml
+devspace_start.sh
 
 # Local development
 .env
