@@ -1,7 +1,7 @@
 # OLake Helm Chart
 
 <h1 align="center" style="border-bottom: none">
-    <a href="https://datazip.io/olake" target="_blank">
+    <a href="https://olake.io/" target="_blank">
         <img alt="olake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
     </a>
     <br>OLake
@@ -29,7 +29,7 @@ Chart documentation is available in [olake directory](./helm/olake/README.md).
 We ❤️ contributions! Check our [Bounty Program](https://olake.io/docs/community/issues-and-prs#goodies).
 
 - Chart contributions: Please submit issues and pull requests to this repository. See [CONTRIBUTING.md](./CONTRIBUTING.md) for branching, commit and review conventions.
-- Core contributions: [OLake Main Repository](https://github.com/datazip-inc/olake)
+- Core contributions: [OLake Go Repository](https://github.com/datazip-inc/olake-go)
 - Documentation: [OLake Docs Repository](https://github.com/datazip-inc/olake-docs)
 
 ## Support
