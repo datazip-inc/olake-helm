@@ -196,6 +196,38 @@ olake-shared-storage
 {{- end -}}
 
 {{/*
+Fail fast on olakeUI extra volumes that would leave the pod stuck in ContainerCreating:
+a mount without a matching volume, or a non-optional ConfigMap/Secret missing from the namespace.
+The existence check covers plain configMap/secret volumes and runs only when the cluster is
+reachable (kube-root-ca.crt is in every namespace), so helm template and GitOps renders skip it.
+*/}}
+{{- define "olake.validateExtraVolumes" -}}
+{{- $ns := include "olake.namespace" . -}}
+{{- $names := list "olake-config" "shared-storage" -}}
+{{- if first .Values.global.imagePullSecrets -}}
+{{- $names = append $names "registry-creds" -}}
+{{- end -}}
+{{- range .Values.olakeUI.extraVolumes -}}
+{{- $names = append $names .name -}}
+{{- end -}}
+{{- range .Values.olakeUI.extraVolumeMounts -}}
+{{- if not (has .name $names) -}}
+{{- fail (printf "olakeUI.extraVolumeMounts entry %q has no matching entry in olakeUI.extraVolumes" .name) -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.olakeUI.extraVolumes (lookup "v1" "ConfigMap" $ns "kube-root-ca.crt") -}}
+{{- range .Values.olakeUI.extraVolumes -}}
+{{- if and .configMap (not .configMap.optional) (not (lookup "v1" "ConfigMap" $ns .configMap.name)) -}}
+{{- fail (printf "olakeUI.extraVolumes %q: ConfigMap %q not found in namespace %q; create it first or set optional: true" .name .configMap.name $ns) -}}
+{{- end -}}
+{{- if and .secret (not .secret.optional) (not (lookup "v1" "Secret" $ns .secret.secretName)) -}}
+{{- fail (printf "olakeUI.extraVolumes %q: Secret %q not found in namespace %q; create it first or set optional: true" .name .secret.secretName $ns) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Get the namespace name
 */}}
 {{- define "olake.namespace" -}}

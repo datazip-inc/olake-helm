@@ -605,6 +605,8 @@ olakeUI:
 
 Keep `subPath`: mounting the ConfigMap over the whole `/etc/ssl/certs` directory hides the image's default CAs. A `subPath` mount does not pick up ConfigMap updates; restart the pod after changing the certificate.
 
+Create the ConfigMap or Secret before installing, not in the same release. When Helm can reach the cluster, `helm install` and `helm upgrade` fail if a plain `configMap` or `secret` volume references an object missing from the release namespace, unless the volume sets `optional: true`. `helm template`, client-side `--dry-run`, GitOps renders and first installs with `--create-namespace` skip this check, and a missing object leaves the `olake-ui` pod in `ContainerCreating`.
+
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.
