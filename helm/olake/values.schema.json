@@ -110,6 +110,34 @@
         }
       }
     },
+    "olakeUI": {
+      "type": "object",
+      "properties": {
+        "extraVolumes": {
+          "type": "array",
+          "description": "Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs; each needs a unique name that is not olake-config, shared-storage or registry-creds.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "not": { "enum": ["olake-config", "shared-storage", "registry-creds"] } }
+            }
+          }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "description": "Mounts for olakeUI.extraVolumes, applied to the OLake UI container.",
+          "items": {
+            "type": "object",
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "mountPath": { "type": "string", "pattern": "^/" }
+            }
+          }
+        }
+      }
+    },
     "jobIndexes": {
       "type": "object",
       "description": "Per-job index volume settings. \"default\" holds the settings every job starts from; entries under \"jobs\" are deep-merged over it field by field. A job only gets a volume when its index_required advanced setting is true.",

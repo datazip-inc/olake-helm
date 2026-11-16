@@ -264,6 +264,9 @@ spec:
           mountPath: /etc/olake/registry
           readOnly: true
         {{- end }}
+        {{- with .Values.olakeUI.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
@@ -311,4 +314,7 @@ spec:
           items:
             - key: .dockerconfigjson
               path: config.json
+      {{- end }}
+      {{- with .Values.olakeUI.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
       {{- end }}

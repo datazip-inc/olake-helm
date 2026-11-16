@@ -281,6 +281,26 @@ olakeUI:
   #     FEATURE_FLAG: "true"
   env: {}
 
+  # -- Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs.
+  # Referenced ConfigMaps/Secrets must exist in the release namespace.
+  # Example (custom CA for a TLS-inspecting proxy):
+  #   extraVolumes:
+  #     - name: custom-ca
+  #       configMap:
+  #         name: custom-ca
+  extraVolumes: []
+
+  # -- Mounts for the volumes above, applied to the OLake UI container.
+  # To add a CA to the trust store, mount a single file into /etc/ssl/certs with subPath;
+  # mounting over the whole directory hides the image's default CAs.
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: custom-ca
+  #       mountPath: /etc/ssl/certs/custom-ca.crt
+  #       subPath: custom-ca.crt
+  #       readOnly: true
+  extraVolumeMounts: []
+
   # -- Ingress configuration for external access
   ingress:
     # -- Enable ingress

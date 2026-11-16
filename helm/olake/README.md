@@ -582,6 +582,29 @@ Rules:
 -   A mount that uses `subPath` does not pick up later ConfigMap/Secret updates. Restart the pod, or run a new job, to get the new content.
 -   Do not mount over /etc/ssl/certs, as it hides the default trusted CA certificates used for TLS connections. Use a separate path, such as /etc/ssl/custom-certs, for your custom certificates.
 
+### Custom CA for OLake UI
+
+On networks where a proxy or firewall inspects TLS traffic, outbound HTTPS from OLake UI fails with `x509: certificate signed by unknown authority`. Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to add the proxy CA (PEM format) to the UI's trust store:
+
+```bash
+kubectl create configmap custom-ca -n <namespace> --from-file=custom-ca.crt
+```
+
+```yaml
+olakeUI:
+  extraVolumes:
+    - name: custom-ca
+      configMap:
+        name: custom-ca
+  extraVolumeMounts:
+    - name: custom-ca
+      mountPath: /etc/ssl/certs/custom-ca.crt
+      subPath: custom-ca.crt
+      readOnly: true
+```
+
+Keep `subPath`: mounting the ConfigMap over the whole `/etc/ssl/certs` directory hides the image's default CAs. A `subPath` mount does not pick up ConfigMap updates; restart the pod after changing the certificate.
+
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.
