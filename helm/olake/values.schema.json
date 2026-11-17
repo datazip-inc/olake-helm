@@ -113,28 +113,15 @@
     "olakeUI": {
       "type": "object",
       "properties": {
-        "extraVolumes": {
-          "type": "array",
-          "description": "Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs; each needs a unique name that is not olake-config, shared-storage or registry-creds.",
-          "items": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1, "not": { "enum": ["olake-config", "shared-storage", "registry-creds"] } }
-            }
-          }
-        },
-        "extraVolumeMounts": {
-          "type": "array",
-          "description": "Mounts for olakeUI.extraVolumes, applied to the OLake UI container.",
-          "items": {
-            "type": "object",
-            "required": ["name", "mountPath"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "mountPath": { "type": "string", "pattern": "^/" }
-            }
-          }
+        "customCA": {
+          "type": "object",
+          "description": "Custom CA for the OLake UI trust store. Set one of certificate or existingConfigMap.",
+          "properties": {
+            "certificate": { "type": "string", "description": "PEM CA certificate or bundle; the chart creates a ConfigMap from it." },
+            "existingConfigMap": { "type": "string", "description": "Existing ConfigMap in the release namespace that holds the CA." },
+            "key": { "type": "string", "pattern": "^[-._a-zA-Z0-9]+$", "not": { "enum": [".", ".."] }, "description": "Key in existingConfigMap that holds the PEM." }
+          },
+          "additionalProperties": false
         }
       }
     },

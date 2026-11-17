@@ -584,28 +584,27 @@ Rules:
 
 ### Custom CA for OLake UI
 
-On networks where a proxy or firewall inspects TLS traffic, outbound HTTPS from OLake UI fails with `x509: certificate signed by unknown authority`. Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to add the proxy CA (PEM format) to the UI's trust store:
+On networks where a proxy or firewall inspects TLS traffic, outbound HTTPS from OLake UI fails with `x509: certificate signed by unknown authority`. Use `olakeUI.customCA` to add the proxy CA (PEM format) to the UI's trust store. The chart mounts it at `/etc/ssl/certs/olake-custom-ca.crt`, next to the image's default CAs.
+
+Pass the certificate and let the chart create the ConfigMap:
 
 ```bash
-kubectl create configmap custom-ca -n <namespace> --from-file=custom-ca.crt
+helm upgrade --install olake olake/olake -n <namespace> \
+  --set-file olakeUI.customCA.certificate=./ca.crt
 ```
+
+The `olake-ui` pod restarts when the certificate changes. Several certificates can be concatenated into one PEM bundle.
+
+Or point at a ConfigMap you manage, for example one created by trust-manager. It must exist in the release namespace before installing and contain `key`, or the `olake-ui` pod stays in `ContainerCreating`:
 
 ```yaml
 olakeUI:
-  extraVolumes:
-    - name: custom-ca
-      configMap:
-        name: custom-ca
-  extraVolumeMounts:
-    - name: custom-ca
-      mountPath: /etc/ssl/certs/custom-ca.crt
-      subPath: custom-ca.crt
-      readOnly: true
+  customCA:
+    existingConfigMap: corp-ca
+    key: ca.crt
 ```
 
-Keep `subPath`: mounting the ConfigMap over the whole `/etc/ssl/certs` directory hides the image's default CAs. A `subPath` mount does not pick up ConfigMap updates; restart the pod after changing the certificate.
-
-Create the ConfigMap or Secret before installing, not in the same release. When Helm can reach the cluster, `helm install` and `helm upgrade` fail if a plain `configMap` or `secret` volume references an object missing from the release namespace, unless the volume sets `optional: true`. `helm template`, client-side `--dry-run`, GitOps renders and first installs with `--create-namespace` skip this check, and a missing object leaves the `olake-ui` pod in `ContainerCreating`.
+With `existingConfigMap`, restart the `olake-ui` pod after the ConfigMap changes. Set only one of `certificate` and `existingConfigMap`.
 
 ### Private Container Registry
 

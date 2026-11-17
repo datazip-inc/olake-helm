@@ -1,4 +1,5 @@
-{{- include "olake.validateExtraVolumes" . }}
+{{- $customCA := include "olake.customCA.configMapName" . }}
+{{- $ca := .Values.olakeUI.customCA | default dict }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -30,6 +31,9 @@ spec:
         {{- end }}
         {{- with .Values.olakeUI.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $ca.certificate }}
+        checksum/custom-ca: {{ sha256sum . | quote }}
         {{- end }}
       labels:
         app.kubernetes.io/name: olake-ui
@@ -265,8 +269,11 @@ spec:
           mountPath: /etc/olake/registry
           readOnly: true
         {{- end }}
-        {{- with .Values.olakeUI.extraVolumeMounts }}
-        {{- toYaml . | nindent 8 }}
+        {{- if $customCA }}
+        - name: custom-ca
+          mountPath: /etc/ssl/certs/olake-custom-ca.crt
+          subPath: ca.crt
+          readOnly: true
         {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
@@ -316,6 +323,12 @@ spec:
             - key: .dockerconfigjson
               path: config.json
       {{- end }}
-      {{- with .Values.olakeUI.extraVolumes }}
-      {{- toYaml . | nindent 6 }}
+      {{- if $customCA }}
+      - name: custom-ca
+        configMap:
+          name: {{ $customCA | quote }}
+          # explicit key so a missing key fails the mount instead of mounting an empty path
+          items:
+            - key: {{ if $ca.certificate }}ca.crt{{ else }}{{ $ca.key | default "ca.crt" | quote }}{{ end }}
+              path: ca.crt
       {{- end }}

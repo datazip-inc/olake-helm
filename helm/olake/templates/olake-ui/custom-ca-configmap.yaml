@@ -1,0 +1,16 @@
+{{- $ca := .Values.olakeUI.customCA | default dict }}
+{{- if $ca.certificate }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "olake.customCA.configMapName" . }}
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    app.kubernetes.io/name: olake-ui
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: olake-ui
+    {{- include "olake.labels" . | nindent 4 }}
+data:
+  ca.crt: |
+    {{- $ca.certificate | nindent 4 }}
+{{- end }}

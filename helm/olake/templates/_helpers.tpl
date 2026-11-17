@@ -196,34 +196,24 @@ olake-shared-storage
 {{- end -}}
 
 {{/*
-Fail fast on olakeUI extra volumes that would leave the pod stuck in ContainerCreating:
-a mount without a matching volume, or a non-optional ConfigMap/Secret missing from the namespace.
-The existence check covers plain configMap/secret volumes and runs only when the cluster is
-reachable (kube-root-ca.crt is in every namespace), so helm template and GitOps renders skip it.
+ConfigMap holding the olake-ui custom CA: chart-created from customCA.certificate, or
+customCA.existingConfigMap. Empty when no custom CA is configured.
 */}}
-{{- define "olake.validateExtraVolumes" -}}
-{{- $ns := include "olake.namespace" . -}}
-{{- $names := list "olake-config" "shared-storage" -}}
-{{- if first .Values.global.imagePullSecrets -}}
-{{- $names = append $names "registry-creds" -}}
+{{- define "olake.customCA.configMapName" -}}
+{{- $ca := .Values.olakeUI.customCA | default dict -}}
+{{- if and $ca.certificate $ca.existingConfigMap -}}
+{{- fail "set only one of olakeUI.customCA.certificate and olakeUI.customCA.existingConfigMap" -}}
 {{- end -}}
-{{- range .Values.olakeUI.extraVolumes -}}
-{{- $names = append $names .name -}}
+{{- if $ca.certificate -}}
+{{- if not (contains "-----BEGIN CERTIFICATE-----" $ca.certificate) -}}
+{{- fail "olakeUI.customCA.certificate must be a PEM certificate; pass the file with --set-file olakeUI.customCA.certificate=./ca.crt" -}}
 {{- end -}}
-{{- range .Values.olakeUI.extraVolumeMounts -}}
-{{- if not (has .name $names) -}}
-{{- fail (printf "olakeUI.extraVolumeMounts entry %q has no matching entry in olakeUI.extraVolumes" .name) -}}
+{{- if contains "PRIVATE KEY" $ca.certificate -}}
+{{- fail "olakeUI.customCA.certificate must not contain a private key; include only the CA certificate" -}}
 {{- end -}}
-{{- end -}}
-{{- if and .Values.olakeUI.extraVolumes (lookup "v1" "ConfigMap" $ns "kube-root-ca.crt") -}}
-{{- range .Values.olakeUI.extraVolumes -}}
-{{- if and .configMap (not .configMap.optional) (not (lookup "v1" "ConfigMap" $ns .configMap.name)) -}}
-{{- fail (printf "olakeUI.extraVolumes %q: ConfigMap %q not found in namespace %q; create it first or set optional: true" .name .configMap.name $ns) -}}
-{{- end -}}
-{{- if and .secret (not .secret.optional) (not (lookup "v1" "Secret" $ns .secret.secretName)) -}}
-{{- fail (printf "olakeUI.extraVolumes %q: Secret %q not found in namespace %q; create it first or set optional: true" .name .secret.secretName $ns) -}}
-{{- end -}}
-{{- end -}}
+{{- printf "%s-custom-ca" (include "olake.fullname" . | trunc 53 | trimSuffix "-") -}}
+{{- else -}}
+{{- $ca.existingConfigMap | default "" -}}
 {{- end -}}
 {{- end -}}
 
