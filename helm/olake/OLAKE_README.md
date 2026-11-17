@@ -77,6 +77,8 @@ Settings for the OLake UI frontend dashboard and backend API server, including r
 | `olakeUI.customCA.existingConfigMap` | `string` | `""` | Existing ConfigMap in the release namespace that holds the CA, for example one managed by trust-manager. It must exist before install. |
 | `olakeUI.customCA.key` | `string` | `"ca.crt"` | Key in existingConfigMap that holds the PEM |
 | `olakeUI.env` | `object` | `{}` | Environment variables for OLake UI Add custom environment variables here Example:   env:     CUSTOM_VAR: "value"     FEATURE_FLAG: "true" |
+| `olakeUI.extraVolumeMounts` | `list` | `[]` | Mounts applied to the OLake UI container. Each name must match an entry in extraVolumes or a built-in volume. Example:   extraVolumeMounts:     - name: pg-ca       mountPath: /etc/olake/pg-ca       readOnly: true |
+| `olakeUI.extraVolumes` | `list` | `[]` | Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs. Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod stays in ContainerCreating. For a custom CA, use customCA instead. Example:   extraVolumes:     - name: pg-ca       secret:         secretName: pg-ca |
 | `olakeUI.image` | `object` | `{"pullPolicy":"Always","repository":"olakego/ui","tag":"latest"}` | OLake UI image configuration |
 | `olakeUI.ingress` | `object` | `{"annotations":{},"className":"","enabled":false,"hosts":[],"tls":[]}` | Ingress configuration for external access |
 | `olakeUI.ingress.annotations` | `object` | `{}` | Ingress annotations Add custom annotations for your ingress controller here. Examples:   nginx.ingress.kubernetes.io/rewrite-target: /   kubernetes.io/ingress.class: nginx   kubernetes.io/tls-acme: "true"   cert-manager.io/cluster-issuer: "letsencrypt-prod" |

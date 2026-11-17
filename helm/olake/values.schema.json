@@ -122,6 +122,29 @@
             "key": { "type": "string", "pattern": "^[-._a-zA-Z0-9]+$", "not": { "enum": [".", ".."] }, "description": "Key in existingConfigMap that holds the PEM." }
           },
           "additionalProperties": false
+        },
+        "extraVolumes": {
+          "type": "array",
+          "description": "Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs; names must not reuse a built-in volume.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "not": { "enum": ["olake-config", "shared-storage", "registry-creds", "custom-ca"] } }
+            }
+          }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "description": "Mounts applied to the OLake UI container. Each name must match an extraVolumes entry or a built-in volume.",
+          "items": {
+            "type": "object",
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "mountPath": { "type": "string", "pattern": "^/", "not": { "pattern": "^/+$" } }
+            }
+          }
         }
       }
     },
