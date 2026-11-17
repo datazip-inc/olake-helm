@@ -436,6 +436,26 @@ olakeWorker:
   #     FEATURE_FLAG: "true"
   env: {}
 
+  # -- Extra volumes added to the OLake Worker pod. Standard Kubernetes volume specs.
+  # Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod
+  # stays in ContainerCreating. These do not reach connector job pods; use
+  # global.extraJobVolumes for those.
+  # Example:
+  #   extraVolumes:
+  #     - name: gcp-key
+  #       secret:
+  #         secretName: olake-gcp-key
+  extraVolumes: []
+
+  # -- Mounts applied to the OLake Worker container. Each name must match an entry in
+  # extraVolumes or the built-in shared-storage volume.
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: gcp-key
+  #       mountPath: /etc/olake/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
+
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:
     # -- Service account name

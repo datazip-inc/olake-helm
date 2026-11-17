@@ -606,9 +606,9 @@ olakeUI:
 
 With `existingConfigMap`, restart the `olake-ui` pod after the ConfigMap changes. Set only one of `certificate` and `existingConfigMap`.
 
-### Extra Volumes for OLake UI
+### Extra Volumes for OLake UI and OLake Worker
 
-Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to mount other files into the `olake-ui` pod. Both take standard Kubernetes volume and volumeMount specs. For a custom CA, use `olakeUI.customCA` instead.
+Use `olakeUI.extraVolumes` / `olakeUI.extraVolumeMounts` and `olakeWorker.extraVolumes` / `olakeWorker.extraVolumeMounts` to mount other files into the `olake-ui` and `olake-workers` pods. They take standard Kubernetes volume and volumeMount specs. For a custom CA in `olake-ui`, use `olakeUI.customCA` instead. Connector job pods are configured separately with `global.extraJobVolumes`.
 
 For example, to resolve GitOps secret references from GCP Secret Manager outside GKE Workload Identity, mount a service account key and point `GOOGLE_APPLICATION_CREDENTIALS` at it:
 
@@ -626,14 +626,16 @@ olakeUI:
     GOOGLE_APPLICATION_CREDENTIALS: /etc/olake/gcp/key.json
 ```
 
-A mounted file is only used when something reads its path, usually through an environment variable in `olakeUI.env`.
+The same shape works under `olakeWorker`. A mounted file is only used when something reads its path, usually through an environment variable in `olakeUI.env` or `olakeWorker.env`.
 
 Rules:
 
--   Every `name` in `extraVolumeMounts` must match an entry in `extraVolumes` or a built-in volume (`olake-config`, `shared-storage`, plus `registry-creds` when `global.imagePullSecrets` is set and `custom-ca` when `olakeUI.customCA` is set); the render fails otherwise.
--   Volume names `olake-config`, `shared-storage`, `registry-creds` and `custom-ca` are reserved.
+-   Every `name` in `extraVolumeMounts` must match an entry in the same component's `extraVolumes` or one of its built-in volumes; the render fails otherwise and lists the available names.
+    -   `olake-ui`: `olake-config`, `shared-storage`, plus `registry-creds` when `global.imagePullSecrets` is set and `custom-ca` when `olakeUI.customCA` is set.
+    -   `olake-workers`: `shared-storage`.
+-   Built-in volume names are reserved for `extraVolumes`.
 -   `mountPath` cannot be `/`. Do not mount over `/etc/ssl/certs`, as it hides the default trusted CAs.
--   Referenced ConfigMaps and Secrets must exist in the release namespace before installing, or the `olake-ui` pod stays in `ContainerCreating`.
+-   Referenced ConfigMaps and Secrets must exist in the release namespace before installing, or the pod stays in `ContainerCreating`.
 
 ### Private Container Registry
 

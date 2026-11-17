@@ -116,6 +116,8 @@ Configurations for the Temporal worker service that executes ingestion jobs, pod
 | `olakeWorker.config` | `object` | `{"logging":{"format":"console","level":"info"}}` | OLake Worker application configuration |
 | `olakeWorker.config.logging` | `object` | `{"format":"console","level":"info"}` | Logging configuration |
 | `olakeWorker.env` | `object` | `{}` | Environment variables for OLake Worker Add custom environment variables here Example:   env:     CUSTOM_VAR: "value"     FEATURE_FLAG: "true" |
+| `olakeWorker.extraVolumeMounts` | `list` | `[]` | Mounts applied to the OLake Worker container. Each name must match an entry in extraVolumes or the built-in shared-storage volume. Example:   extraVolumeMounts:     - name: gcp-key       mountPath: /etc/olake/gcp       readOnly: true |
+| `olakeWorker.extraVolumes` | `list` | `[]` | Extra volumes added to the OLake Worker pod. Standard Kubernetes volume specs. Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod stays in ContainerCreating. These do not reach connector job pods; use global.extraJobVolumes for those. Example:   extraVolumes:     - name: gcp-key       secret:         secretName: olake-gcp-key |
 | `olakeWorker.image` | `object` | `{"pullPolicy":"Always","repository":"olakego/ui-worker","tag":"latest"}` | OLake Worker image configuration |
 | `olakeWorker.nodeSelector` | `object` | `{}` | Pod scheduling constraints |
 | `olakeWorker.podAnnotations` | `object` | `{}` | Additional pod annotations |

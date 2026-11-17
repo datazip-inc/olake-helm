@@ -221,22 +221,17 @@ customCA.existingConfigMap. Empty when no custom CA is configured.
 {{- end -}}
 
 {{/*
-Fail when an olakeUI.extraVolumeMounts entry names no volume in the olake-ui pod.
+Fail when a <component>.extraVolumeMounts entry names no volume in that pod.
+Takes a dict: component (values key), builtins (volume names the template defines), volumes, mounts.
 */}}
 {{- define "olake.validateExtraVolumeMounts" -}}
-{{- $names := list "olake-config" "shared-storage" -}}
-{{- if first .Values.global.imagePullSecrets -}}
-{{- $names = append $names "registry-creds" -}}
-{{- end -}}
-{{- if include "olake.customCA.configMapName" . -}}
-{{- $names = append $names "custom-ca" -}}
-{{- end -}}
-{{- range .Values.olakeUI.extraVolumes -}}
+{{- $names := .builtins -}}
+{{- range .volumes -}}
 {{- $names = append $names .name -}}
 {{- end -}}
-{{- range .Values.olakeUI.extraVolumeMounts -}}
+{{- range .mounts -}}
 {{- if not (has .name $names) -}}
-{{- fail (printf "olakeUI.extraVolumeMounts entry %q matches no volume; available: %s" .name (join ", " $names)) -}}
+{{- fail (printf "%s.extraVolumeMounts entry %q matches no volume; available: %s" $.component .name (join ", " $names)) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

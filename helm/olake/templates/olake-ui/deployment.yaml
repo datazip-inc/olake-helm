@@ -1,6 +1,9 @@
 {{- $customCA := include "olake.customCA.configMapName" . }}
 {{- $ca := .Values.olakeUI.customCA | default dict }}
-{{- include "olake.validateExtraVolumeMounts" . }}
+{{- $builtinVolumes := list "olake-config" "shared-storage" }}
+{{- if first .Values.global.imagePullSecrets }}{{ $builtinVolumes = append $builtinVolumes "registry-creds" }}{{ end }}
+{{- if $customCA }}{{ $builtinVolumes = append $builtinVolumes "custom-ca" }}{{ end }}
+{{- include "olake.validateExtraVolumeMounts" (dict "component" "olakeUI" "builtins" $builtinVolumes "volumes" .Values.olakeUI.extraVolumes "mounts" .Values.olakeUI.extraVolumeMounts) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
