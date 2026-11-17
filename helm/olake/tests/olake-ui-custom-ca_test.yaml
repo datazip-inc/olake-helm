@@ -139,14 +139,33 @@ tests:
       olakeUI.customCA.existingConfigMap: corp-ca
       olakeUI.customCA.key: ../ca.crt
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: "/olakeUI/customCA/key"
 
   - it: rejects unknown customCA fields
     template: templates/olake-ui/deployment.yaml
     set:
       olakeUI.customCA.existingConfigmap: corp-ca
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: "additional properties 'existingConfigmap' not allowed"
+
+  - it: fails when key is set without existingConfigMap
+    template: templates/olake-ui/deployment.yaml
+    set:
+      olakeUI.customCA.key: bundle.pem
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeUI.customCA.key applies only to olakeUI.customCA.existingConfigMap"
+
+  - it: accepts a certificate with leading whitespace
+    template: templates/olake-ui/custom-ca-configmap.yaml
+    set:
+      olakeUI.customCA.certificate: "  \n  -----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+    asserts:
+      - equal:
+          path: data["ca.crt"]
+          value: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
   - it: renders nothing when customCA is null
     template: templates/olake-ui/deployment.yaml

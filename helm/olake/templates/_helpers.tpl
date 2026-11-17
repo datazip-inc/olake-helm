@@ -204,6 +204,9 @@ customCA.existingConfigMap. Empty when no custom CA is configured.
 {{- if and $ca.certificate $ca.existingConfigMap -}}
 {{- fail "set only one of olakeUI.customCA.certificate and olakeUI.customCA.existingConfigMap" -}}
 {{- end -}}
+{{- if and (not $ca.existingConfigMap) $ca.key (ne $ca.key "ca.crt") -}}
+{{- fail "olakeUI.customCA.key applies only to olakeUI.customCA.existingConfigMap; set existingConfigMap or remove key" -}}
+{{- end -}}
 {{- if $ca.certificate -}}
 {{- if not (contains "-----BEGIN CERTIFICATE-----" $ca.certificate) -}}
 {{- fail "olakeUI.customCA.certificate must be a PEM certificate; pass the file with --set-file olakeUI.customCA.certificate=./ca.crt" -}}

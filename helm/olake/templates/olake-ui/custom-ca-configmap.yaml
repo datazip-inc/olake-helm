@@ -12,5 +12,5 @@ metadata:
     {{- include "olake.labels" . | nindent 4 }}
 data:
   ca.crt: |
-    {{- $ca.certificate | nindent 4 }}
+    {{- $ca.certificate | trim | nindent 4 }}
 {{- end }}
