@@ -20,3 +20,21 @@ jobs:
       # Helm is preinstalled on GitHub-hosted Ubuntu runners
       - name: Lint chart
         run: make lint
+
+  unit-test-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.2.3
+
+      # Helm 4 verifies plugin signatures by default; helm-unittest is pinned to a release tag instead
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.1.2 --verify=false
+
+      - name: Run chart unit tests
+        run: make test
