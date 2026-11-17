@@ -608,19 +608,25 @@ With `existingConfigMap`, restart the `olake-ui` pod after the ConfigMap changes
 
 ### Extra Volumes for OLake UI
 
-Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to mount other files into the `olake-ui` pod, such as a client certificate. Both take standard Kubernetes volume and volumeMount specs. For a custom CA, use `olakeUI.customCA` instead.
+Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to mount other files into the `olake-ui` pod. Both take standard Kubernetes volume and volumeMount specs. For a custom CA, use `olakeUI.customCA` instead.
+
+For example, to resolve GitOps secret references from GCP Secret Manager outside GKE Workload Identity, mount a service account key and point `GOOGLE_APPLICATION_CREDENTIALS` at it:
 
 ```yaml
 olakeUI:
   extraVolumes:
-    - name: pg-ca
+    - name: gcp-key
       secret:
-        secretName: pg-ca
+        secretName: olake-gcp-key
   extraVolumeMounts:
-    - name: pg-ca
-      mountPath: /etc/olake/pg-ca
+    - name: gcp-key
+      mountPath: /etc/olake/gcp
       readOnly: true
+  env:
+    GOOGLE_APPLICATION_CREDENTIALS: /etc/olake/gcp/key.json
 ```
+
+A mounted file is only used when something reads its path, usually through an environment variable in `olakeUI.env`.
 
 Rules:
 

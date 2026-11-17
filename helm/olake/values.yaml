@@ -298,17 +298,17 @@ olakeUI:
   # stays in ContainerCreating. For a custom CA, use customCA instead.
   # Example:
   #   extraVolumes:
-  #     - name: pg-ca
+  #     - name: gcp-key
   #       secret:
-  #         secretName: pg-ca
+  #         secretName: olake-gcp-key
   extraVolumes: []
 
   # -- Mounts applied to the OLake UI container. Each name must match an entry in
   # extraVolumes or a built-in volume.
   # Example:
   #   extraVolumeMounts:
-  #     - name: pg-ca
-  #       mountPath: /etc/olake/pg-ca
+  #     - name: gcp-key
+  #       mountPath: /etc/olake/gcp
   #       readOnly: true
   extraVolumeMounts: []
 
