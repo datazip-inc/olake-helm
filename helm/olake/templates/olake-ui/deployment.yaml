@@ -1,6 +1,5 @@
 {{- $customCA := include "olake.customCA.configMapName" . }}
 {{- $ca := .Values.olakeUI.customCA | default dict }}
-{{- include "olake.validateExtraVolumeMounts" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -276,9 +275,6 @@ spec:
           subPath: ca.crt
           readOnly: true
         {{- end }}
-        {{- with .Values.olakeUI.extraVolumeMounts }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
         {{- $defaultResources := dict 
           "requests" (dict "memory" "512Mi" "cpu" "500m")
         }}
@@ -335,7 +331,4 @@ spec:
           items:
             - key: {{ if $ca.certificate }}ca.crt{{ else }}{{ $ca.key | default "ca.crt" | quote }}{{ end }}
               path: ca.crt
-      {{- end }}
-      {{- with .Values.olakeUI.extraVolumes }}
-      {{- toYaml . | nindent 6 }}
       {{- end }}

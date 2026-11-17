@@ -293,25 +293,6 @@ olakeUI:
     # -- Key in existingConfigMap that holds the PEM
     key: "ca.crt"
 
-  # -- Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs.
-  # Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod
-  # stays in ContainerCreating. For a custom CA, use customCA instead.
-  # Example:
-  #   extraVolumes:
-  #     - name: pg-ca
-  #       secret:
-  #         secretName: pg-ca
-  extraVolumes: []
-
-  # -- Mounts applied to the OLake UI container. Each name must match an entry in
-  # extraVolumes or a built-in volume.
-  # Example:
-  #   extraVolumeMounts:
-  #     - name: pg-ca
-  #       mountPath: /etc/olake/pg-ca
-  #       readOnly: true
-  extraVolumeMounts: []
-
   # -- Ingress configuration for external access
   ingress:
     # -- Enable ingress

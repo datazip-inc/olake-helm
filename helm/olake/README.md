@@ -606,29 +606,6 @@ olakeUI:
 
 With `existingConfigMap`, restart the `olake-ui` pod after the ConfigMap changes. Set only one of `certificate` and `existingConfigMap`.
 
-### Extra Volumes for OLake UI
-
-Use `olakeUI.extraVolumes` and `olakeUI.extraVolumeMounts` to mount other files into the `olake-ui` pod, such as a client certificate. Both take standard Kubernetes volume and volumeMount specs. For a custom CA, use `olakeUI.customCA` instead.
-
-```yaml
-olakeUI:
-  extraVolumes:
-    - name: pg-ca
-      secret:
-        secretName: pg-ca
-  extraVolumeMounts:
-    - name: pg-ca
-      mountPath: /etc/olake/pg-ca
-      readOnly: true
-```
-
-Rules:
-
--   Every `name` in `extraVolumeMounts` must match an entry in `extraVolumes` or a built-in volume (`olake-config`, `shared-storage`, plus `registry-creds` when `global.imagePullSecrets` is set and `custom-ca` when `olakeUI.customCA` is set); the render fails otherwise.
--   Volume names `olake-config`, `shared-storage`, `registry-creds` and `custom-ca` are reserved.
--   `mountPath` cannot be `/`. Do not mount over `/etc/ssl/certs`, as it hides the default trusted CAs.
--   Referenced ConfigMaps and Secrets must exist in the release namespace before installing, or the `olake-ui` pod stays in `ContainerCreating`.
-
 ### Private Container Registry
 
 OLake supports pulling all images from a private or self-hosted container registry.
