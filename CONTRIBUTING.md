@@ -2,7 +2,7 @@
 
 Thanks for helping improve the chart. This guide covers how we branch, write commits, open pull requests and document chart values.
 
-For changes to OLake itself, see the [OLake repository](https://github.com/datazip-inc/olake). For documentation on olake.io, see [olake-docs](https://github.com/datazip-inc/olake-docs).
+For changes to OLake itself, see the [OLake Go repository](https://github.com/datazip-inc/olake-go). For documentation on olake.io, see [olake-docs](https://github.com/datazip-inc/olake-docs).
 
 ## Prerequisites
 

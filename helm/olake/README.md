@@ -1,7 +1,7 @@
 # OLake Helm Chart
 
 <h1 align="center" style="border-bottom: none">
-    <a href="https://datazip.io/olake" target="_blank">
+    <a href="https://olake.io/" target="_blank">
         <img alt="olake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
     </a>
     <br>OLake
@@ -10,7 +10,7 @@
 <p align="center">Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse. ⚡ Efficient, quick and scalable data ingestion for real-time analytics. Starting with MongoDB. Visit <a href="https://olake.io/" target="_blank">olake.io/docs</a> for the full documentation, and benchmarks</p>
 
 <p align="center">
-    <a href="https://github.com/datazip-inc/olake-ui/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/datazip-inc/olake"/></a> <a href="https://olake.io/docs"><img alt="Documentation" height="22" src="https://img.shields.io/badge/view-Documentation-blue?style=for-the-badge"/></a>
+    <a href="https://github.com/datazip-inc/olake-ui/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/datazip-inc/olake-ui"/></a> <a href="https://olake.io/docs"><img alt="Documentation" height="22" src="https://img.shields.io/badge/view-Documentation-blue?style=for-the-badge"/></a>
     <a href="https://olake.io/slack/"><img alt="slack" src="https://img.shields.io/badge/Join%20Our%20Community-Slack-blue"/></a>
 </p>
 
@@ -828,7 +828,7 @@ helm upgrade olake olake/olake
 We ❤️ contributions! Check our [Bounty Program](https://olake.io/docs/community/issues-and-prs#goodies).
 
 - UI contributions: [CONTRIBUTING.md](../CONTRIBUTING.md)
-- Core contributions: [OLake Main Repository](https://github.com/datazip-inc/olake)
+- Core contributions: [OLake Go Repository](https://github.com/datazip-inc/olake-go)
 - Documentation: [OLake Docs Repository](https://github.com/datazip-inc/olake-docs)
 
 ## Support
