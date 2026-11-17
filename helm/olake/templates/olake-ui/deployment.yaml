@@ -1,8 +1,5 @@
-{{- $customCA := include "olake.customCA.configMapName" . }}
-{{- $ca := .Values.olakeUI.customCA | default dict }}
 {{- $builtinVolumes := list "olake-config" "shared-storage" }}
 {{- if first .Values.global.imagePullSecrets }}{{ $builtinVolumes = append $builtinVolumes "registry-creds" }}{{ end }}
-{{- if $customCA }}{{ $builtinVolumes = append $builtinVolumes "custom-ca" }}{{ end }}
 {{- include "olake.validateExtraVolumeMounts" (dict "component" "olakeUI" "builtins" $builtinVolumes "volumes" .Values.olakeUI.extraVolumes "mounts" .Values.olakeUI.extraVolumeMounts) }}
 apiVersion: apps/v1
 kind: Deployment
@@ -35,9 +32,6 @@ spec:
         {{- end }}
         {{- with .Values.olakeUI.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with $ca.certificate }}
-        checksum/custom-ca: {{ sha256sum . | quote }}
         {{- end }}
       labels:
         app.kubernetes.io/name: olake-ui
@@ -273,12 +267,6 @@ spec:
           mountPath: /etc/olake/registry
           readOnly: true
         {{- end }}
-        {{- if $customCA }}
-        - name: custom-ca
-          mountPath: /etc/ssl/certs/olake-custom-ca.crt
-          subPath: ca.crt
-          readOnly: true
-        {{- end }}
         {{- with .Values.olakeUI.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -329,15 +317,6 @@ spec:
           items:
             - key: .dockerconfigjson
               path: config.json
-      {{- end }}
-      {{- if $customCA }}
-      - name: custom-ca
-        configMap:
-          name: {{ $customCA | quote }}
-          # explicit key so a missing key fails the mount instead of mounting an empty path
-          items:
-            - key: {{ if $ca.certificate }}ca.crt{{ else }}{{ $ca.key | default "ca.crt" | quote }}{{ end }}
-              path: ca.crt
       {{- end }}
       {{- with .Values.olakeUI.extraVolumes }}
       {{- toYaml . | nindent 6 }}

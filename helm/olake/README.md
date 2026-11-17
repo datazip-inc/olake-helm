@@ -582,35 +582,36 @@ Rules:
 -   A mount that uses `subPath` does not pick up later ConfigMap/Secret updates. Restart the pod, or run a new job, to get the new content.
 -   Do not mount over /etc/ssl/certs, as it hides the default trusted CA certificates used for TLS connections. Use a separate path, such as /etc/ssl/custom-certs, for your custom certificates.
 
-### Custom CA for OLake UI
+### Extra Volumes for OLake UI and OLake Worker
 
-On networks where a proxy or firewall inspects TLS traffic, outbound HTTPS from OLake UI fails with `x509: certificate signed by unknown authority`. Use `olakeUI.customCA` to add the proxy CA (PEM format) to the UI's trust store. The chart mounts it at `/etc/ssl/certs/olake-custom-ca.crt`, next to the image's default CAs.
+Use `olakeUI.extraVolumes` / `olakeUI.extraVolumeMounts` and `olakeWorker.extraVolumes` / `olakeWorker.extraVolumeMounts` to mount files from ConfigMaps or Secrets into the `olake-ui` and `olake-workers` pods. They take standard Kubernetes volume and volumeMount specs, like `global.extraJobVolumes` does for connector job pods.
 
-Pass the certificate and let the chart create the ConfigMap:
+#### Custom CA certificate
+
+On networks where a proxy or firewall inspects TLS traffic, outbound HTTPS from OLake UI fails with `x509: certificate signed by unknown authority`. Add the proxy CA (PEM format) to the trust store by mounting it as a single file into `/etc/ssl/certs`, next to the image's default CAs:
 
 ```bash
-helm upgrade --install olake olake/olake -n <namespace> \
-  --set-file olakeUI.customCA.certificate=./ca.crt
+kubectl create configmap custom-ca -n <namespace> --from-file=ca.crt=./ca.crt
 ```
-
-The `olake-ui` pod restarts when the certificate changes. Several certificates can be concatenated into one PEM bundle.
-
-Or point at a ConfigMap you manage, for example one created by trust-manager. It must exist in the release namespace before installing and contain `key`, or the `olake-ui` pod stays in `ContainerCreating`:
 
 ```yaml
 olakeUI:
-  customCA:
-    existingConfigMap: corp-ca
-    key: ca.crt
+  extraVolumes:
+    - name: custom-ca
+      configMap:
+        name: custom-ca
+  extraVolumeMounts:
+    - name: custom-ca
+      mountPath: /etc/ssl/certs/custom-ca.crt
+      subPath: ca.crt
+      readOnly: true
 ```
 
-With `existingConfigMap`, restart the `olake-ui` pod after the ConfigMap changes. Set only one of `certificate` and `existingConfigMap`.
+Keep `subPath`: mounting the ConfigMap over the whole `/etc/ssl/certs` directory hides the default CAs. Several certificates can be concatenated into one PEM bundle. A `subPath` mount does not pick up ConfigMap updates, so restart the pod after changing the certificate. The same values under `olakeWorker` add the CA to the worker.
 
-### Extra Volumes for OLake UI and OLake Worker
+#### Other files
 
-Use `olakeUI.extraVolumes` / `olakeUI.extraVolumeMounts` and `olakeWorker.extraVolumes` / `olakeWorker.extraVolumeMounts` to mount other files into the `olake-ui` and `olake-workers` pods. They take standard Kubernetes volume and volumeMount specs. For a custom CA in `olake-ui`, use `olakeUI.customCA` instead. Connector job pods are configured separately with `global.extraJobVolumes`.
-
-For example, to resolve GitOps secret references from GCP Secret Manager outside GKE Workload Identity, mount a service account key and point `GOOGLE_APPLICATION_CREDENTIALS` at it:
+To resolve GitOps secret references from GCP Secret Manager outside GKE Workload Identity, mount a service account key and point `GOOGLE_APPLICATION_CREDENTIALS` at it:
 
 ```yaml
 olakeUI:
@@ -631,10 +632,10 @@ The same shape works under `olakeWorker`. A mounted file is only used when somet
 Rules:
 
 -   Every `name` in `extraVolumeMounts` must match an entry in the same component's `extraVolumes` or one of its built-in volumes; the render fails otherwise and lists the available names.
-    -   `olake-ui`: `olake-config`, `shared-storage`, plus `registry-creds` when `global.imagePullSecrets` is set and `custom-ca` when `olakeUI.customCA` is set.
+    -   `olake-ui`: `olake-config`, `shared-storage`, plus `registry-creds` when `global.imagePullSecrets` is set.
     -   `olake-workers`: `shared-storage`.
 -   Built-in volume names are reserved for `extraVolumes`.
--   `mountPath` cannot be `/`. Do not mount over `/etc/ssl/certs`, as it hides the default trusted CAs.
+-   `mountPath` cannot be `/`. Do not mount a whole volume over `/etc/ssl/certs`; add single files with `subPath` as shown above.
 -   Referenced ConfigMaps and Secrets must exist in the release namespace before installing, or the pod stays in `ContainerCreating`.
 
 ### Private Container Registry

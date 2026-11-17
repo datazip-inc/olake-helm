@@ -9,7 +9,7 @@
 
 # OLake Helm Chart
 
-![Version: 0.0.37](https://img.shields.io/badge/Version-0.0.37-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
+![Version: 0.0.36](https://img.shields.io/badge/Version-0.0.36-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
 
 A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 
@@ -72,13 +72,9 @@ Settings for the OLake UI frontend dashboard and backend API server, including r
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `olakeUI.affinity` | `object` | `{}` | Affinity settings for pod assignment |
-| `olakeUI.customCA` | `object` | `{"certificate":"","existingConfigMap":"","key":"ca.crt"}` | Custom CA added to the OLake UI trust store, for networks where a proxy or firewall inspects TLS traffic. Set one of certificate or existingConfigMap. |
-| `olakeUI.customCA.certificate` | `string` | `""` | PEM CA certificate or bundle; the chart creates a ConfigMap from it. Example: --set-file olakeUI.customCA.certificate=./ca.crt |
-| `olakeUI.customCA.existingConfigMap` | `string` | `""` | Existing ConfigMap in the release namespace that holds the CA, for example one managed by trust-manager. It must exist before install. |
-| `olakeUI.customCA.key` | `string` | `"ca.crt"` | Key in existingConfigMap that holds the PEM |
 | `olakeUI.env` | `object` | `{}` | Environment variables for OLake UI Add custom environment variables here Example:   env:     CUSTOM_VAR: "value"     FEATURE_FLAG: "true" |
-| `olakeUI.extraVolumeMounts` | `list` | `[]` | Mounts applied to the OLake UI container. Each name must match an entry in extraVolumes or a built-in volume. Example:   extraVolumeMounts:     - name: gcp-key       mountPath: /etc/olake/gcp       readOnly: true |
-| `olakeUI.extraVolumes` | `list` | `[]` | Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs. Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod stays in ContainerCreating. For a custom CA, use customCA instead. Example:   extraVolumes:     - name: gcp-key       secret:         secretName: olake-gcp-key |
+| `olakeUI.extraVolumeMounts` | `list` | `[]` | Mounts applied to the OLake UI container. Each name must match an entry in extraVolumes or a built-in volume. To trust a CA, mount the single file into /etc/ssl/certs with subPath; mounting over the directory hides the default CAs. Example:   extraVolumeMounts:     - name: custom-ca       mountPath: /etc/ssl/certs/custom-ca.crt       subPath: ca.crt       readOnly: true |
+| `olakeUI.extraVolumes` | `list` | `[]` | Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs. Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod stays in ContainerCreating. Example (custom CA for a TLS-inspecting proxy, from a ConfigMap with key ca.crt):   extraVolumes:     - name: custom-ca       configMap:         name: custom-ca |
 | `olakeUI.image` | `object` | `{"pullPolicy":"Always","repository":"olakego/ui","tag":"latest"}` | OLake UI image configuration |
 | `olakeUI.ingress` | `object` | `{"annotations":{},"className":"","enabled":false,"hosts":[],"tls":[]}` | Ingress configuration for external access |
 | `olakeUI.ingress.annotations` | `object` | `{}` | Ingress annotations Add custom annotations for your ingress controller here. Examples:   nginx.ingress.kubernetes.io/rewrite-target: /   kubernetes.io/ingress.class: nginx   kubernetes.io/tls-acme: "true"   cert-manager.io/cluster-issuer: "letsencrypt-prod" |

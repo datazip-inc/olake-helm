@@ -196,31 +196,6 @@ olake-shared-storage
 {{- end -}}
 
 {{/*
-ConfigMap holding the olake-ui custom CA: chart-created from customCA.certificate, or
-customCA.existingConfigMap. Empty when no custom CA is configured.
-*/}}
-{{- define "olake.customCA.configMapName" -}}
-{{- $ca := .Values.olakeUI.customCA | default dict -}}
-{{- if and $ca.certificate $ca.existingConfigMap -}}
-{{- fail "set only one of olakeUI.customCA.certificate and olakeUI.customCA.existingConfigMap" -}}
-{{- end -}}
-{{- if and (not $ca.existingConfigMap) $ca.key (ne $ca.key "ca.crt") -}}
-{{- fail "olakeUI.customCA.key applies only to olakeUI.customCA.existingConfigMap; set existingConfigMap or remove key" -}}
-{{- end -}}
-{{- if $ca.certificate -}}
-{{- if not (contains "-----BEGIN CERTIFICATE-----" $ca.certificate) -}}
-{{- fail "olakeUI.customCA.certificate must be a PEM certificate; pass the file with --set-file olakeUI.customCA.certificate=./ca.crt" -}}
-{{- end -}}
-{{- if contains "PRIVATE KEY" $ca.certificate -}}
-{{- fail "olakeUI.customCA.certificate must not contain a private key; include only the CA certificate" -}}
-{{- end -}}
-{{- printf "%s-custom-ca" (include "olake.fullname" . | trunc 53 | trimSuffix "-") -}}
-{{- else -}}
-{{- $ca.existingConfigMap | default "" -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Fail when a <component>.extraVolumeMounts entry names no volume in that pod.
 Takes a dict: component (values key), builtins (volume names the template defines), volumes, mounts.
 */}}
