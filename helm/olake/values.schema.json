@@ -110,6 +110,62 @@
         }
       }
     },
+    "olakeUI": {
+      "type": "object",
+      "properties": {
+        "extraVolumes": {
+          "type": "array",
+          "description": "Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs; names must not reuse a built-in volume.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "not": { "enum": ["olake-config", "shared-storage", "registry-creds"] } }
+            }
+          }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "description": "Mounts applied to the OLake UI container. Each name must match an extraVolumes entry or a built-in volume.",
+          "items": {
+            "type": "object",
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "mountPath": { "type": "string", "pattern": "^/", "not": { "pattern": "^/+$" } }
+            }
+          }
+        }
+      }
+    },
+    "olakeWorker": {
+      "type": "object",
+      "properties": {
+        "extraVolumes": {
+          "type": "array",
+          "description": "Extra volumes added to the OLake Worker pod. Standard Kubernetes volume specs; names must not reuse the built-in shared-storage volume.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "not": { "enum": ["shared-storage"] } }
+            }
+          }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "description": "Mounts applied to the OLake Worker container. Each name must match an extraVolumes entry or shared-storage.",
+          "items": {
+            "type": "object",
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "mountPath": { "type": "string", "pattern": "^/", "not": { "pattern": "^/+$" } }
+            }
+          }
+        }
+      }
+    },
     "jobIndexes": {
       "type": "object",
       "description": "Per-job index volume settings. \"default\" holds the settings every job starts from; entries under \"jobs\" are deep-merged over it field by field. A job only gets a volume when its index_required advanced setting is true.",

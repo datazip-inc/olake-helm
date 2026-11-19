@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help docs docs-check lint
+.PHONY: help docs docs-check lint test
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -13,3 +13,6 @@ docs-check: docs ## Fail if helm/olake/OLAKE_README.md is out of date (run by CI
 
 lint: ## Lint the chart with helm lint
 	@helm lint helm/olake
+
+test: ## Run chart unit tests (needs the helm-unittest plugin)
+	@helm unittest helm/olake

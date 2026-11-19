@@ -281,6 +281,27 @@ olakeUI:
   #     FEATURE_FLAG: "true"
   env: {}
 
+  # -- Extra volumes added to the OLake UI pod. Standard Kubernetes volume specs.
+  # Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod
+  # stays in ContainerCreating.
+  # Example (custom CA for a TLS-inspecting proxy, from a ConfigMap with key ca.crt):
+  #   extraVolumes:
+  #     - name: custom-ca
+  #       configMap:
+  #         name: custom-ca
+  extraVolumes: []
+
+  # -- Mounts applied to the OLake UI container. Each name must match an entry in
+  # extraVolumes or a built-in volume. To trust a CA, mount the single file into
+  # /etc/ssl/certs with subPath; mounting over the directory hides the default CAs.
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: custom-ca
+  #       mountPath: /etc/ssl/certs/custom-ca.crt
+  #       subPath: ca.crt
+  #       readOnly: true
+  extraVolumeMounts: []
+
   # -- Ingress configuration for external access
   ingress:
     # -- Enable ingress
@@ -404,6 +425,26 @@ olakeWorker:
   #     CUSTOM_VAR: "value"
   #     FEATURE_FLAG: "true"
   env: {}
+
+  # -- Extra volumes added to the OLake Worker pod. Standard Kubernetes volume specs.
+  # Referenced ConfigMaps/Secrets must exist in the release namespace, or the pod
+  # stays in ContainerCreating. These do not reach connector job pods; use
+  # global.extraJobVolumes for those.
+  # Example:
+  #   extraVolumes:
+  #     - name: gcp-key
+  #       secret:
+  #         secretName: olake-gcp-key
+  extraVolumes: []
+
+  # -- Mounts applied to the OLake Worker container. Each name must match an entry in
+  # extraVolumes or the built-in shared-storage volume.
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: gcp-key
+  #       mountPath: /etc/olake/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
 
   # -- Service Account configuration for Kubernetes API access
   serviceAccount:
