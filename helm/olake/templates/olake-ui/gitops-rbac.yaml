@@ -1,0 +1,44 @@
+{{- if and .Values.gitops.enabled .Values.gitops.rbac.create (include "olake.uiServiceAccountName" .) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "olake.fullname" . }}-gitops
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: olake-ui
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: [""]
+  # Source/Destination may be defined as a Secret instead of a ConfigMap
+  # (credentials in git). The operator writes olake.io/* status annotations
+  # back onto whichever type is used, so Secrets need the same write verbs as
+  # ConfigMaps. Cache and List/Watch are still scoped to the olake.io/managed
+  # label (see manager.go) and to POD_NAMESPACE, but the verb grant itself
+  # applies to all Secrets in the namespace — this is the accepted trade-off
+  # of storing Source/Destination credentials as Secrets. See docs/gitops.md.
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "olake.fullname" . }}-gitops
+  namespace: {{ include "olake.namespace" . }}
+  labels:
+    {{- include "olake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: olake-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "olake.fullname" . }}-gitops
+subjects:
+- kind: ServiceAccount
+  name: {{ include "olake.uiServiceAccountName" . }}
+  namespace: {{ include "olake.namespace" . }}
+{{- end }}

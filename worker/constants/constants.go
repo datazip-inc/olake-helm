@@ -27,6 +27,11 @@ const (
 	OutputFileName      = "output.json"
 	TelemetryUserIDPath = "telemetry/user_id"
 
+	// Names of the volumes the kubernetes executor adds to every connector pod.
+	// User-supplied volumes may not reuse them.
+	JobVolumeName   = "job-storage"
+	IndexVolumeName = "index-storage"
+
 	// IndexDirName is the persistence-root subdirectory that holds one Pebble
 	// index directory per job. Docker counterpart of the per-job index PVC.
 	IndexDirName = "index"
@@ -63,7 +68,16 @@ const (
 	StorageModeS3  = "s3"
 
 	// MinS3StorageModeVersion is the minimum connector version that supports s3 storage mode.
-	MinS3StorageModeVersion = "v0.12.0"
+	MinS3StorageModeVersion  = "v0.12.0"
+	IndicatorMessageMax      = 4096 // kubelet caps the termination message at 4096 bytes
+	IndicatorAnnotationMax   = 1024
+	LabelIndicator           = "olake.io/indicator"
+	LabelIndicatorKind       = "olake.io/kind"
+	LabelIndicatorResource   = "olake.io/resource"
+	LabelIndicatorPhase      = "olake.io/phase"
+	AnnotationIndicatorError = "olake.io/error"
+	IndicatorEventReason     = "SyncFailed" // the reason olake-ui gives the failed ConfigMap/Secret's event too
+	IndicatorEventComponent  = "olake-worker"
 
 	// Kubernetes ConfigMap names
 	GlobalEnvConfigMap  = "olake-global-env"

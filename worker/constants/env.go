@@ -67,6 +67,14 @@ const (
 	// activity pod annotations
 	EnvJobPodAnnotations = "OLAKE_JOB_POD_ANNOTATIONS"
 
+	// User-supplied volumes and volume mounts (JSON) added to connector pods
+	EnvJobVolumes      = "OLAKE_JOB_VOLUMES"
+	EnvJobVolumeMounts = "OLAKE_JOB_VOLUME_MOUNTS"
+
+	// User-supplied host bind mounts (comma-separated host:container pairs) added to connector containers in docker mode.
+	// Set it in the worker service's environment in the docker-compose file.
+	EnvJobBindMounts = "OLAKE_JOB_BIND_MOUNTS"
+
 	// activity pod labels
 	EnvJobPodLabels = "OLAKE_JOB_POD_LABELS"
 

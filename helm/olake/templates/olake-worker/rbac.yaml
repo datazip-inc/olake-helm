@@ -23,6 +23,12 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log", "pods/status"]
   verbs: ["get", "list", "watch"]
+{{- if .Values.gitops.enabled }}
+# Events on GitOps failure-indicator pods
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+{{- end }}
 # Job management for batch processing
 - apiGroups: ["batch"]
   resources: ["jobs"]

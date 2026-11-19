@@ -275,7 +275,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	var volumes []corev1.Volume
 	if storage.Mode() == constants.StorageModeNFS {
 		volumes = []corev1.Volume{{
-			Name: "job-storage",
+			Name: constants.JobVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: k.config.PVCName,
@@ -283,11 +283,15 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		}}
 		volumeMounts = []corev1.VolumeMount{{
-			Name:      "job-storage",
+			Name:      constants.JobVolumeName,
 			MountPath: "/mnt/config",
 			SubPath:   subDir,
 		}}
 	}
+	// User-supplied volumes and mounts (global.extraJobVolumes / global.extraJobVolumeMounts).
+	extraJobVolumes, extraJobVolumeMounts := k.configWatcher.GetJobVolumes()
+	volumes = append(volumes, extraJobVolumes...)
+	volumeMounts = append(volumeMounts, extraJobVolumeMounts...)
 
 	envFrom := []corev1.EnvFromSource{
 		{
@@ -341,11 +345,15 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			}),
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy:   corev1.RestartPolicyNever,
-			NodeSelector:    k.GetNodeSelectorForJob(req.JobID, req.Command),
-			Tolerations:     k.GetTolerationsForJob(req.JobID, req.Command),
-			Affinity:        k.BuildAffinityForJob(req.JobID, req.Command),
-			SecurityContext: k.config.SecurityContext,
+			RestartPolicy: corev1.RestartPolicyNever,
+			// connectors never call the Kubernetes API, so the job SA's token stays out of them.
+			// Cloud identity still works: IRSA, EKS Pod Identity and Azure WI inject their own
+			// projected token, and GKE WI uses the metadata server.
+			AutomountServiceAccountToken: ptr.To(false),
+			NodeSelector:                 k.GetNodeSelectorForJob(req.JobID, req.Command),
+			Tolerations:                  k.GetTolerationsForJob(req.JobID, req.Command),
+			Affinity:                     k.BuildAffinityForJob(req.JobID, req.Command),
+			SecurityContext:              k.config.SecurityContext,
 			Containers: []corev1.Container{
 				{
 					Name:         "connector",
@@ -379,7 +387,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 	// job's sync and clear-destination runs open the same Pebble index.
 	if indexVolume != nil {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-			Name: "index-storage",
+			Name: constants.IndexVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: indexVolume.claimName,
@@ -387,7 +395,7 @@ func (k *KubernetesExecutor) CreatePodSpec(req *types.ExecutionRequest, workDir,
 			},
 		})
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "index-storage",
+			Name:      constants.IndexVolumeName,
 			MountPath: indexVolume.mountPath,
 		})
 		// Mounting the volume is not enough: the driver opens its Pebble index at

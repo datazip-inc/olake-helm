@@ -60,6 +60,13 @@ func (k *KubernetesExecutor) ensureIndexVolume(ctx context.Context, jobID int, o
 	if err := validateIndexMountPath(cfg.MountPath, jobID); err != nil {
 		return nil, err
 	}
+	_, extraJobVolumeMounts := k.configWatcher.GetJobVolumes()
+	for _, m := range extraJobVolumeMounts {
+		if path.Clean(m.MountPath) == path.Clean(cfg.MountPath) {
+			return nil, fmt.Errorf("extraJobVolumeMounts %q mountPath %q is the same as the index mountPath %q for job %d; choose a different path",
+				m.Name, m.MountPath, cfg.MountPath, jobID)
+		}
+	}
 
 	claimName, err := k.resolveIndexClaim(ctx, jobID, cfg, heartbeat)
 	if err != nil {
@@ -108,20 +115,10 @@ func (k *KubernetesExecutor) useExistingClaim(ctx context.Context, jobID int, na
 
 // validateIndexMountPath rejects the two mount paths Kubernetes would accept but
 // that break the pod: the container root, and anything inside the shared config
-// directory, which would hide the job configuration the connector reads at
-// startup. A relative path is rejected by the API server with its own message.
+// directory. A relative path is rejected by the API server with its own message.
 func validateIndexMountPath(mountPath string, jobID int) error {
-	// Container paths are POSIX regardless of where the worker runs.
-	clean := path.Clean(mountPath)
-
-	if clean == "/" {
-		return fmt.Errorf("jobIndexes mountPath for job %d cannot be the container root", jobID)
-	}
-
-	configDir := path.Clean(constants.ContainerMountDir)
-	if clean == configDir || strings.HasPrefix(clean, configDir+"/") {
-		return fmt.Errorf("jobIndexes mountPath %q for job %d would shadow the shared config directory %s; choose a path outside it",
-			mountPath, jobID, configDir)
+	if _, err := utils.CleanContainerMountPath(mountPath); err != nil {
+		return fmt.Errorf("jobIndexes mountPath %q for job %d: %w", mountPath, jobID, err)
 	}
 
 	return nil

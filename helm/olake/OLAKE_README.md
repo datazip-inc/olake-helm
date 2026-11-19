@@ -1,7 +1,7 @@
 
 
 <h1 align="center" style="border-bottom: none">
-    <a href="https://datazip.io/olake" target="_blank">
+    <a href="https://olake.io/" target="_blank">
         <img alt="olake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
     </a>
     <br>OLake
@@ -9,7 +9,7 @@
 
 # OLake Helm Chart
 
-![Version: 0.0.33](https://img.shields.io/badge/Version-0.0.33-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
+![Version: 0.0.35](https://img.shields.io/badge/Version-0.0.35-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: 0.3.11](https://img.shields.io/badge/AppVersion-0.3.11-informational?style=flat-square)
 
 A Helm chart for OLake UI - Fastest open-source tool for replicating Databases to Apache Iceberg or Data Lakehouse
 
@@ -48,8 +48,10 @@ Configurations that apply globally across all components, or manage standard Kub
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `fullnameOverride` | `string` | `""` | Provide a name to substitute for the full names of resources |
-| `global` | `object` | `{"env":{},"imagePullSecrets":[],"jobMapping":{},"jobPodLabels":{},"jobProfiles":{},"jobServiceAccount":{"annotations":{},"create":true,"name":""},"logFileStorageMode":"nfs","podAnnotations":{},"storageClass":""}` | Global configuration that applies to all components |
+| `global` | `object` | `{"env":{},"extraJobVolumeMounts":[],"extraJobVolumes":[],"imagePullSecrets":[],"jobMapping":{},"jobPodLabels":{},"jobProfiles":{},"jobServiceAccount":{"annotations":{},"create":true,"name":""},"logFileStorageMode":"nfs","podAnnotations":{},"storageClass":""}` | Global configuration that applies to all components |
 | `global.env` | `object` | `{}` | Global environment variables that apply to all OLake components These variables are inherited by all services (olakeUI, olakeWorker) Individual component env sections can override these values if needed  OLAKE_SECRET_KEY: Used for encrypting job metadata and sensitive data   - Leave empty or unset to disable encryption   - Set to a secure random string. Example: "LewgLVrgCZMadJverZdn"   - AWS KMS Key ARN can also be used. Example: "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"  RUN_MODE: Sets the deployment environment mode   - "development": Local development with debug features   - "staging": Pre-production testing environment   - "production": Production deployment with optimizations  Example configuration:   env:     OLAKE_SECRET_KEY: "your-secure-encryption-key-here"     RUN_MODE: "production" |
+| `global.extraJobVolumeMounts` | `list` | `[]` | Mounts for the volumes above, applied to the connector container. Every `name` must match an entry in extraJobVolumes; mountPath values must be unique and cannot be `/` or inside the shared config directory (/mnt/config). All mounts are read-only. Example:   extraJobVolumeMounts:     - name: custom-ca       mountPath: /etc/ssl/custom-certs     - name: client-key       mountPath: /etc/ssl/client-key |
+| `global.extraJobVolumes` | `list` | `[]` | Extra volumes added to connector job pods (the pods olake-workers spawns). Standard Kubernetes volume specs. Mount them with extraJobVolumeMounts. Referenced ConfigMaps/Secrets must exist in the release namespace. Example (custom CA from a ConfigMap, client key from a Secret):   extraJobVolumes:     - name: custom-ca       configMap:         name: my-ca-certs     - name: client-key       secret:         secretName: my-client-key |
 | `global.imagePullSecrets` | `list` | `[]` | Global image pull secrets for private container registries List of Kubernetes secret names containing registry credentials. Applied to all long-running Deployments AND to the connector job pods spawned by olake-workers (via the job ServiceAccount), so private connector images (Harbor, Nexus, Quay, etc.) can be pulled during test/discover/sync. To cover connector job pods, also set `global.jobServiceAccount.create: true`. NOTE: Secrets must be created separately using kubectl or other means Examples:   Create secret: kubectl create secret docker-registry my-registry-secret \     --docker-server=my-registry.com --docker-username=user --docker-password=pass   Reference in values:   imagePullSecrets:     - name: "my-registry-secret"     - name: "docker-hub-secret" |
 | `global.jobMapping` | `object` | `{}` | [DEPRECATED] JobID-based node mapping configuration Use `global.jobProfiles` instead. This field will be removed in a future release. Maps JobID (integer) to specific node labels for pod scheduling (NodeSelector only). |
 | `global.jobPodLabels` | `object` | `{}` | Extra labels for activity pods; internal labels win. Azure Workload Identity needs: azure.workload.identity/use: "true" |
@@ -251,4 +253,9 @@ Miscellaneous and additional configuration parameters that do not belong to the 
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `gitops.enabled` | `bool` | `false` | Enable the embedded GitOps reconciler in olake-ui (sets OLAKE_GITOPS_MODE=kubernetes) |
+| `gitops.rbac.create` | `bool` | `true` | Create namespace Role/RoleBinding for labelled ConfigMaps, Secrets, and Events |
+| `gitops.serviceAccount.annotations` | `object` | `{}` |  |
+| `gitops.serviceAccount.create` | `bool` | `true` | Create a dedicated olake-ui ServiceAccount when global.jobServiceAccount.create is false |
+| `gitops.serviceAccount.name` | `string` | `""` | ServiceAccount name. With create true it names the created one (default <fullname>-ui); with create false it is an existing ServiceAccount the GitOps Role binds to |
 
