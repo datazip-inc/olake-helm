@@ -196,6 +196,22 @@ olake-shared-storage
 {{- end -}}
 
 {{/*
+Fail when a <component>.extraVolumeMounts entry names no volume in that pod.
+Takes a dict: component (values key), builtins (volume names the template defines), volumes, mounts.
+*/}}
+{{- define "olake.validateExtraVolumeMounts" -}}
+{{- $names := .builtins -}}
+{{- range .volumes -}}
+{{- $names = append $names .name -}}
+{{- end -}}
+{{- range .mounts -}}
+{{- if not (has .name $names) -}}
+{{- fail (printf "%s.extraVolumeMounts entry %q matches no volume; available: %s" $.component .name (join ", " $names)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Get the namespace name
 */}}
 {{- define "olake.namespace" -}}

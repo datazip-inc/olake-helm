@@ -1,0 +1,110 @@
+suite: olake-worker extra volumes
+templates:
+  - templates/olake-worker/deployment.yaml
+release:
+  name: olake
+  namespace: olake
+set:
+  olakeWorker:
+    extraVolumes:
+      - name: gcp-key
+        secret:
+          secretName: olake-gcp-key
+    extraVolumeMounts:
+      - name: gcp-key
+        mountPath: /etc/olake/gcp
+        readOnly: true
+tests:
+  - it: renders nothing extra by default
+    set:
+      olakeWorker:
+        extraVolumes: []
+        extraVolumeMounts: []
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+
+  - it: renders extra volumes and mounts after the built-in ones
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[-1]
+          value:
+            name: gcp-key
+            secret:
+              secretName: olake-gcp-key
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[-1]
+          value:
+            name: gcp-key
+            mountPath: /etc/olake/gcp
+            readOnly: true
+
+  - it: allows extra mounts of the built-in volume
+    set:
+      olakeWorker:
+        extraVolumes: []
+        extraVolumeMounts:
+          - name: shared-storage
+            mountPath: /mnt/extra
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: shared-storage
+            mountPath: /mnt/extra
+
+  - it: does not mix in olake-ui extra volumes
+    set:
+      olakeUI:
+        extraVolumes:
+          - name: ui-only
+            emptyDir: {}
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: ui-only
+          any: true
+
+  - it: fails when a mount has no matching volume
+    set:
+      olakeWorker:
+        extraVolumes: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeWorker.extraVolumeMounts entry \"gcp-key\" matches no volume; available: shared-storage$"
+
+  - it: fails when a mount uses an olake-ui-only volume
+    set:
+      olakeWorker:
+        extraVolumes: []
+        extraVolumeMounts:
+          - name: olake-config
+            mountPath: /mnt/config
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeWorker.extraVolumeMounts entry \"olake-config\" matches no volume"
+
+  - it: rejects extra volumes that reuse the built-in name
+    set:
+      olakeWorker:
+        extraVolumes:
+          - name: shared-storage
+            emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeWorker/extraVolumes/0/name"
+
+  - it: rejects mounting at the root path
+    set:
+      olakeWorker:
+        extraVolumeMounts:
+          - name: gcp-key
+            mountPath: /
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeWorker/extraVolumeMounts/0/mountPath"
