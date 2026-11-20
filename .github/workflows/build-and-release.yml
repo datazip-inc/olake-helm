@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           # Release events build the release tag, so a re-run builds the same commit
           ref: ${{ github.event_name == 'release' && github.ref || inputs.environment == 'master' && 'refs/heads/master' || inputs.environment == 'staging' && 'refs/heads/staging' || github.ref }}
