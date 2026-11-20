@@ -1,44 +1,27 @@
-# Build stage
-FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine AS builder
+# The worker binary is prebuilt by `make dist`. This file only copies it in.
 
-ARG TARGETOS TARGETARCH
+# The runtime directories are the same on every arch, so build them on the host arch.
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS rootfs
+RUN mkdir -p /rootfs/mnt/config /rootfs/tmp/olake-config \
+ && chmod 777 /rootfs/mnt/config /rootfs/tmp/olake-config \
+ && chmod 1777 /rootfs/tmp
 
-# Set working directory
-WORKDIR /app
 
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy the entire worker source code
-COPY . ./
-
-# Cross-compile on the build host instead of under QEMU emulation.
-# -trimpath drops local paths, -s -w drop the symbol table and DWARF data (stack traces still work).
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o olake-worker ./main.go
-
-# Prepare the runtime directories here, so the runtime stage needs no RUN step
-RUN mkdir -p /rootfs/mnt/config /rootfs/tmp/olake-config
-
-# Runtime stage: COPY steps only, so multi-arch builds do not need QEMU.
-# Alpine is kept (not scratch) because the Helm chart's worker probes run /bin/sh and wget,
-# and the base image already ships the CA bundle at /etc/ssl/certs/ca-certificates.crt.
+# Alpine, not scratch: the Helm chart's worker probes run /bin/sh and wget, and the
+# base image already ships the CA bundle at /etc/ssl/certs/ca-certificates.crt.
 FROM alpine:3.24
 
-# Create app directory
+COPY --from=rootfs /rootfs/ /
+
+ARG TARGETOS
+ARG TARGETARCH
+# chmod: the binaries come through a workflow artifact, which drops the exec bit.
+COPY --chmod=0755 dist/${TARGETOS}/${TARGETARCH}/olake-worker /app/olake-worker
+
 WORKDIR /app
-
-# Copy the binary from builder stage
-COPY --from=builder /app/olake-worker .
-
-# Copy the necessary directories. COPY does not keep the source directory's mode, so set it here.
-COPY --from=builder --chmod=777 /rootfs/mnt/config /mnt/config
-COPY --from=builder --chmod=777 /rootfs/tmp/olake-config /tmp/olake-config
 
 # Health server port (/health, /ready, /metrics)
 EXPOSE 8090
 
-# Run the worker
+# Runs as root: the worker needs the mounted docker.sock.
 CMD ["./olake-worker"]

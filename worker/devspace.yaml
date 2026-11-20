@@ -32,6 +32,13 @@ images:
       # containerd runtime, which minikube can pick by default.
       preferMinikube: false
 
+# The Dockerfile only copies prebuilt binaries, so build them before the image.
+# This runs before DevSpace checks whether the image needs a rebuild.
+hooks:
+  - name: build-worker-binaries
+    events: ["before:build:app"]
+    command: make -C .. dist
+
 # This is a list of `deployments` that DevSpace can create for this project
 deployments:
   app:

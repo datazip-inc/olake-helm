@@ -40,3 +40,6 @@ CLAUDE.local.md
 
 # Local tools binary directory
 .bin/
+
+# Worker binaries built by `make dist`
+worker/dist/

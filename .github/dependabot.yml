@@ -30,7 +30,7 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Base images in the worker Dockerfile (golang, alpine).
+  # Base image in the worker Dockerfile (alpine). Go comes from worker/go.mod.
   - package-ecosystem: "docker"
     directory: "/worker"
     target-branch: "staging"
