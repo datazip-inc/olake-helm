@@ -154,7 +154,7 @@ Settings for shared file and log storage between the worker and connector pods. 
 | `s3LogFileStorage.external.endpoint` | `string` | `""` | S3-compatible endpoint. Leave empty for AWS S3. Set for anything else, e.g. "https://storage.googleapis.com" or "http://minio.example.com:9000". |
 | `s3LogFileStorage.external.existingSecret` | `string` | `""` | Secret with static credentials. Not needed when role.enabled is true. For GCS, use HMAC keys. kubectl create secret generic s3-log-file-storage-secret \   --from-literal=OLAKE_S3_ACCESS_KEY_ID=<your-access-key-id> \   --from-literal=OLAKE_S3_SECRET_ACCESS_KEY=<your-secret-access-key> |
 | `s3LogFileStorage.external.role` | `object` | `{"annotations":{},"enabled":false}` | IAM role auth for AWS S3 (EKS IRSA or EKS Pod Identity) instead of a secret. |
-| `s3LogFileStorage.external.role.annotations` | `object` | `{}` | IRSA only; leave empty for EKS Pod Identity. Added to the worker and job service accounts. Example:   eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role" |
+| `s3LogFileStorage.external.role.annotations` | `object` | `{}` | IRSA only; leave empty for EKS Pod Identity. Added to the worker, job and Fusion service accounts. Example:   eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/olake-s3-log-storage-role" |
 | `s3LogFileStorage.minio` | `object` | `{"affinity":{},"auth":{"rootPassword":"password","rootUser":"olake"},"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"olakego/minio","tag":"RELEASE.2025-04-03T14-56-28Z"},"nodeSelector":{},"persistence":{"size":"20Gi"},"podAnnotations":{},"podLabels":{},"resources":{},"securityContext":{},"tolerations":[]}` | In-cluster MinIO. Runs as a single pod, so it is a single point of failure. Not recommended for production; use `external` instead. Endpoint and credentials secret are managed by the chart. |
 | `s3LogFileStorage.minio.affinity` | `object` | `{}` | Affinity settings for pod assignment |
 | `s3LogFileStorage.minio.auth.rootUser` | `string` | `"olake"` | MinIO root credentials, also used by OLake as OLAKE_S3_* keys. Override rootPassword for any non-local environment. |
@@ -233,7 +233,7 @@ Settings for optional components including Fusion (Apache Amoro for Iceberg comp
 | `elasticsearch.securityContext` | `object` | `{"fsGroup":1000,"runAsGroup":1000,"runAsUser":1000}` | Elasticsearch security context |
 | `elasticsearch.tolerations` | `list` | `[]` | Tolerations for pod assignment |
 | `fusion.affinity` | `object` | `{}` |  |
-| `fusion.enabled` | `bool` | `false` | Enable Fusion (Amoro) components. Set to false to disable all Fusion resources. Fusion requires NFS/RWX shared storage and is not supported when global.logFileStorageMode is s3. NOTE: NFS mode is deprecated and will be removed end of 2026. |
+| `fusion.enabled` | `bool` | `false` | Enable Fusion (Amoro) components. Set to false to disable all Fusion resources. Fusion follows global.logFileStorageMode: in s3 mode it uploads each run's logs to s3LogFileStorage. NOTE: NFS mode is deprecated and will be removed end of 2026. |
 | `fusion.env` | `object` | `{}` | Environment variables for OLake Fusion Add custom environment variables here Example:   env:     CUSTOM_VAR: "value"     FEATURE_FLAG: "true" |
 | `fusion.image` | `object` | `{"pullPolicy":"Always","repository":"olakego/fusion","tag":"latest"}` | - Fusion (Amoro) container image |
 | `fusion.nodeSelector` | `object` | `{}` | - Pod scheduling constraints for the Fusion pod |

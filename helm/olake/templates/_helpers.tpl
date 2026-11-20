@@ -138,7 +138,6 @@ External covers AWS S3 (no endpoint) and S3-compatible stores like GCS or extern
 {{/*
 Log storage mode from global.logFileStorageMode (default nfs).
 When s3, validates s3LogFileStorage is complete before render.
-Fusion still requires the shared RWX volume and is not supported in s3 mode.
 */}}
 {{- define "olake.storageMode" -}}
 {{- $mode := .Values.global.logFileStorageMode | default "nfs" -}}
@@ -150,15 +149,12 @@ Fusion still requires the shared RWX volume and is not supported in s3 mode.
 {{- if not (or $s3.minio.enabled $s3.external.role.enabled $s3.external.existingSecret) -}}
 {{- fail "S3 credentials are required when s3LogFileStorage.minio.enabled is false; set s3LogFileStorage.external.existingSecret or s3LogFileStorage.external.role.enabled (IRSA / EKS Pod Identity)" -}}
 {{- end -}}
-{{- if .Values.fusion.enabled -}}
-{{- fail "Fusion is not supported when global.logFileStorageMode is s3; set fusion.enabled to false or use nfs" -}}
-{{- end -}}
 {{- end -}}
 {{- $mode -}}
 {{- end -}}
 
 {{/*
-S3 IRSA annotations for external log storage (worker and job service accounts).
+S3 IRSA annotations for external log storage (worker, job and Fusion service accounts).
 Returns a YAML map when active, empty otherwise.
 */}}
 {{- define "olake.s3IRSAAnnotations" -}}

@@ -83,9 +83,11 @@ spec:
         - name: optimizer-config
           configMap:
             name: {{ include "olake.fullname" . }}-fusion-optimizer-config
+        {{- if eq (include "olake.storageMode" .) "nfs" }}
         - name: shared-storage
           persistentVolumeClaim:
             claimName: {{ include "olake.sharedStoragePVC" . }}
+        {{- end }}
       containers:
         - name: optimizer
           image: "{{ include "olake.registryBase" . }}/{{ .Values.fusion.optimizer.spark.image.repository }}:{{ .Values.fusion.optimizer.spark.image.tag }}"
@@ -102,9 +104,11 @@ spec:
             - name: optimizer-config
               mountPath: /usr/local/amoro/conf/executor-pod-template.yaml
               subPath: executor-pod-template.yaml
+            {{- if eq (include "olake.storageMode" .) "nfs" }}
             - name: shared-storage
               mountPath: /data/fusion-logs
               subPath: fusion-logs
+            {{- end }}
           env:
             - name: POD_IP
               valueFrom:
@@ -114,8 +118,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- if eq (include "olake.storageMode" .) "nfs" }}
             - name: LOG_DIR
               value: "/data/fusion-logs"
+            {{- end }}
             {{- range $key, $value := .Values.global.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
