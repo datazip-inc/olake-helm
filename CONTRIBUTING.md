@@ -2,7 +2,7 @@
 
 Thanks for helping improve the chart. This guide covers how we branch, write commits, open pull requests and document chart values.
 
-For changes to OLake itself, see the [OLake repository](https://github.com/datazip-inc/olake). For documentation on olake.io, see [olake-docs](https://github.com/datazip-inc/olake-docs).
+For changes to OLake itself, see the [OLake Go repository](https://github.com/datazip-inc/olake-go). For documentation on olake.io, see [olake-docs](https://github.com/datazip-inc/olake-docs).
 
 ## Prerequisites
 
@@ -110,11 +110,14 @@ CI runs `make lint` and `make docs-check` on every pull request that touches the
 
 ## Testing your changes
 
-Lint the chart and render it with your values before opening a pull request:
+Lint the chart, run its unit tests, and render it with your values before opening a pull request:
 
 ```bash
 make lint
+make test
 helm template olake helm/olake -f my-values.yaml
 ```
+
+`make test` needs the [helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin (`helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.1.2`, plus `--verify=false` on Helm 4). Tests live in `helm/olake/tests/`; add or update one when you change a template. CI runs both `make lint` and `make test`.
 
 For template or behavior changes, install the chart on a local cluster (kind, minikube or k3d) and describe what you checked in the pull request.

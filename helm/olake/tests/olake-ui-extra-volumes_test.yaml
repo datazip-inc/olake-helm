@@ -1,0 +1,137 @@
+suite: olake-ui extra volumes
+templates:
+  - templates/olake-ui/deployment.yaml
+release:
+  name: olake
+  namespace: olake
+set:
+  olakeUI:
+    extraVolumes:
+      - name: gcp-key
+        secret:
+          secretName: olake-gcp-key
+    extraVolumeMounts:
+      - name: gcp-key
+        mountPath: /etc/olake/gcp
+        readOnly: true
+tests:
+  - it: renders extra volumes and mounts
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: gcp-key
+            secret:
+              secretName: olake-gcp-key
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: gcp-key
+            mountPath: /etc/olake/gcp
+            readOnly: true
+
+  - it: mounts a CA from a ConfigMap into the trust store
+    set:
+      olakeUI:
+        extraVolumes:
+          - name: custom-ca
+            configMap:
+              name: custom-ca
+        extraVolumeMounts:
+          - name: custom-ca
+            mountPath: /etc/ssl/certs/custom-ca.crt
+            subPath: ca.crt
+            readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-ca
+            configMap:
+              name: custom-ca
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: custom-ca
+            mountPath: /etc/ssl/certs/custom-ca.crt
+            subPath: ca.crt
+            readOnly: true
+
+  - it: allows extra mounts of built-in volumes
+    set:
+      olakeUI:
+        extraVolumes: []
+        extraVolumeMounts:
+          - name: shared-storage
+            mountPath: /mnt/extra
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: shared-storage
+            mountPath: /mnt/extra
+
+  - it: fails when a mount has no matching volume
+    set:
+      olakeUI:
+        extraVolumes: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeUI.extraVolumeMounts entry \"gcp-key\" matches no volume; available: olake-config, shared-storage$"
+
+  - it: fails when a mount uses registry-creds without a pull secret
+    set:
+      olakeUI:
+        extraVolumes: []
+        extraVolumeMounts:
+          - name: registry-creds
+            mountPath: /mnt/registry
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeUI.extraVolumeMounts entry \"registry-creds\" matches no volume"
+
+  - it: allows a registry-creds mount when a pull secret is set
+    set:
+      global:
+        imagePullSecrets:
+          - name: reg
+      olakeUI:
+        extraVolumes: []
+        extraVolumeMounts:
+          - name: registry-creds
+            mountPath: /mnt/registry
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: registry-creds
+            mountPath: /mnt/registry
+
+  - it: appends extra volumes after the built-in ones
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[-1].name
+          value: gcp-key
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[-1].name
+          value: gcp-key
+
+  - it: rejects extra volumes that reuse a built-in name
+    set:
+      olakeUI:
+        extraVolumes:
+          - name: shared-storage
+            emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeUI/extraVolumes/0/name"
+
+  - it: rejects mounting at the root path
+    set:
+      olakeUI:
+        extraVolumeMounts:
+          - name: gcp-key
+            mountPath: /
+    asserts:
+      - failedTemplate:
+          errorPattern: "olakeUI/extraVolumeMounts/0/mountPath"
