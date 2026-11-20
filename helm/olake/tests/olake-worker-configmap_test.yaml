@@ -1,0 +1,51 @@
+suite: olake-worker job volumes
+templates:
+  - templates/olake-worker/configmap.yaml
+release:
+  name: olake
+  namespace: olake
+tests:
+  - it: omits job volume settings by default
+    asserts:
+      - notExists:
+          path: data.OLAKE_JOB_VOLUMES
+      - notExists:
+          path: data.OLAKE_JOB_VOLUME_MOUNTS
+
+  - it: passes extra job volumes and mounts to the worker as JSON
+    set:
+      global:
+        extraJobVolumes:
+          - name: custom-ca
+            configMap:
+              name: my-ca-certs
+        extraJobVolumeMounts:
+          - name: custom-ca
+            mountPath: /etc/ssl/custom-certs
+    asserts:
+      - equal:
+          path: data.OLAKE_JOB_VOLUMES
+          value: '[{"configMap":{"name":"my-ca-certs"},"name":"custom-ca"}]'
+      - equal:
+          path: data.OLAKE_JOB_VOLUME_MOUNTS
+          value: '[{"mountPath":"/etc/ssl/custom-certs","name":"custom-ca"}]'
+
+  - it: rejects a reserved job volume name
+    set:
+      global:
+        extraJobVolumes:
+          - name: job-storage
+            emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "global/extraJobVolumes/0/name"
+
+  - it: rejects mounting inside the shared config directory
+    set:
+      global:
+        extraJobVolumeMounts:
+          - name: custom-ca
+            mountPath: /mnt/config/ca
+    asserts:
+      - failedTemplate:
+          errorPattern: "global/extraJobVolumeMounts/0/mountPath"
