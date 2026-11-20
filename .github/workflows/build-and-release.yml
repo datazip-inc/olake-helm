@@ -29,36 +29,134 @@ on:
         default: "v0.0.0.dev"
         type: string
 
-jobs:
-  build_and_publish_frontend:
-    name: Build and publish K8s Worker image for ${{ inputs.environment }}
-    environment: ${{ inputs.environment }}
-    runs-on: ubuntu-latest
-    env:
-      DOCKER_LOGIN: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      K8S_REPO_WORKER: ${{ secrets.K8S_REPO_WORKER || 'olakego' }}
-      ENVIRONMENT: ${{ inputs.environment }}
-      VERSION: ${{ inputs.version }}
+permissions:
+  contents: read
 
+env:
+  # Read by `make dist` and the image build.
+  PLATFORM: linux/amd64,linux/arm64
+
+jobs:
+  # Cross-compiles the worker for each platform on the runner (`make dist`).
+  # No Docker Hub credentials here: the build runs third-party code (Go modules).
+  build:
+    name: Build K8s Worker binaries for ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           # Release events build the release tag, so a re-run builds the same commit
           ref: ${{ github.event_name == 'release' && github.ref || inputs.environment == 'master' && 'refs/heads/master' || inputs.environment == 'staging' && 'refs/heads/staging' || github.ref }}
+          persist-credentials: false
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      # The push job checks out this exact commit, so the image always matches the binaries.
+      - name: Record commit
+        id: ref
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup environment variables
+      # Go version pinned in worker/go.mod. No caches: a release build should not
+      # restore state other workflows saved.
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: worker/go.mod
+          cache: false
+
+      - name: Build worker binaries
+        run: make dist
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: worker-dist
+          path: worker/dist/
+          if-no-files-found: error
+          retention-days: 1
+          # A re-run of this job uploads under the same name.
+          overwrite: true
+
+  # Packages the prebuilt binaries into the multi-arch image and pushes it. The Dockerfile
+  # only copies files, so no QEMU is needed.
+  push:
+    name: Build and publish K8s Worker image for ${{ inputs.environment }}
+    needs: build
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE_NAMESPACE: ${{ secrets.K8S_REPO_WORKER || 'olakego' }}
+    steps:
+      # Fail before anything is built if the version does not fit the environment.
+      #   master:  v1.2.3       -> v1.2.3, latest
+      #   staging: v1.2.3-rc1   -> stag-v1.2.3-rc1, stag-latest
+      #   other:   any tag      -> dev-<version>, dev-latest
+      # The same image is pushed as both ui-worker and k8s-worker.
+      - name: Resolve image tags
+        id: tags
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          VERSION: ${{ inputs.version }}
         run: |
-          echo "ENVIRONMENT=${{ env.ENVIRONMENT }}" >> $GITHUB_ENV
-          echo "VERSION=${{ env.VERSION }}" >> $GITHUB_ENV
-          echo "Building frontend application for $ENVIRONMENT with version $VERSION"
+          case "$ENVIRONMENT" in
+            master)
+              [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+                || { echo "::error::Version '$VERSION' must be semantic (e.g. v1.0.0) for master"; exit 1; }
+              version_tag="$VERSION"; latest_tag="latest" ;;
+            staging)
+              [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9_.-]+$ ]] \
+                || { echo "::error::Version '$VERSION' must look like v1.0.0-rc1 for staging"; exit 1; }
+              version_tag="stag-$VERSION"; latest_tag="stag-latest" ;;
+            *)
+              [[ "$VERSION" =~ ^[a-zA-Z0-9_.-]+$ ]] \
+                || { echo "::error::Version '$VERSION' has characters not allowed in a Docker tag"; exit 1; }
+              version_tag="dev-$VERSION"; latest_tag="dev-latest" ;;
+          esac
+          {
+            echo "tags<<EOF"
+            for repo in ui-worker k8s-worker; do
+              echo "${IMAGE_NAMESPACE}/${repo}:${version_tag}"
+              echo "${IMAGE_NAMESPACE}/${repo}:${latest_tag}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing ${IMAGE_NAMESPACE}/{ui-worker,k8s-worker}:{${version_tag},${latest_tag}}"
 
-      - name: Run Release tool
-        run: |
-          chmod +x ./worker/release.sh
-          ./worker/release.sh
-        shell: bash
+      # Only the Dockerfile and .dockerignore are needed from the repo.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            worker/Dockerfile
+            worker/.dockerignore
+          sparse-checkout-cone-mode: false
+
+      - name: Download build output
+        uses: actions/download-artifact@v8
+        with:
+          name: worker-dist
+          path: worker/dist/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # `context: worker` builds from the checkout plus the downloaded binaries, not from git.
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: worker
+          file: worker/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}

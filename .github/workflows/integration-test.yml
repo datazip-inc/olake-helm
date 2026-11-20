@@ -61,6 +61,11 @@ jobs:
         working-directory: ./worker
         run: go mod download
 
+      # The test builds the worker image from the local Dockerfile, which only copies a prebuilt
+      # binary. `make dist` builds it for this runner's architecture (the Docker-in-Docker host).
+      - name: Build worker binary
+        run: make dist
+
       - name: Run Docker In Docker Container Tests
         working-directory: ./worker
         run: go test -v ./tests -timeout 0 -run 'TestDinDIntegration'
