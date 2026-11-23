@@ -109,7 +109,9 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 	for _, s3object := range s3Objects {
 		relativePath := strings.TrimPrefix(s3object.Key, s3path)
 		workflowDir, _, ok := strings.Cut(relativePath, "/")
-		if !ok || workflowDir == "" || workflowDir == "telemetry" {
+		// fusion/ holds logs for all Fusion runs under one prefix, so whole-prefix
+		// deletion would wipe recent runs along with old ones; skip it like telemetry.
+		if !ok || workflowDir == "" || workflowDir == "telemetry" || workflowDir == "fusion" {
 			continue
 		}
 		groups[workflowDir] = append(groups[workflowDir], s3object)
