@@ -386,7 +386,7 @@ For IAM role auth (EKS IRSA or EKS Pod Identity) instead of static keys, set `s3
 
 **Note:** For development and quick starts, in-cluster MinIO is included and used when `s3LogFileStorage.minio.enabled: true` (the default). This provides an out-of-the-box S3 solution without any external dependencies. However, because this server runs as a single pod, it represents a single point of failure and is not recommended for production use.
 
-**⚠️ Fusion:** Fusion requires NFS/RWX shared storage and is not supported when `global.logFileStorageMode` is `s3`. Set `fusion.enabled: false` to use S3 storage.
+**Fusion:** When `global.logFileStorageMode` is `s3`, Fusion uses the same `s3LogFileStorage` bucket and credentials: it uploads each run's logs once the run completes: compaction runs to `<prefix>/fusion/logs/optimization/<processId>.log`, snapshot expiry runs to `<prefix>/fusion/logs/cleanup/<processId>.log`. It needs a Fusion image with S3 log storage support. With IRSA, the S3 role is added to the Fusion service account; if `fusion.serviceAccount.annotations` sets its own role (for example for Glue), that role is used instead and must also grant access to the log bucket.
 
 The OLake application components (UI, Worker, and Activity Pods) require a shared ReadWriteMany (RWX) volume for **coordinating pipeline state and metadata**.
 

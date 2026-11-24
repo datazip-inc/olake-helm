@@ -39,12 +39,14 @@ data:
     spark.executor.maxNumFailures                    2147483647
     spark.executor.failuresValidityInterval          10ms
     spark.task.maxFailures                           4
-    # Shared storage for logs
+    {{- if eq (include "olake.storageMode" .) "nfs" }}
+    # Shared storage for logs (NFS mode only; in S3 mode the optimizer sends its logs to ams)
     spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.path /data/fusion-logs
     spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.readOnly false
     spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.mount.subPath fusion-logs
     spark.kubernetes.executor.volumes.persistentVolumeClaim.fusion-logs.options.claimName {{ include "olake.sharedStoragePVC" . }}
     spark.executorEnv.LOG_DIR                        /data/fusion-logs
+    {{- end }}
     # Force Log4j2 to use the routing config (belt-and-suspenders with the Dockerfile COPY)
     spark.driver.extraJavaOptions                    -Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml -XX:+ExitOnOutOfMemoryError
     spark.executor.extraJavaOptions                  -Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
