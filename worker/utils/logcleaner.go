@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 	"github.com/robfig/cron"
 	"github.com/spf13/viper"
 )
+
+// skippedS3LogDirs are top-level folders under the S3 log prefix that the cleaner never deletes.
+// telemetry holds persistent counters; fusion holds logs for all Fusion runs under one
+// prefix, so whole-prefix deletion would wipe recent runs along with old ones.
+var skippedS3LogDirs = []string{"telemetry", "fusion"}
 
 // starts a log cleaner that removes old logs from the specified directory based on the retention period
 func InitLogCleaner(ctx context.Context, logDir string, retentionPeriod int) {
@@ -109,9 +115,7 @@ func cleanS3OldLogs(ctx context.Context, retentionPeriod int) {
 	for _, s3object := range s3Objects {
 		relativePath := strings.TrimPrefix(s3object.Key, s3path)
 		workflowDir, _, ok := strings.Cut(relativePath, "/")
-		// fusion/ holds logs for all Fusion runs under one prefix, so whole-prefix
-		// deletion would wipe recent runs along with old ones; skip it like telemetry.
-		if !ok || workflowDir == "" || workflowDir == "telemetry" || workflowDir == "fusion" {
+		if !ok || workflowDir == "" || slices.Contains(skippedS3LogDirs, workflowDir) {
 			continue
 		}
 		groups[workflowDir] = append(groups[workflowDir], s3object)
