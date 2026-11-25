@@ -1,41 +1,27 @@
-# Build stage
-FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine AS builder
+# The worker binary is prebuilt by `make dist`. This file only copies it in.
 
-ARG TARGETOS TARGETARCH
+# The runtime directories are the same on every arch, so build them on the host arch.
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS rootfs
+RUN mkdir -p /rootfs/mnt/config /rootfs/tmp/olake-config \
+ && chmod 777 /rootfs/mnt/config /rootfs/tmp/olake-config \
+ && chmod 1777 /rootfs/tmp
 
-# Set working directory
+
+# Alpine, not scratch: the Helm chart's worker probes run /bin/sh and wget, and the
+# base image already ships the CA bundle at /etc/ssl/certs/ca-certificates.crt.
+FROM alpine:3.24
+
+COPY --from=rootfs /rootfs/ /
+
+ARG TARGETOS
+ARG TARGETARCH
+# chmod: the binaries come through a workflow artifact, which drops the exec bit.
+COPY --chmod=0755 dist/${TARGETOS}/${TARGETARCH}/olake-worker /app/olake-worker
+
 WORKDIR /app
 
-COPY go.mod go.sum ./
+# Health server port (/health, /ready, /metrics)
+EXPOSE 8090
 
-# Download dependencies
-RUN go mod download
-
-# Copy the entire worker source code
-COPY . ./
-
-# Cross-compile on the build host instead of under QEMU emulation
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o olake-worker ./main.go
-
-# Runtime stage
-FROM alpine:latest
-
-# Install required packages
-RUN apk update && apk add --no-cache \
-    docker-cli \
-    ca-certificates
-
-# Create app directory
-WORKDIR /app
-
-# Copy the binary from builder stage
-COPY --from=builder /app/olake-worker .
-
-# Create necessary directories with proper permissions
-RUN mkdir -p /mnt/config && chmod -R 777 /mnt/config
-RUN mkdir -p /tmp/olake-config && chmod -R 777 /tmp/olake-config
-
-EXPOSE 8080
-
-# Run the worker
+# Runs as root: the worker needs the mounted docker.sock.
 CMD ["./olake-worker"]

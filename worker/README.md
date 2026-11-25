@@ -142,9 +142,11 @@ kubectl get pods -l app.kubernetes.io/component=olake-ui -n olake
 
 If Docker-based development prefered:
 
+The Dockerfile only copies the binary that `make dist` builds, so build the image with `make docker` from the repo root.
+
 ```bash
-# Build locally
-docker build -t olakego/olake-workers:local .
+# Build locally (from the repo root)
+make docker IMAGE=olakego/olake-workers TAG=local
 
 # For minikube development
 minikube image load olakego/olake-workers:local
@@ -173,9 +175,9 @@ worker/
    go build -o olake-workers main.go
    go test ./...
    ```
-3. **Build Docker image:**
+3. **Build Docker image** (from the repo root):
    ```bash
-   docker build -t olakego/olake-workers:local .
+   make docker IMAGE=olakego/olake-workers TAG=local
    ```
 4. **Deploy to cluster** (see Helm chart documentation)
 
